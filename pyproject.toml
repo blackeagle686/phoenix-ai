@@ -29,7 +29,12 @@ dependencies = [
     "SpeechRecognition",
     "pydub",
     "Pillow",
-    "psutil"
+    "psutil",
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
+    "pyserial>=3.5",
+    "paho-mqtt>=1.6.0"
 ]
 
 [project.optional-dependencies]
