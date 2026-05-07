@@ -1,4 +1,4 @@
-Phoenix-AI Hardware SDK — Workflow & Architecture Plan
+Phoenix-AI (SENSORIUM) Hardware SDK — Workflow & Architecture Plan
 Vision
 why new hardware sdk?
     for develper that build a real life agent 
@@ -107,35 +107,34 @@ Example:
     "unit": "C",
     "timestamp": 1712345678
 }
-Suggested Folder Structure
-phoenix_sdk/
+
+Folder Structure
+phoenix/
 │
+├── framework/
+│   │
+│   ├── agent/
+│   ├── chatbot/
+│   ├── multi_agent/
+│   │
+│   ├── sensorium/          ← NEW 
+│   │   ├── core/
+│   │   ├── registry/
+│   │   ├── devices/
+│   │   ├── plugins/
+│   │   ├── protocols/
+│   │   ├── streaming/
+│   │   ├── perception/
+│   │   ├── events/
+│   │   └── tools/
+│   │
+│   └── orchestration/
+│
+├── services/
+├── api/
 ├── core/
-│   ├── registry.py
-│   ├── container.py
-│   ├── events.py
-│   ├── interfaces.py
-│   └── manager.py
-│
-├── devices/
-│   ├── camera/
-│   ├── radar/
-│   ├── sensors/
-│   ├── eeg/
-│   └── audio/
-│
-├── plugins/
-│   ├── webcam_plugin.py
-│   ├── esp32_plugin.py
-│   └── radar_plugin.py
-│
-├── tools/
-│   ├── camera_tools.py
-│   ├── sensor_tools.py
-│   └── radar_tools.py
-│
-└── examples/
-    └── example_app.py
+└── plugins/
+
 Step-by-Step Workflow
 Phase 1 — Core Infrastructure
 Goal
