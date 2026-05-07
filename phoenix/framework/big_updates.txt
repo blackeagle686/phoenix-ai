@@ -369,4 +369,3 @@ Hardware	PySerial, GPIO
 Streaming	WebRTC, WebSocket
 Database	PostgreSQL, Redis
 Vector DB	ChromaDB
-Deployment	Docker, Kubernetes
