@@ -28,7 +28,9 @@ setup(
         "psutil",
         "fastapi",
         "uvicorn",
-        "python-multipart"
+        "python-multipart",
+        "pyserial>=3.5",
+        "paho-mqtt>=1.6.0"
     ],
     extras_require={
         "full": [
