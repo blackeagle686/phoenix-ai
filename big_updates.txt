@@ -7,7 +7,7 @@ why new hardware sdk?
     The AI OS must be able to run on a Raspberry Pi, Jetson Nano, or other embedded systems.
     using in building AI-OS that agents can use and control in the hardware copmonents.
 
-    
+
 Transform Phoenix-AI from a software-only agent framework into an AI Operating System capable of interacting with the physical world through sensors, cameras, embedded systems, and IoT devices.
 
 The SDK should provide:
@@ -26,6 +26,7 @@ High-Level Architecture
 | Planning | Memory | Tools | Reasoning | Actions  |
 +--------------------------↑-----------------------+
                            |
+                           
                            |
 +--------------------------------------------------+
 |                 Tool Abstraction Layer           |
