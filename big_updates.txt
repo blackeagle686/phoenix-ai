@@ -5,7 +5,7 @@ why new hardware sdk?
     sky-gard agnents -> monitor the sky for drones, report to the Army sides,
     interact with the real world via hardware sensors, cameras, and other devices.
     The AI OS must be able to run on a Raspberry Pi, Jetson Nano, or other embedded systems.
-    using in building AI-OS that agent can use and controls
+    using in building AI-OS that agents can use and controls
 Transform Phoenix-AI from a software-only agent framework into an AI Operating System capable of interacting with the physical world through sensors, cameras, embedded systems, and IoT devices.
 
 The SDK should provide:
