@@ -19,6 +19,7 @@ pip install phx-ashborn
 3. **Flexible Vector DB**: Native support for **ChromaDB** (Default/Persistent) and **Qdrant**.
 4. **Embedded Insights**: Pre-configured with `sentence-transformers` (`all-MiniLM-L6-v2`) for local embedding generation.
 5. **RAG Orchestration**: All-in-one `RAGPipeline` that handles document loading (.pdf, .docx, .xlsx), SQL databases, external APIs, and web scraping.
+6. **Sensorium Hardware SDK**: (NEW) Native infrastructure for building embodied AI agents that interact with real hardware (Serial, MQTT, GPIO, Cameras).
 
 ## 📦 Installation
 Choose the method that fits your workflow best.
@@ -105,7 +106,7 @@ print(response)
 The Phoenix AI SDK now supports creating a fully autonomous agent that can think, analyze, plan, execute tools, and reflect on its progress with a single line of code! 
 
 > [!TIP]
-> For a deep dive into the architecture and integration patterns, check out the **[Agent Framework Guide](https://github.com/blackeagle686/phoenix-ai/blob/master/docs/AGENT_GUIDE.md)**, **[Multi-Agent Guide](docs/framework/multi_agent.md)**, **[Django Integration Guide](https://github.com/blackeagle686/phoenix-ai/blob/master/docs/DJANGO_INTEGRATION.md)**, **[GUI Integration Guide](https://github.com/blackeagle686/phoenix-ai/blob/master/docs/GUI_INTEGRATION.md)**, or the **[API Integration Guide](https://github.com/blackeagle686/phoenix-ai/blob/master/docs/API_INTEGRATION.md)**.
+> For a deep dive into the architecture and integration patterns, check out the **[Agent Framework Guide](https://github.com/blackeagle686/phoenix-ai/blob/master/docs/AGENT_GUIDE.md)**, **[Sensorium Hardware Guide](docs/sensorium.md)**, **[Multi-Agent Guide](docs/framework/multi_agent.md)**, **[Django Integration Guide](https://github.com/blackeagle686/phoenix-ai/blob/master/docs/DJANGO_INTEGRATION.md)**, **[GUI Integration Guide](https://github.com/blackeagle686/phoenix-ai/blob/master/docs/GUI_INTEGRATION.md)**, or the **[API Integration Guide](https://github.com/blackeagle686/phoenix-ai/blob/master/docs/API_INTEGRATION.md)**.
 
 #### ⚡ High-Speed Cognitive Engine
 *   **Parallel Awareness**: The `Thinker` and `Analyzer` run concurrently, allowing the agent to understand both your prompt and your project structure in a single cognitive step.
@@ -162,8 +163,34 @@ final_report = await manager.run_pipeline(
     agent_sequence=["Giyu", "Shinobu"]
 )
 ```
+## 🐦‍🔥 Framework Mode: Sensorium (Hardware SDK)
+
+The Phoenix AI SDK now supports **Embodied AI**. You can connect your agents to real-world sensors, cameras, and actuators using a unified plugin-based architecture.
+
+*   **Unified Device Communication**: Standardized interfaces for Serial (Arduino/ESP32), MQTT (IoT), and GPIO.
+*   **Real-Time Streaming**: Optimized frame-dropping buffers for vision processing on the edge (Raspberry Pi / Jetson).
+*   **Agent Integration**: Register hardware as tools that agents can autonomously use in their reasoning loops.
+
+```python
+from phoenix.framework.sensorium.core.manager import DeviceManager
+from phoenix.framework.sensorium.plugins.mock_plugin import MockSensorPlugin
+
+# 1. Initialize Hardware Manager
+manager = DeviceManager()
+
+# 2. Add and connect a sensor
+await manager.add_device("main_thermometer", MockSensorPlugin())
+
+# 3. Register as a tool for the Agent
+@tool(name="get_temp", description="Reads current temperature")
+async def get_temp():
+    return await manager.get_device("main_thermometer").read()
+
+agent.register_tool(get_temp)
+await agent.run("Is it too hot in the living room?")
+```
 > [!NOTE]
-> Every agent in a team is a full Phoenix Agent, inheriting the complete **Think-Plan-Act-Reflect** loop and strict **Agent Profile** rule enforcement. For more details, see the **[Multi-Agent Guide](docs/framework/multi_agent.md)**.
+> Sensorium is designed for performance-critical tasks. It uses Python `__slots__` and thread-safe protocols to ensure zero-latency interaction with hardware. For more details, see the **[Sensorium Hardware Guide](docs/sensorium.md)**.
 
 ### 🐦‍🔥 Custom Tools & Engineering Suite
 
