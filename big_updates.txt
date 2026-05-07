@@ -1,6 +1,6 @@
 Phoenix-AI Hardware SDK — Workflow & Architecture Plan
 Vision
-why new hardware sdk
+why new hardware sdk? the developer 
 Transform Phoenix-AI from a software-only agent framework into an AI Operating System capable of interacting with the physical world through sensors, cameras, embedded systems, and IoT devices.
 
 The SDK should provide:
