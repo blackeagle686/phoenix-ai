@@ -2,8 +2,9 @@ Phoenix-AI Hardware SDK — Workflow & Architecture Plan
 Vision
 why new hardware sdk?
     for develper that build a real life agent 
-    sky-gard agnents -> monitor the sky for drones, report to the Army sides
-    
+    sky-gard agnents -> monitor the sky for drones, report to the Army sides,
+    interact with the real world via hardware sensors, cameras, and other devices.
+    The AI OS must be able to run on a Raspberry Pi, Jetson Nano, or other embedded systems.
 
 Transform Phoenix-AI from a software-only agent framework into an AI Operating System capable of interacting with the physical world through sensors, cameras, embedded systems, and IoT devices.
 
