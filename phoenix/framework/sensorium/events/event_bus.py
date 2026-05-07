@@ -36,10 +36,9 @@ class EventBus:
             if asyncio.iscoroutinefunction(callback):
                 asyncio.create_task(callback(event))
             else:
-                # For non-async callbacks, run in a thread to avoid blocking loop
-                # or just run directly if they are expected to be fast.
-                # Here we run directly but assume they are fast.
-                callback(event)
+                # Run synchronous callbacks in a separate thread to avoid blocking the event loop.
+                # This is crucial for high-performance Sensorium operations.
+                asyncio.create_task(asyncio.to_thread(callback, event))
 
     async def emit_wait(self, event_name: str, event: DeviceEvent) -> None:
         """Emit and wait for all subscribers to finish (if async)."""
@@ -51,7 +50,7 @@ class EventBus:
             if asyncio.iscoroutinefunction(callback):
                 tasks.append(callback(event))
             else:
-                callback(event)
+                tasks.append(asyncio.to_thread(callback, event))
         
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)

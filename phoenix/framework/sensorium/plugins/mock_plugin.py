@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any
 from .base import DevicePlugin
 from .metadata import PluginMetadata
 from ..core.capabilities import DeviceCapability
@@ -24,9 +25,6 @@ class MockSensorPlugin(DevicePlugin):
         await asyncio.sleep(0.1) # Simulate hardware latency
         return True
 
-    async def disconnect(self) -> bool:
-        return True
-
     async def read(self) -> SensorData:
         self.value += 0.1
         return SensorData(
@@ -35,6 +33,9 @@ class MockSensorPlugin(DevicePlugin):
             value=round(self.value, 2),
             unit="C"
         )
+
+    async def disconnect(self) -> bool:
+        return True
 
     async def write(self, data: Any) -> bool:
         return True
