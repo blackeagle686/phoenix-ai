@@ -1,21 +1,26 @@
 import time
 from typing import Any, Dict, Optional
-from dataclasses import dataclass, field
 
-@dataclass
 class SensorData:
     """
     Standardized data format for all sensor readings.
-    Optimized with __slots__ for memory efficiency.
+    Optimized with __slots__ for maximum memory efficiency and speed.
     """
     __slots__ = ['device_id', 'type', 'value', 'unit', 'timestamp', 'metadata']
     
-    device_id: str
-    type: str
-    value: Any
-    unit: Optional[str]
-    timestamp: float = field(default_factory=time.time)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    def __init__(self, 
+                 device_id: str, 
+                 type: str, 
+                 value: Any, 
+                 unit: Optional[str] = None, 
+                 timestamp: Optional[float] = None, 
+                 metadata: Optional[Dict[str, Any]] = None):
+        self.device_id = device_id
+        self.type = type
+        self.value = value
+        self.unit = unit
+        self.timestamp = timestamp if timestamp is not None else time.time()
+        self.metadata = metadata if metadata is not None else {}
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -27,14 +32,19 @@ class SensorData:
             "metadata": self.metadata
         }
 
-@dataclass
 class DeviceEvent:
     """
     Standardized event object for the Sensorium Event Bus.
+    Optimized with __slots__.
     """
     __slots__ = ['event_name', 'source_id', 'data', 'timestamp']
     
-    event_name: str
-    source_id: str
-    data: Any
-    timestamp: float = field(default_factory=time.time)
+    def __init__(self, 
+                 event_name: str, 
+                 source_id: str, 
+                 data: Any, 
+                 timestamp: Optional[float] = None):
+        self.event_name = event_name
+        self.source_id = source_id
+        self.data = data
+        self.timestamp = timestamp if timestamp is not None else time.time()
