@@ -23,10 +23,10 @@ High-Level Architecture
 +--------------------------------------------------+
 |                 Tool Abstraction Layer           |
 |--------------------------------------------------|
-| camera.capture()                                |
-| sensor.read()                                   |
-| radar.scan()                                    |
-| microphone.listen()                             |
+| camera.capture()                                 |
+| sensor.read()                                    |
+| radar.scan()                                     |
+| microphone.listen()                              |
 +--------------------------↑-----------------------+
                            |
                            |
