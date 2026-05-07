@@ -2,6 +2,7 @@ from typing import List, Set, Any, Dict, Optional
 from ..core.interfaces import DeviceInterface
 from ..core.capabilities import DeviceCapability
 from .metadata import PluginMetadata
+from ..protocols.base import ProtocolInterface
 
 class DevicePlugin(DeviceInterface):
     """
@@ -11,10 +12,12 @@ class DevicePlugin(DeviceInterface):
     def __init__(self, 
                  device_id: str, 
                  metadata: PluginMetadata,
-                 capabilities: List[DeviceCapability]):
+                 capabilities: List[DeviceCapability],
+                 protocol: Optional[ProtocolInterface] = None):
         super().__init__(device_id)
         self.plugin_metadata = metadata
         self.capabilities: Set[DeviceCapability] = set(capabilities)
+        self.protocol = protocol
 
     def has_capability(self, capability: DeviceCapability) -> bool:
         """Check if the device supports a specific capability."""
@@ -29,6 +32,7 @@ class DevicePlugin(DeviceInterface):
                 "version": self.plugin_metadata.version,
                 "author": self.plugin_metadata.author
             },
-            "capabilities": [c.name for c in self.capabilities]
+            "capabilities": [c.name for c in self.capabilities],
+            "protocol": self.protocol.__class__.__name__ if self.protocol else None
         })
         return info
