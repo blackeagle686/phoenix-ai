@@ -36,31 +36,76 @@ await agent.run("If you detect a drone via radar, take a photo and sound the ala
 ### 2. Smart Home "Butler" Agent
 An embodied agent that manages home comfort and security.
 
-**Hardware Stack:**
-- **Temperature/Humidity Sensors**: Connected via MQTT.
-- **Smart Blinds**: Connected via Serial/ESP32.
-- **Motion Sensors**: Connected via Zigbee/MQTT bridge.
-
-**Workflow:**
-1. The Agent receives a query: "It's too hot in here."
-2. The Agent uses `sensor.read_temperature()` to verify (Result: 28°C).
-3. The Agent looks for a solution: `blinds.close()`.
-4. The Agent confirms: "I've closed the blinds to cool down the room."
-
 ### 3. Industrial Quality Control Robot
 A robot arm that inspects parts on a conveyor belt.
 
-**Hardware Stack:**
-- **Conveyor Motor**: Controlled via Serial.
-- **Proximity Sensor**: Connected via GPIO.
-- **Inspection Camera**: High-speed stream via WebSockets.
+---
 
-**Workflow:**
-1. The **Proximity Sensor** triggers an event when a part arrives.
-2. The Agent stops the conveyor: `motor.stop()`.
-3. The Agent inspects the part: `camera.inspect()`.
-4. If "Defective", it triggers a sorter arm: `actuator.push_rejected()`.
-5. Restart conveyor: `motor.start()`.
+## Implementing Real Hardware
+
+To add a new device, inherit from `DevicePlugin` and implement the `connect`, `disconnect`, `read`, and `write` methods using one of the built-in protocols.
+
+### Example 1: Arduino Sensor (Serial)
+Perfect for sensors connected via USB to your Raspberry Pi or PC.
+
+```python
+from phoenix.framework.sensorium.plugins.base import DevicePlugin
+from phoenix.framework.sensorium.protocols.serial_protocol import SerialProtocol
+from phoenix.framework.sensorium.core.models import SensorData
+from phoenix.framework.sensorium.core.capabilities import DeviceCapability
+
+class ArduinoSensor(DevicePlugin):
+    def __init__(self, port="/dev/ttyUSB0"):
+        # Protocol handles the low-level threading and IO
+        protocol = SerialProtocol(port=port, baudrate=9600)
+        super().__init__("arduino_01", metadata, [DeviceCapability.READ], protocol)
+
+    async def read(self):
+        # Read a line like "25.4" from Arduino
+        line = await self.protocol.receive()
+        if line:
+            return SensorData(self.device_id, "temperature", float(line), "C")
+        return None
+```
+
+### Example 2: IoT Power Plug (MQTT)
+Ideal for distributed devices connected over Wi-Fi.
+
+```python
+from phoenix.framework.sensorium.plugins.base import DevicePlugin
+from phoenix.framework.sensorium.protocols.mqtt_protocol import MQTTProtocol
+from phoenix.framework.sensorium.core.capabilities import DeviceCapability
+
+class SmartPlug(DevicePlugin):
+    def __init__(self, broker_ip="192.168.1.50"):
+        protocol = MQTTProtocol(broker=broker_ip)
+        super().__init__("plug_01", metadata, [DeviceCapability.WRITE], protocol)
+
+    async def write(self, command: str):
+        # command could be "ON" or "OFF"
+        return await self.protocol.send("home/living_room/plug/set", command)
+```
+
+### Example 3: USB Camera (OpenCV)
+For high-speed vision processing without a specialized protocol.
+
+```python
+import cv2
+from phoenix.framework.sensorium.plugins.base import DevicePlugin
+
+class USBWebcam(DevicePlugin):
+    async def connect(self):
+        self.cap = cv2.VideoCapture(0)
+        return self.cap.isOpened()
+
+    async def read(self):
+        ret, frame = self.cap.read()
+        return {"success": ret, "frame": frame}
+
+    async def disconnect(self):
+        self.cap.release()
+        return True
+```
 
 ---
 
@@ -103,7 +148,8 @@ from phoenix.framework.agent.tools.base import tool
 
 @tool(name="check_temp", description="Reads temperature")
 async def check_temp():
-    return await manager.get_device("thermometer").read()
+    device = manager.get_device("thermometer")
+    return await device.read()
 
 agent.register_tool(check_temp)
 await agent.run("What is the temperature?")
