@@ -2,7 +2,8 @@ Phoenix-AI Hardware SDK — Workflow & Architecture Plan
 Vision
 why new hardware sdk?
     for develper that build a real life agent 
-    sky-gard agnents -> monitor the sky for drones, 
+    sky-gard agnents -> monitor the sky for drones, report to the Army sides
+    
 
 Transform Phoenix-AI from a software-only agent framework into an AI Operating System capable of interacting with the physical world through sensors, cameras, embedded systems, and IoT devices.
 
