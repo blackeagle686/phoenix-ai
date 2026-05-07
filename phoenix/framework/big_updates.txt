@@ -20,49 +20,7 @@ Dependency Injection support
 Registry-based device discovery
 Event-driven architecture
 High-Level Architecture
-+--------------------------------------------------+
-|                  Phoenix Agents                  |
-|--------------------------------------------------|
-| Planning | Memory | Tools | Reasoning | Actions  |
-+--------------------------↑-----------------------+
-|  ->  if the agent need to use hardware if not skipp it
-                           |
-+--------------------------------------------------+
-|                 Tool Abstraction Layer           |
-|--------------------------------------------------|
-| camera.capture()                                 |
-| sensor.read()                                    |
-| radar.scan()                                     |
-| microphone.listen()                              |
-+--------------------------↑-----------------------+
-                           |
-                           |
-+--------------------------------------------------+
-|              Phoenix Hardware SDK                |
-|--------------------------------------------------|
-| Device Registry                                  |
-| Dependency Injection Container                   |
-| Event Bus                                        |
-| Streaming Manager                                |
-| Device Manager                                   |
-+--------------------------↑-----------------------+
-                           |
-                           |
-+--------------------------------------------------+
-|                 Device Plugins                   |
-|--------------------------------------------------|
-| Camera Plugin                                    |
-| Radar Plugin                                     |
-| IR Sensor Plugin                                 |
-| Arduino Plugin                                   |
-| ESP32 Plugin                                     |
-| EEG Plugin                                       |
-+--------------------------↑-----------------------+
-                           |
-                           |
-+--------------------------------------------------+
-|               Real Hardware Devices              |
-+--------------------------------------------------+
+
 Core Design Principles
 1. Registry Pattern
 
@@ -369,3 +327,48 @@ Hardware	PySerial, GPIO
 Streaming	WebRTC, WebSocket
 Database	PostgreSQL, Redis
 Vector DB	ChromaDB
+
+
++--------------------------------------------------+
+|                  Phoenix Agents                  |
+|--------------------------------------------------|
+| Planning | Memory | Tools | Reasoning | Actions  |
++--------------------------↑-----------------------+
+|  ->  if the agent need to use hardware if not skipp it
+                           |
++--------------------------------------------------+
+|                 Tool Abstraction Layer           |
+|--------------------------------------------------|
+| camera.capture()                                 |
+| sensor.read()                                    |
+| radar.scan()                                     |
+| microphone.listen()                              |
++--------------------------↑-----------------------+
+                           |
+                           |
++--------------------------------------------------+
+|              Phoenix Hardware SDK                |
+|--------------------------------------------------|
+| Device Registry                                  |
+| Dependency Injection Container                   |
+| Event Bus                                        |
+| Streaming Manager                                |
+| Device Manager                                   |
++--------------------------↑-----------------------+
+                           |
+                           |
++--------------------------------------------------+
+|                 Device Plugins                   |
+|--------------------------------------------------|
+| Camera Plugin                                    |
+| Radar Plugin                                     |
+| IR Sensor Plugin                                 |
+| Arduino Plugin                                   |
+| ESP32 Plugin                                     |
+| EEG Plugin                                       |
++--------------------------↑-----------------------+
+                           |
+                           |
++--------------------------------------------------+
+|               Real Hardware Devices              |
++--------------------------------------------------+
