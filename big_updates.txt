@@ -16,7 +16,7 @@ High-Level Architecture
 +--------------------------------------------------+
 |                  Phoenix Agents                  |
 |--------------------------------------------------|
-| Planning | Memory | Tools | Reasoning | Actions |
+| Planning | Memory | Tools | Reasoning | Actions  |
 +--------------------------↑-----------------------+
                            |
                            |
@@ -33,23 +33,23 @@ High-Level Architecture
 +--------------------------------------------------+
 |              Phoenix Hardware SDK                |
 |--------------------------------------------------|
-| Device Registry                                 |
-| Dependency Injection Container                  |
-| Event Bus                                       |
-| Streaming Manager                               |
-| Device Manager                                  |
+| Device Registry                                  |
+| Dependency Injection Container                   |
+| Event Bus                                        |
+| Streaming Manager                                |
+| Device Manager                                   |
 +--------------------------↑-----------------------+
                            |
                            |
 +--------------------------------------------------+
 |                 Device Plugins                   |
 |--------------------------------------------------|
-| Camera Plugin                                   |
-| Radar Plugin                                    |
-| IR Sensor Plugin                                |
-| Arduino Plugin                                  |
-| ESP32 Plugin                                    |
-| EEG Plugin                                      |
+| Camera Plugin                                    |
+| Radar Plugin                                     |
+| IR Sensor Plugin                                 |
+| Arduino Plugin                                   |
+| ESP32 Plugin                                     |
+| EEG Plugin                                       |
 +--------------------------↑-----------------------+
                            |
                            |
