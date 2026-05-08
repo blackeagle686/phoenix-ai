@@ -1,0 +1,37 @@
+{
+  "name": "default_cognition_iteration",
+  "version": "1.0",
+  "steps": [
+    {
+      "id": "planner_step",
+      "brain": "planner",
+      "required_inputs": ["objective", "task_file_id", "previous_results"],
+      "input_map": {
+        "objective": "objective",
+        "task_file_id": "task_file_id",
+        "previous_results": "previous_results"
+      },
+      "output_key": "planner_output"
+    },
+    {
+      "id": "actor_step",
+      "brain": "actor",
+      "required_inputs": ["planner_output"],
+      "input_map": {
+        "plan": "planner_output"
+      },
+      "output_key": "actor_output"
+    },
+    {
+      "id": "reflector_step",
+      "brain": "reflector",
+      "required_inputs": ["objective", "planner_output", "actor_output"],
+      "input_map": {
+        "objective": "objective",
+        "action": "planner_output",
+        "result": "actor_output"
+      },
+      "output_key": "reflector_output"
+    }
+  ]
+}

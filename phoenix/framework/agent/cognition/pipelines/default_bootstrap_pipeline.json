@@ -1,0 +1,26 @@
+{
+  "name": "default_cognition_bootstrap",
+  "version": "1.0",
+  "steps": [
+    {
+      "id": "thinker_step",
+      "brain": "thinker",
+      "required_inputs": ["prompt", "memory", "session_id"],
+      "input_map": {
+        "prompt": "prompt",
+        "memory": "memory",
+        "session_id": "session_id"
+      },
+      "output_key": "thinker_output"
+    },
+    {
+      "id": "analyzer_step",
+      "brain": "analyzer",
+      "required_inputs": ["prompt"],
+      "input_map": {
+        "prompt": "prompt"
+      },
+      "output_key": "analyzer_output"
+    }
+  ]
+}
