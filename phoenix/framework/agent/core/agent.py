@@ -113,17 +113,17 @@ class Agent:
 
     def _component_context(self) -> Dict[str, Any]:
         context = {
-            llm=self.llm,
-            memory=self.memory,
-            tools=self.tools,
-            thinker=getattr(self, "thinker", None),
-            planner=getattr(self, "planner", None),
-            analyzer=getattr(self, "analyzer", None),
-            actor=getattr(self, "actor", None),
-            reflector=getattr(self, "reflector", None),
-            tool_manager=getattr(self, "tool_manager", None),
-            loop_cls=self.loop_cls,
-            profile=self.profile,
+            "llm": self.llm,
+            "memory": self.memory,
+            "tools": self.tools,
+            "thinker": getattr(self, "thinker", None),
+            "planner": getattr(self, "planner", None),
+            "analyzer": getattr(self, "analyzer", None),
+            "actor": getattr(self, "actor", None),
+            "reflector": getattr(self, "reflector", None),
+            "tool_manager": getattr(self, "tool_manager", None),
+            "loop_cls": self.loop_cls,
+            "profile": self.profile,
         }
         context.update(self._dynamic_components)
         return context
