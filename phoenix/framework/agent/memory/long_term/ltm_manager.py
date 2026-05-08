@@ -65,5 +65,6 @@ class LongTermMemoryManager(BaseMemory):
             return await self.semantic.search(session_id, query, limit=limit)
         
         # Basic mock search
-        results = [c for c in self._mock_storage if query.lower() in c.content.lower()]
+        storage = self._mock_storage.get(session_id, [])
+        results = [c for c in storage if query.lower() in c.content.lower()]
         return results[:limit]
