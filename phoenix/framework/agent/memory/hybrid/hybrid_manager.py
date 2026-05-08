@@ -145,11 +145,10 @@ class HybridMemoryManager:
         lines = [line for line in reflections_text.splitlines() if line.strip()]
         if not lines:
             return ""
-        # Keep heading if present and latest reflections.
-        header = lines[0] if lines[0].lower().startswith("lessons learned") else "Lessons Learned:"
+        # Keep latest reflection bullets only.
         bullet_lines = [ln for ln in lines[1:] if ln.strip().startswith("-")]
         tail = bullet_lines[-max_items:] if bullet_lines else lines[-max_items:]
-        return "\n".join([header] + tail)
+        return "\n".join(tail)
 
     def _should_store_long_term(self, role: str, content: str, metadata: Optional[Dict] = None) -> bool:
         text = (content or "").strip()
