@@ -3,6 +3,7 @@ from .planner import Planner, BasePlanner
 from .actor import Actor, BaseActor
 from .analyzer import Analyzer, BaseAnalyzer
 from .reflector import Reflector, BaseReflector
+from .pipeline import CognitionPipeline, BrainRegistry, PipelineValidationError
 
 __all__ = [
     "Thinker",
@@ -14,5 +15,8 @@ __all__ = [
     "Analyzer",
     "BaseAnalyzer",
     "Reflector",
-    "BaseReflector"
+    "BaseReflector",
+    "CognitionPipeline",
+    "BrainRegistry",
+    "PipelineValidationError",
 ]
