@@ -41,6 +41,13 @@ class HybridMemoryManager:
                 self.session.set(key, value)
         self._invalidate_search_cache(session_id)
 
+    async def consolidate_reflections(self, llm):
+        """
+        Delegates reflection consolidation to the ReflectionMemory component.
+        """
+        await self.reflection.consolidate(llm)
+
+
     async def get_full_context(self, session_id: str, query: str = "") -> str:
         reflections_task = asyncio.to_thread(self.reflection.get_reflections)
         session_vars_task = asyncio.to_thread(self.session.get_all)
