@@ -1,5 +1,6 @@
 import uuid
 from typing import Any, Callable, Dict, Optional, Type
+import inspect
 from phoenix.services.llm.openai import OpenAILLM
 from phoenix.framework.agent.memory.hybrid import HybridMemory
 from phoenix.framework.agent.memory.adapter import InteractiveMemoryAdapter
@@ -37,6 +38,7 @@ class Agent:
         self.memory = self._prepare_memory(memory)
         self.tools = tools if tools is not None else ToolRegistry.load_default()
         self._factories = component_factories or {}
+        self._dynamic_components: Dict[str, Any] = {}
         self.loop_cls = loop_cls or AgentLoop
         
         self.profile = self._prepare_profile(profile)
@@ -66,15 +68,12 @@ class Agent:
         if self.analyzer is None:
             self.analyzer = Analyzer(self.llm, profile=self.profile)
 
+        # Build user-defined custom components (e.g. generator) from factories.
+        self._build_dynamic_components()
+
         self.loop = loop or self._build_component("loop")
         if self.loop is None:
-            self.loop = self.loop_cls(
-                thinker=self.thinker,
-                planner=self.planner,
-                actor=self.actor,
-                reflector=self.reflector,
-                analyzer=self.analyzer
-            )
+            self.loop = self._construct_loop()
 
     def _prepare_memory(self, memory):
         if memory is None:
@@ -104,12 +103,16 @@ class Agent:
         """
         Optional construction hook for framework extensibility.
         Factory signature can accept any subset of:
-        llm, memory, tools, thinker, planner, analyzer, actor, reflector, tool_manager, loop_cls
+        llm, memory, tools, thinker, planner, analyzer, actor, reflector, tool_manager,
+        loop_cls, profile, plus any custom components built from other factories.
         """
         factory = self._factories.get(name)
         if not callable(factory):
             return None
-        return factory(
+        return self._call_with_supported_kwargs(factory, self._component_context())
+
+    def _component_context(self) -> Dict[str, Any]:
+        context = {
             llm=self.llm,
             memory=self.memory,
             tools=self.tools,
@@ -121,7 +124,41 @@ class Agent:
             tool_manager=getattr(self, "tool_manager", None),
             loop_cls=self.loop_cls,
             profile=self.profile,
-        )
+        }
+        context.update(self._dynamic_components)
+        return context
+
+    def _build_dynamic_components(self):
+        reserved = {"tool_manager", "thinker", "planner", "analyzer", "actor", "reflector", "loop"}
+        for name in self._factories.keys():
+            if name in reserved:
+                continue
+            if hasattr(self, name) and getattr(self, name) is not None:
+                self._dynamic_components[name] = getattr(self, name)
+                continue
+            component = self._build_component(name)
+            if component is not None:
+                setattr(self, name, component)
+                self._dynamic_components[name] = component
+
+    def _call_with_supported_kwargs(self, fn: Callable[..., Any], kwargs: Dict[str, Any]):
+        sig = inspect.signature(fn)
+        accepts_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+        if accepts_var_kw:
+            return fn(**kwargs)
+        supported = {k: v for k, v in kwargs.items() if k in sig.parameters}
+        return fn(**supported)
+
+    def _construct_loop(self):
+        loop_kwargs = {
+            "thinker": self.thinker,
+            "planner": self.planner,
+            "actor": self.actor,
+            "reflector": self.reflector,
+            "analyzer": self.analyzer,
+        }
+        loop_kwargs.update(self._dynamic_components)
+        return self._call_with_supported_kwargs(self.loop_cls, loop_kwargs)
 
     def register_tool(self, tool):
         """Helper to register a new tool to the agent's ToolRegistry."""
@@ -130,11 +167,12 @@ class Agent:
     def set_component(self, name: str, component: Any, rebuild_loop: bool = True):
         """
         Replace a core component at runtime.
-        Supported names: thinker, planner, analyzer, actor, reflector, tool_manager, loop
+        For core names, assigns explicitly.
+        Any other name is treated as a user-defined custom component.
         """
-        if name not in {"thinker", "planner", "analyzer", "actor", "reflector", "tool_manager", "loop"}:
-            raise ValueError(f"Unsupported component: {name}")
         setattr(self, name, component)
+        if name not in {"thinker", "planner", "analyzer", "actor", "reflector", "tool_manager", "loop"}:
+            self._dynamic_components[name] = component
         if rebuild_loop and name != "loop":
             self.rebuild_loop()
 
@@ -145,13 +183,7 @@ class Agent:
         """
         if loop_cls is not None:
             self.loop_cls = loop_cls
-        self.loop = self.loop_cls(
-            thinker=self.thinker,
-            planner=self.planner,
-            actor=self.actor,
-            reflector=self.reflector,
-            analyzer=self.analyzer
-        )
+        self.loop = self._construct_loop()
 
     def register_brain(self, name: str, handler: Callable[..., Any]):
         """
