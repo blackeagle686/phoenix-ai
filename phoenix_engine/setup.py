@@ -102,31 +102,7 @@ setup(
 
 
 
-http.begin(serverApi);
-  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-  http.addHeader("ngrok-skip-browser-warning", "true");
 
-  String httpRequestData = "text=take me there&session_id=default";
-  Serial.println("\n--- Requesting Target Partition ---");
-  int httpCode = http.POST(httpRequestData);
-  int partitionID = -1;
-
-  if (httpCode > 0) {
-    Serial.print("HTTP Response code: ");
-    Serial.println(httpCode);
-    
-    String payload = http.getString();
-    Serial.print("Payload received: ");
-    Serial.println(payload);
-
-    StaticJsonDocument<1024> doc;
-    DeserializationError error = deserializeJson(doc, payload);
-
-    if (!error) {
-      if (doc.containsKey("message")) {
-        partitionID = doc["message"]; 
-        Serial.print("Parsed Partition ID: ");
-        Serial.println(partitionID);
 
 
 
