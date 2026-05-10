@@ -65,8 +65,14 @@ PYBIND11_MODULE(_phoenix_backend, m) {
     m.def("multiply_scalar", &cpu::multiply_scalar, "Scalar multiplication of a TensorData object",
           py::arg("a"), py::arg("scalar"));
     m.def("sqrt", &cpu::sqrt, "Element-wise sqrt of a TensorData object");
+    m.def("embedding_forward", &cpu::embedding_forward, "Embedding lookup");
     m.def("gemm", &cpu::gemm, "General Matrix Multiply (2D) of two TensorData objects");
-    m.def("sum", &cpu::sum, "Sum reduction of a TensorData object");
+    
+    m.def("from_list_int32", [](const std::vector<int32_t>& list, const std::vector<size_t>& shape) {
+        auto data = std::make_shared<TensorData>(shape, DType::Int32, Device::CPU);
+        std::memcpy(data->data(), list.data(), list.size() * sizeof(int32_t));
+        return data;
+    });
     m.def("relu", &cpu::relu, "ReLU activation of a TensorData object");
     m.def("softmax", &cpu::softmax, "Fused Softmax (along the last dimension)");
     m.def("layernorm", &cpu::layernorm, "Fused LayerNorm (along the last dimension)",
