@@ -42,6 +42,9 @@ TensorDataPtr add(const TensorDataPtr& a, const TensorDataPtr& b) {
                 }
             }
         } else {
+            if (!a->is_contiguous() || !b->is_contiguous()) {
+                throw std::runtime_error("Addition of non-contiguous tensors not fully implemented. Call .contiguous() first.");
+            }
             add_impl(a_ptr, b_ptr, out_ptr, a->size());
         }
     } else {
@@ -69,6 +72,9 @@ TensorDataPtr multiply(const TensorDataPtr& a, const TensorDataPtr& b) {
     auto out = std::make_shared<TensorData>(a->shape(), a->dtype(), Device::CPU);
 
     if (a->dtype() == DType::Float32) {
+        if (!a->is_contiguous() || !b->is_contiguous()) {
+            throw std::runtime_error("Multiplication of non-contiguous tensors not fully implemented. Call .contiguous() first.");
+        }
         mul_impl(static_cast<const float*>(a->data()), 
                  static_cast<const float*>(b->data()), 
                  static_cast<float*>(out->data()), a->size());
@@ -139,6 +145,9 @@ TensorDataPtr sub(const TensorDataPtr& a, const TensorDataPtr& b) {
 
     auto out = std::make_shared<TensorData>(a->shape(), a->dtype(), Device::CPU);
     if (a->dtype() == DType::Float32) {
+        if (!a->is_contiguous() || !b->is_contiguous()) {
+            throw std::runtime_error("Subtraction of non-contiguous tensors not fully implemented. Call .contiguous() first.");
+        }
         sub_impl(static_cast<const float*>(a->data()), static_cast<const float*>(b->data()), static_cast<float*>(out->data()), a->size());
     } else {
         throw std::runtime_error("Subtraction only implemented for Float32");
