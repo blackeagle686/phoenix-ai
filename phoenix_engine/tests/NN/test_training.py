@@ -1,30 +1,17 @@
 import os
 import sys
 
-# 1. Resolve paths
-# Root of phoenix_engine
-engine_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-# The folder containing the actual python code
-python_src = os.path.join(engine_root, 'python')
+# Add the parent directory to sys.path so we can import the phoenix_engine package
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-# 2. Add paths to sys.path
-sys.path.append(engine_root)
-sys.path.append(python_src)
-
-# 3. Handle the 'phoenix_engine' package alias
 try:
     from phoenix_engine import Tensor
     from phoenix_engine.nn import Linear, MSELoss
     from phoenix_engine.optim import SGD
-except ImportError:
-    # Fallback for when not installed via pip: import directly from the python folder
-    print("Package not installed, falling back to direct imports from 'python/' folder...")
-    import tensor as phoenix_engine
-    from tensor import Tensor
-    import nn
-    from nn import Linear, MSELoss
-    import optim
-    from optim import SGD
+except ImportError as e:
+    print(f"\n[ERROR] Could not import phoenix_engine: {e}")
+    print("Ensure you are running this from the correct directory or have installed the package.")
+    sys.exit(1)
 
 try:
     import _phoenix_backend as pb
