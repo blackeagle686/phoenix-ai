@@ -36,7 +36,9 @@ TensorDataPtr add(const TensorDataPtr& a, const TensorDataPtr& b) {
             size_t N = a->shape()[1];
             for (size_t i = 0; i < M; ++i) {
                 for (size_t j = 0; j < N; ++j) {
-                    out_ptr[i * N + j] = a_ptr[i * N + j] + b_ptr[j];
+                    float a_val = a_ptr[i * a->strides()[0] + j * a->strides()[1]];
+                    float b_val = b_ptr[0 * b->strides()[0] + j * b->strides()[1]]; // b is [1, N]
+                    out_ptr[i * out->strides()[0] + j * out->strides()[1]] = a_val + b_val;
                 }
             }
         } else {
