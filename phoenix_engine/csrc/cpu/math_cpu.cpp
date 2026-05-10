@@ -260,6 +260,79 @@ TensorDataPtr tril(const std::vector<size_t>& shape) {
     return out;
 }
 
+    return out;
+}
+
+TensorDataPtr softmax_cross_entropy(const TensorDataPtr& logits, const TensorDataPtr& targets) {
+    // logits: [batch..., vocab_size]
+    // targets: [batch...]
+    
+    size_t vocab_size = logits->shape().back();
+    size_t num_items = targets->size();
+    
+    auto out = std::make_shared<TensorData>(targets->shape(), DType::Float32, Device::CPU);
+    
+    const float* l_ptr = static_cast<const float*>(logits->data());
+    const int32_t* t_ptr = static_cast<const int32_t*>(targets->data());
+    float* out_ptr = static_cast<float*>(out->data());
+    
+    for (size_t i = 0; i < num_items; ++i) {
+        const float* row = l_ptr + i * vocab_size;
+        
+        // 1. Find max for numerical stability
+        float max_val = row[0];
+        for (size_t j = 1; j < vocab_size; ++j) if (row[j] > max_val) max_val = row[j];
+        
+        // 2. Compute log-sum-exp
+        float sum_exp = 0.0f;
+        for (size_t j = 0; j < vocab_size; ++j) sum_exp += std::exp(row[j] - max_val);
+        float lse = std::log(sum_exp) + max_val;
+        
+        // 3. Loss = lse - logits[target]
+        int32_t target = t_ptr[i];
+        out_ptr[i] = lse - row[target];
+    }
+    
+    return out;
+}
+
+TensorDataPtr softmax_cross_entropy_backward(const TensorDataPtr& grad_out, const TensorDataPtr& logits, const TensorDataPtr& targets) {
+    // logits: [batch..., vocab_size]
+    // targets: [batch...]
+    // grad_out: [batch...] (usually all ones for loss.backward())
+    
+    auto out = std::make_shared<TensorData>(logits->shape(), DType::Float32, Device::CPU);
+    size_t vocab_size = logits->shape().back();
+    size_t num_items = targets->size();
+    
+    const float* l_ptr = static_cast<const float*>(logits->data());
+    const int32_t* t_ptr = static_cast<const int32_t*>(targets->data());
+    const float* go_ptr = static_cast<const float*>(grad_out->data());
+    float* out_ptr = static_cast<float*>(out->data());
+    
+    for (size_t i = 0; i < num_items; ++i) {
+        const float* row = l_ptr + i * vocab_size;
+        float* out_row = out_ptr + i * vocab_size;
+        float weight = go_ptr[i];
+        
+        // Compute softmax for this row
+        float max_val = row[0];
+        for (size_t j = 1; j < vocab_size; ++j) if (row[j] > max_val) max_val = row[j];
+        
+        float sum_exp = 0.0f;
+        for (size_t j = 0; j < vocab_size; ++j) sum_exp += std::exp(row[j] - max_val);
+        
+        int32_t target = t_ptr[i];
+        for (size_t j = 0; j < vocab_size; ++j) {
+            float s = std::exp(row[j] - max_val) / sum_exp;
+            float g = (j == (size_t)target) ? (s - 1.0f) : s;
+            out_row[j] = g * weight;
+        }
+    }
+    
+    return out;
+}
+
 template <typename T>
 void gemm_impl(const T* a, const T* b, T* out, size_t m, size_t k, size_t n,
                size_t stride_a0, size_t stride_a1,
