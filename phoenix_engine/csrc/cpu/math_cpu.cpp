@@ -103,29 +103,69 @@ void gemm_impl(const T* a, const T* b, T* out, size_t m, size_t k, size_t n,
 }
 
 TensorDataPtr gemm(const TensorDataPtr& a, const TensorDataPtr& b) {
-    if (a->shape().size() != 2 || b->shape().size() != 2) {
-        throw std::invalid_argument("GEMM requires 2D tensors");
+    if (a->shape().size() < 2 || b->shape().size() < 2) {
+        throw std::invalid_argument("GEMM requires at least 2D tensors");
     }
-    if (a->shape()[1] != b->shape()[0]) {
+    if (a->shape().size() != b->shape().size()) {
+        throw std::invalid_argument("GEMM requires tensors to have the same number of dimensions for now");
+    }
+    
+    int rank = a->shape().size();
+    size_t m = a->shape()[rank - 2];
+    size_t k = a->shape()[rank - 1];
+    
+    if (b->shape()[rank - 2] != k) {
         throw std::invalid_argument("Inner dimensions must match for GEMM");
     }
-    if (a->dtype() != b->dtype()) {
-        throw std::invalid_argument("DTypes must match for GEMM");
+    size_t n = b->shape()[rank - 1];
+
+    size_t batch_size = 1;
+    for (int i = 0; i < rank - 2; ++i) {
+        if (a->shape()[i] != b->shape()[i]) {
+            throw std::invalid_argument("Batch dimensions must match for Batched GEMM");
+        }
+        batch_size *= a->shape()[i];
     }
 
-    size_t m = a->shape()[0];
-    size_t k = a->shape()[1];
-    size_t n = b->shape()[1];
+    std::vector<size_t> out_shape = a->shape();
+    out_shape[rank - 2] = m;
+    out_shape[rank - 1] = n;
 
-    auto out = std::make_shared<TensorData>(std::vector<size_t>{m, n}, a->dtype(), Device::CPU);
+    auto out = std::make_shared<TensorData>(out_shape, a->dtype(), Device::CPU);
 
     if (a->dtype() == DType::Float32) {
-        gemm_impl(static_cast<const float*>(a->data()), 
-                  static_cast<const float*>(b->data()), 
-                  static_cast<float*>(out->data()), m, k, n,
-                  a->strides()[0], a->strides()[1],
-                  b->strides()[0], b->strides()[1],
-                  out->strides()[0], out->strides()[1]);
+        const float* a_ptr = static_cast<const float*>(a->data());
+        const float* b_ptr = static_cast<const float*>(b->data());
+        float* out_ptr = static_cast<float*>(out->data());
+
+        std::vector<size_t> batch_coords(rank > 2 ? rank - 2 : 1, 0);
+
+        for (size_t b_idx = 0; b_idx < batch_size; ++b_idx) {
+            size_t offset_a = 0, offset_b = 0, offset_out = 0;
+            if (rank > 2) {
+                for (int d = 0; d < rank - 2; ++d) {
+                    offset_a += batch_coords[d] * a->strides()[d];
+                    offset_b += batch_coords[d] * b->strides()[d];
+                    offset_out += batch_coords[d] * out->strides()[d];
+                }
+            }
+
+            gemm_impl(a_ptr + offset_a, 
+                      b_ptr + offset_b, 
+                      out_ptr + offset_out, m, k, n,
+                      a->strides()[rank - 2], a->strides()[rank - 1],
+                      b->strides()[rank - 2], b->strides()[rank - 1],
+                      out->strides()[rank - 2], out->strides()[rank - 1]);
+
+            // Update odometer
+            if (rank > 2) {
+                for (int d = rank - 3; d >= 0; --d) {
+                    batch_coords[d]++;
+                    if (batch_coords[d] < a->shape()[d]) break;
+                    batch_coords[d] = 0;
+                }
+            }
+        }
     } else {
         throw std::runtime_error("GEMM only implemented for Float32 right now");
     }
