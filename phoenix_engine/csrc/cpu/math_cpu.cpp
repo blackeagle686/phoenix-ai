@@ -87,6 +87,30 @@ TensorDataPtr multiply(const TensorDataPtr& a, const TensorDataPtr& b) {
 }
 
 template <typename T>
+void multiply_scalar_impl(const T* a, T scalar, T* out, size_t size) {
+    for (size_t i = 0; i < size; ++i) {
+        out[i] = a[i] * scalar;
+    }
+}
+
+TensorDataPtr multiply_scalar(const TensorDataPtr& a, float scalar) {
+    if (!a->is_contiguous()) {
+        throw std::runtime_error("multiply_scalar requires contiguous memory for now.");
+    }
+
+    auto out = std::make_shared<TensorData>(a->shape(), a->dtype(), Device::CPU);
+
+    if (a->dtype() == DType::Float32) {
+        multiply_scalar_impl(static_cast<const float*>(a->data()), scalar, 
+                             static_cast<float*>(out->data()), a->size());
+    } else {
+        throw std::runtime_error("multiply_scalar only implemented for Float32 right now");
+    }
+
+    return out;
+}
+
+template <typename T>
 void gemm_impl(const T* a, const T* b, T* out, size_t m, size_t k, size_t n,
                size_t stride_a0, size_t stride_a1,
                size_t stride_b0, size_t stride_b1,
