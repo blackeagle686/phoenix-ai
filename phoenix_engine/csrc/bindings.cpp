@@ -75,6 +75,8 @@ PYBIND11_MODULE(_phoenix_backend, m) {
         std::memcpy(data->data(), list.data(), list.size() * sizeof(int32_t));
         return data;
     });
+    m.def("softmax_cross_entropy", &cpu::softmax_cross_entropy, "Fused Softmax Cross Entropy loss");
+    m.def("softmax_cross_entropy_backward", &cpu::softmax_cross_entropy_backward, "Fused Softmax Cross Entropy backward");
     m.def("relu", &cpu::relu, "ReLU activation of a TensorData object");
     m.def("softmax", &cpu::softmax, "Fused Softmax (along the last dimension)");
     m.def("layernorm", &cpu::layernorm, "Fused LayerNorm (along the last dimension)",
