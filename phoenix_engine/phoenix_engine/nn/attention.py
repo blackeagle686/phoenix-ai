@@ -30,11 +30,48 @@ class MultiHeadAttention(Module):
         self.v_cache = None
 
     def forward(self, x: Tensor) -> Tensor:
-        # x shape: [batch_size, seq_len, embed_dim]
-        # TODO: Implement full attention calculation
-        # 1. Project Q, K, V
-        # 2. Split heads and permute: [batch, num_heads, seq_len, head_dim]
-        # 3. Handle KV-Cache concatenation
-        # 4. Scaled Dot-Product: softmax(Q @ K^T / sqrt(d)) @ V
-        # 5. Concatenate heads and out_proj
-        pass
+        # x shape: [B, T, C]
+        B, T, C = x.shape
+        
+        # 1. Project Q, K, V -> [B, T, C]
+        q = self.q_proj(x)
+        k = self.k_proj(x)
+        v = self.v_proj(x)
+        
+        # 2. Split heads and permute: [B, num_heads, T, head_dim]
+        q = q.view(B, T, self.num_heads, self.head_dim).permute([0, 2, 1, 3])
+        k = k.view(B, T, self.num_heads, self.head_dim).permute([0, 2, 1, 3])
+        v = v.view(B, T, self.num_heads, self.head_dim).permute([0, 2, 1, 3])
+        
+        # 3. KV-Cache (Conceptual - requires 'concat' op implementation in C++)
+        if self.use_kv_cache:
+            if self.k_cache is not None and self.v_cache is not None:
+                # k = concat([self.k_cache, k], dim=2)
+                # v = concat([self.v_cache, v], dim=2)
+                pass
+            self.k_cache = k
+            self.v_cache = v
+            
+        # 4. Scaled Dot-Product Attention: softmax(Q @ K^T / sqrt(d)) @ V
+        # Transpose K's last two dimensions (O(1) memory view)
+        k_t = k.transpose(2, 3)
+        
+        # Batched Matrix Multiplication: [B, num_heads, T, T]
+        attn_scores = q.matmul(k_t)
+        
+        # Apply Softmax (Scale by sqrt(d) omitted temporarily pending scalar division op)
+        attn_probs = attn_scores.softmax()
+        
+        # Multiply by V: [B, num_heads, T, head_dim]
+        attn_output = attn_probs.matmul(v)
+        
+        # 5. Concatenate heads back and project
+        # Permute back: [B, T, num_heads, head_dim]
+        # Must call .contiguous() before view because permute makes it non-contiguous!
+        attn_output = attn_output.permute([0, 2, 1, 3]).contiguous()
+        
+        # Flatten heads: [B, T, C]
+        attn_output = attn_output.view(B, T, C)
+        
+        # Final output projection
+        return self.out_proj(attn_output)
