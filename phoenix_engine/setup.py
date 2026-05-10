@@ -21,7 +21,8 @@ ext_modules = [
         '_phoenix_backend',
         [
             'csrc/bindings.cpp',
-            'csrc/core/tensor_data.cpp'
+            'csrc/core/tensor_data.cpp',
+            'csrc/cpu/math_cpu.cpp'
         ],
         include_dirs=[
             # Path to pybind11 headers

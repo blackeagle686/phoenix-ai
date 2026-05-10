@@ -40,4 +40,9 @@ PYBIND11_MODULE(_phoenix_backend, m) {
         .def("size", &TensorData::size)
         .def("num_bytes", &TensorData::num_bytes)
         .def("__repr__", &TensorData::to_string);
+
+    // Math Kernels
+    m.def("add", &cpu::add, "Element-wise addition of two TensorData objects");
+    m.def("multiply", &cpu::multiply, "Element-wise multiplication of two TensorData objects");
+    m.def("gemm", &cpu::gemm, "General Matrix Multiply (2D) of two TensorData objects");
 }
