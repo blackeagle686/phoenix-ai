@@ -19,6 +19,8 @@ TensorDataPtr multiply(const TensorDataPtr& a, const TensorDataPtr& b);
 TensorDataPtr multiply_scalar(const TensorDataPtr& a, float scalar);
 TensorDataPtr sqrt(const TensorDataPtr& a);
 TensorDataPtr embedding_forward(const TensorDataPtr& indices, const TensorDataPtr& weight);
+TensorDataPtr masked_fill(const TensorDataPtr& a, const TensorDataPtr& mask, float value);
+TensorDataPtr tril(const std::vector<size_t>& shape);
 
 // General Matrix Multiply (2D)
 TensorDataPtr gemm(const TensorDataPtr& a, const TensorDataPtr& b);
