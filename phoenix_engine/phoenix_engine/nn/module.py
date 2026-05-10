@@ -1,6 +1,6 @@
 from ..tensor import Tensor
 from typing import List, Dict, Any
-# para
+# parameters of the model
 class Parameter(Tensor):
     def __init__(self, data, requires_grad=True):
         super().__init__(data, requires_grad=requires_grad)
