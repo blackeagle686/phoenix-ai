@@ -51,6 +51,8 @@ PYBIND11_MODULE(_phoenix_backend, m) {
     m.def("add", &cpu::add, "Element-wise addition of two TensorData objects");
     m.def("sub", &cpu::sub, "Element-wise subtraction of two TensorData objects");
     m.def("multiply", &cpu::multiply, "Element-wise multiplication of two TensorData objects");
+    m.def("multiply_scalar", &cpu::multiply_scalar, "Scalar multiplication of a TensorData object",
+          py::arg("a"), py::arg("scalar"));
     m.def("gemm", &cpu::gemm, "General Matrix Multiply (2D) of two TensorData objects");
     m.def("sum", &cpu::sum, "Sum reduction of a TensorData object");
     m.def("relu", &cpu::relu, "ReLU activation of a TensorData object");
