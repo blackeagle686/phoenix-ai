@@ -1,6 +1,7 @@
 #include "cpu_kernels.h"
 #include <stdexcept>
 #include <random>
+#include <cmath>
 
 namespace phoenix {
 namespace cpu {
@@ -187,6 +188,101 @@ TensorDataPtr relu(const TensorDataPtr& a) {
         relu_impl(static_cast<const float*>(a->data()), static_cast<float*>(out->data()), a->size());
     } else {
         throw std::runtime_error("ReLU only implemented for Float32");
+    }
+    return out;
+}
+
+template <typename T>
+void softmax_impl(const T* a, T* out, size_t outer_size, size_t inner_size) {
+    for (size_t i = 0; i < outer_size; ++i) {
+        const T* a_row = a + i * inner_size;
+        T* out_row = out + i * inner_size;
+        
+        // Find max for numerical stability
+        T max_val = a_row[0];
+        for (size_t j = 1; j < inner_size; ++j) {
+            if (a_row[j] > max_val) max_val = a_row[j];
+        }
+        
+        // Compute exp and sum
+        T sum = 0;
+        for (size_t j = 0; j < inner_size; ++j) {
+            out_row[j] = std::exp(a_row[j] - max_val);
+            sum += out_row[j];
+        }
+        
+        // Normalize
+        for (size_t j = 0; j < inner_size; ++j) {
+            out_row[j] /= sum;
+        }
+    }
+}
+
+TensorDataPtr softmax(const TensorDataPtr& a) {
+    if (!a->is_contiguous()) {
+        throw std::runtime_error("Softmax requires a contiguous tensor. Call .contiguous() first.");
+    }
+    
+    auto out = std::make_shared<TensorData>(a->shape(), a->dtype(), Device::CPU);
+    
+    if (a->dtype() == DType::Float32) {
+        size_t inner_size = a->shape().back();
+        size_t outer_size = a->size() / inner_size;
+        
+        softmax_impl(static_cast<const float*>(a->data()), static_cast<float*>(out->data()), outer_size, inner_size);
+    } else {
+        throw std::runtime_error("Softmax only implemented for Float32");
+    }
+    return out;
+}
+
+template <typename T>
+void layernorm_impl(const T* a, const T* weight, const T* bias, T* out, size_t outer_size, size_t inner_size, float eps) {
+    for (size_t i = 0; i < outer_size; ++i) {
+        const T* a_row = a + i * inner_size;
+        T* out_row = out + i * inner_size;
+        
+        // Mean
+        T sum = 0;
+        for (size_t j = 0; j < inner_size; ++j) {
+            sum += a_row[j];
+        }
+        T mean = sum / inner_size;
+        
+        // Variance
+        T var = 0;
+        for (size_t j = 0; j < inner_size; ++j) {
+            T diff = a_row[j] - mean;
+            var += diff * diff;
+        }
+        var /= inner_size;
+        
+        // Normalize and apply weight/bias
+        T stddev_inv = 1.0f / std::sqrt(var + eps);
+        for (size_t j = 0; j < inner_size; ++j) {
+            T normalized = (a_row[j] - mean) * stddev_inv;
+            out_row[j] = normalized * (weight ? weight[j] : 1.0f) + (bias ? bias[j] : 0.0f);
+        }
+    }
+}
+
+TensorDataPtr layernorm(const TensorDataPtr& a, const TensorDataPtr& weight, const TensorDataPtr& bias, float eps) {
+    if (!a->is_contiguous()) {
+        throw std::runtime_error("LayerNorm requires a contiguous tensor.");
+    }
+    
+    auto out = std::make_shared<TensorData>(a->shape(), a->dtype(), Device::CPU);
+    
+    if (a->dtype() == DType::Float32) {
+        size_t inner_size = a->shape().back();
+        size_t outer_size = a->size() / inner_size;
+        
+        const float* w_ptr = weight ? static_cast<const float*>(weight->data()) : nullptr;
+        const float* b_ptr = bias ? static_cast<const float*>(bias->data()) : nullptr;
+        
+        layernorm_impl(static_cast<const float*>(a->data()), w_ptr, b_ptr, static_cast<float*>(out->data()), outer_size, inner_size, eps);
+    } else {
+        throw std::runtime_error("LayerNorm only implemented for Float32");
     }
     return out;
 }
