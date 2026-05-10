@@ -21,6 +21,7 @@ TensorDataPtr sqrt(const TensorDataPtr& a);
 TensorDataPtr embedding_forward(const TensorDataPtr& indices, const TensorDataPtr& weight);
 TensorDataPtr masked_fill(const TensorDataPtr& a, const TensorDataPtr& mask, float value);
 TensorDataPtr tril(const std::vector<size_t>& shape);
+TensorDataPtr softmax_cross_entropy(const TensorDataPtr& logits, const TensorDataPtr& targets);
 
 // General Matrix Multiply (2D)
 TensorDataPtr gemm(const TensorDataPtr& a, const TensorDataPtr& b);
