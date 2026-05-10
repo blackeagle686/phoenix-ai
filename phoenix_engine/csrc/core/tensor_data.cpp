@@ -100,20 +100,29 @@ std::shared_ptr<TensorData> TensorData::contiguous() {
 
     auto out = std::make_shared<TensorData>(shape_, dtype_, device_);
     
-    // Generic copy loop (Assuming 2D for now)
-    if (shape_.size() == 2) {
+    // Generic N-dimensional copy loop
+    if (dtype_ == DType::Float32) {
         float* src = (float*)data_;
         float* dst = (float*)out->data();
-        size_t M = shape_[0], N = shape_[1];
-        size_t s0 = strides_[0], s1 = strides_[1];
+        size_t total_elements = out->size();
         
-        for (size_t i = 0; i < M; ++i) {
-            for (size_t j = 0; j < N; ++j) {
-                dst[i * N + j] = src[i * s0 + j * s1];
+        std::vector<size_t> coords(shape_.size(), 0);
+        for (size_t i = 0; i < total_elements; ++i) {
+            size_t src_offset = 0;
+            for (size_t d = 0; d < shape_.size(); ++d) {
+                src_offset += coords[d] * strides_[d];
+            }
+            dst[i] = src[src_offset]; // dst is contiguous
+            
+            // update odometer
+            for (int d = shape_.size() - 1; d >= 0; --d) {
+                coords[d]++;
+                if (coords[d] < shape_[d]) break;
+                coords[d] = 0;
             }
         }
     } else {
-        throw std::runtime_error("Contiguous only implemented for 2D tensors currently");
+        throw std::runtime_error("Contiguous only implemented for Float32 tensors currently");
     }
 
     return out;
