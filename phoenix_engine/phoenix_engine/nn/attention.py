@@ -53,13 +53,17 @@ class MultiHeadAttention(Module):
             self.v_cache = v
             
         # 4. Scaled Dot-Product Attention: softmax(Q @ K^T / sqrt(d)) @ V
-        # Transpose K's last two dimensions (O(1) memory view)
         k_t = k.transpose(2, 3)
+        attn_scores = q.matmul(k_t) * (1.0 / math.sqrt(self.head_dim))
         
-        # Batched Matrix Multiplication: [B, num_heads, T, T]
-        attn_scores = q.matmul(k_t)
+        # Apply causal mask: mask out future tokens
+        # mask is 1 for allowed positions, 0 for blocked.
+        # We need to fill blocked positions with -inf (or very small number)
+        mask = Tensor.tril(T, T)
+        # inverted_mask is 1 for blocked positions
+        inv_mask = 1.0 - mask
+        attn_scores = attn_scores.masked_fill(inv_mask, -1e9)
         
-        # Apply Softmax (Scale by sqrt(d) omitted temporarily pending scalar division op)
         attn_probs = attn_scores.softmax()
         
         # Multiply by V: [B, num_heads, T, head_dim]
