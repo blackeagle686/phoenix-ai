@@ -287,6 +287,38 @@ TensorDataPtr layernorm(const TensorDataPtr& a, const TensorDataPtr& weight, con
     return out;
 }
 
+TensorDataPtr embedding(const TensorDataPtr& weight, const TensorDataPtr& indices) {
+    if (!weight->is_contiguous() || !indices->is_contiguous()) {
+        throw std::runtime_error("Embedding requires contiguous tensors.");
+    }
+    
+    size_t embed_dim = weight->shape().back();
+    size_t num_embeddings = weight->size() / embed_dim;
+    
+    std::vector<size_t> out_shape = indices->shape();
+    out_shape.push_back(embed_dim);
+    
+    auto out = std::make_shared<TensorData>(out_shape, weight->dtype(), Device::CPU);
+    
+    if (weight->dtype() == DType::Float32 && indices->dtype() == DType::Float32) {
+        const float* w_ptr = static_cast<const float*>(weight->data());
+        const float* idx_ptr = static_cast<const float*>(indices->data());
+        float* out_ptr = static_cast<float*>(out->data());
+        
+        for (size_t i = 0; i < indices->size(); ++i) {
+            size_t idx = static_cast<size_t>(idx_ptr[i]);
+            if (idx >= num_embeddings) throw std::out_of_range("Embedding index out of bounds");
+            
+            for (size_t j = 0; j < embed_dim; ++j) {
+                out_ptr[i * embed_dim + j] = w_ptr[idx * embed_dim + j];
+            }
+        }
+    } else {
+        throw std::runtime_error("Embedding only implemented for Float32 right now");
+    }
+    return out;
+}
+
 TensorDataPtr randn(const std::vector<size_t>& shape, DType dtype) {
     auto out = std::make_shared<TensorData>(shape, dtype, Device::CPU);
     
