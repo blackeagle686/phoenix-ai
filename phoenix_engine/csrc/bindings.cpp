@@ -66,6 +66,8 @@ PYBIND11_MODULE(_phoenix_backend, m) {
           py::arg("a"), py::arg("scalar"));
     m.def("sqrt", &cpu::sqrt, "Element-wise sqrt of a TensorData object");
     m.def("embedding_forward", &cpu::embedding_forward, "Embedding lookup");
+    m.def("masked_fill", &cpu::masked_fill, "Masked fill");
+    m.def("tril", &cpu::tril, "Create lower triangular matrix");
     m.def("gemm", &cpu::gemm, "General Matrix Multiply (2D) of two TensorData objects");
     
     m.def("from_list_int32", [](const std::vector<int32_t>& list, const std::vector<size_t>& shape) {
