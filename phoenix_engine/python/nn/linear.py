@@ -26,37 +26,3 @@ class Linear(Module):
     def __repr__(self):
         return f"Linear(in_features={self.in_features}, out_features={self.out_features}, bias={self.bias is not None})"
 
-
-
-
-from phoenix_engine import Tensor
-from phoenix_engine.nn import Module, Linear, MSELoss
-from phoenix_engine.optim import SGD
-
-class SimpleNet(Module):
-    def __init__(self):
-        super().__init__()
-        self.fc1 = Linear(10, 5)
-        self.fc2 = Linear(5, 1)
-
-    def forward(self, x):
-        x = self.fc1(x).relu()
-        return self.fc2(x)
-
-model = SimpleNet()
-criterion = MSELoss()
-optimizer = SGD(model.parameters(), lr=0.01)
-
-# Training loop
-for epoch in range(100):
-    optimizer.zero_grad()
-    
-    # Forward pass (Fast C++ execution)
-    pred = model(input_tensor)
-    loss = criterion(pred, target_tensor)
-    
-    # Backward pass (Autograd engine)
-    loss.backward()
-    
-    # Step (Optimized updates)
-    optimizer.step()
