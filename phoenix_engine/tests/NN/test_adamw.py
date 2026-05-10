@@ -53,7 +53,7 @@ def test_adamw():
     x = Tensor.randn(1, 3, requires_grad=True)
     
     # 3. Optimizer
-    optimizer = optim.AdamW([linear.weight, linear.bias], lr=0.1)
+    optimizer = LocalAdamW([linear.weight, linear.bias], lr=0.1)
     
     # 4. Training loop (simple)
     print("Starting optimization loop...")
