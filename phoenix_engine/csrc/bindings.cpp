@@ -68,6 +68,7 @@ PYBIND11_MODULE(_phoenix_backend, m) {
     m.def("embedding_forward", &cpu::embedding_forward, "Embedding lookup");
     m.def("masked_fill", &cpu::masked_fill, "Masked fill");
     m.def("tril", &cpu::tril, "Create lower triangular matrix");
+    m.def("narrow", &cpu::narrow, "Narrow a TensorData object along a dimension");
     m.def("gemm", &cpu::gemm, "General Matrix Multiply (2D) of two TensorData objects");
     
     m.def("from_list_int32", [](const std::vector<int32_t>& list, const std::vector<size_t>& shape) {

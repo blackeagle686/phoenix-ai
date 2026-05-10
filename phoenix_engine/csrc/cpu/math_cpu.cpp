@@ -330,6 +330,37 @@ TensorDataPtr softmax_cross_entropy_backward(const TensorDataPtr& grad_out, cons
     return out;
 }
 
+TensorDataPtr narrow(const TensorDataPtr& a, size_t dim, size_t start, size_t length) {
+    if (dim >= a->shape().size()) throw std::runtime_error("Narrow dimension out of range");
+    if (start + length > a->shape()[dim]) throw std::runtime_error("Narrow range out of bounds");
+    
+    std::vector<size_t> new_shape = a->shape();
+    new_shape[dim] = length;
+    
+    auto out = std::make_shared<TensorData>(new_shape, a->dtype(), Device::CPU);
+    
+    // For now, implement as a copy. 
+    // Optimization: if dim is 0 and a is contiguous, it's just a memcpy.
+    const float* src = static_cast<const float*>(a->data());
+    float* dst = static_cast<float*>(out->data());
+    
+    size_t inner_size = 1;
+    for (size_t i = dim + 1; i < a->shape().size(); ++i) inner_size *= a->shape()[i];
+    
+    size_t outer_size = 1;
+    for (size_t i = 0; i < dim; ++i) outer_size *= a->shape()[i];
+    
+    size_t dim_size = a->shape()[dim];
+    
+    for (size_t i = 0; i < outer_size; ++i) {
+        const float* src_row = src + i * dim_size * inner_size + start * inner_size;
+        float* dst_row = dst + i * length * inner_size;
+        std::memcpy(dst_row, src_row, length * inner_size * sizeof(float));
+    }
+    
+    return out;
+}
+
 template <typename T>
 void gemm_impl(const T* a, const T* b, T* out, size_t m, size_t k, size_t n,
                size_t stride_a0, size_t stride_a1,
