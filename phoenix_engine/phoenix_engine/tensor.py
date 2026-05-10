@@ -22,6 +22,17 @@ class Tensor:
     def shape(self):
         return self.data.shape()
 
+    def view(self, *shape: int) -> 'Tensor':
+        out_data = self.data.view(list(shape))
+        out = Tensor(out_data, _prev=(self,))
+        
+        def _backward():
+            if self.requires_grad:
+                pass
+                
+        out._backward = _backward
+        return out
+
     def transpose(self, dim0: int, dim1: int) -> 'Tensor':
         # Create a new Tensor that wraps the transposed TensorData (O(1) operation)
         out_data = self.data.transpose(dim0, dim1)
