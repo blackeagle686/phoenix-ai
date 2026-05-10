@@ -15,6 +15,15 @@ TensorData::TensorData(const std::vector<size_t>& shape, DType dtype, Device dev
     allocate();
 }
 
+void TensorData::calculate_strides() {
+    strides_.resize(shape_.size());
+    size_t stride = 1;
+    for (int i = shape_.size() - 1; i >= 0; --i) {
+        strides_[i] = stride;
+        stride *= shape_[i];
+    }
+}
+
 TensorData::TensorData(const std::vector<size_t>& shape, const std::vector<size_t>& strides, 
                        DType dtype, Device device, std::shared_ptr<void> storage, size_t offset)
     : shape_(shape), strides_(strides), dtype_(dtype), device_(device), 
