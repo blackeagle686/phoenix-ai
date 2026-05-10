@@ -23,6 +23,7 @@ TensorDataPtr masked_fill(const TensorDataPtr& a, const TensorDataPtr& mask, flo
 TensorDataPtr tril(const std::vector<size_t>& shape);
 TensorDataPtr softmax_cross_entropy(const TensorDataPtr& logits, const TensorDataPtr& targets);
 TensorDataPtr softmax_cross_entropy_backward(const TensorDataPtr& grad_out, const TensorDataPtr& logits, const TensorDataPtr& targets);
+TensorDataPtr narrow(const TensorDataPtr& a, size_t dim, size_t start, size_t length);
 
 // General Matrix Multiply (2D)
 TensorDataPtr gemm(const TensorDataPtr& a, const TensorDataPtr& b);
