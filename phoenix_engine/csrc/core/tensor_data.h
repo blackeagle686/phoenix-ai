@@ -20,20 +20,25 @@ public:
     // Getters
     void* data() const { return data_; }
     const std::vector<size_t>& shape() const { return shape_; }
+    const std::vector<size_t>& strides() const { return strides_; }
     DType dtype() const { return dtype_; }
     Device device() const { return device_; }
     size_t size() const { return size_; }
     size_t num_bytes() const { return size_ * element_size(dtype_); }
+    bool is_contiguous() const { return is_contiguous_; }
 
     // Helpers
     std::string to_string() const;
+    void calculate_strides();
 
 private:
     void* data_;
     std::vector<size_t> shape_;
+    std::vector<size_t> strides_;
     DType dtype_;
     Device device_;
     size_t size_;
+    bool is_contiguous_;
     
     void allocate();
     void deallocate();
