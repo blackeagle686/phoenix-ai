@@ -13,7 +13,7 @@ public:
     TensorData(const std::vector<size_t>& shape, DType dtype, Device device);
     // Special constructor for creating views (sharing memory)
     TensorData(const std::vector<size_t>& shape, const std::vector<size_t>& strides, 
-               DType dtype, Device device, std::shared_ptr<void> storage, size_t offset);
+               DType dtype, Device device, std::shared_ptr<void> storage, size_t offset, bool is_contiguous = false);
     ~TensorData();
 
     // Prevent copying (we pass pointers around)
