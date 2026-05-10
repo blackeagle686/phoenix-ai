@@ -13,6 +13,7 @@ TensorDataPtr sub(const TensorDataPtr& a, const TensorDataPtr& b);
 
 // Basic element-wise multiplication
 TensorDataPtr multiply(const TensorDataPtr& a, const TensorDataPtr& b);
+TensorDataPtr multiply_scalar(const TensorDataPtr& a, float scalar);
 
 // General Matrix Multiply (2D)
 TensorDataPtr gemm(const TensorDataPtr& a, const TensorDataPtr& b);
