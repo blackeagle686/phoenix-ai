@@ -363,19 +363,51 @@ TensorDataPtr randn(const std::vector<size_t>& shape, DType dtype) {
     auto out = std::make_shared<TensorData>(shape, dtype, Device::CPU);
     
     if (dtype == DType::Float32) {
-        float* data = static_cast<float*>(out->data());
-        // Using a static generator is fast enough for now, but not thread-safe.
-        static std::random_device rd;
-        static std::mt19937 gen{rd()};
+        float* out_ptr = static_cast<float*>(out->data());
+        size_t size = out->size();
+        
+        std::random_device rd;
+        std::mt19937 gen(rd());
         std::normal_distribution<float> d(0.0f, 1.0f);
         
-        for (size_t i = 0; i < out->size(); ++i) {
-            data[i] = d(gen);
+        for (size_t i = 0; i < size; ++i) {
+            out_ptr[i] = d(gen);
         }
     } else {
-         throw std::runtime_error("randn only implemented for Float32");
+        throw std::runtime_error("randn only implemented for Float32");
     }
     
+    return out;
+}
+
+template <typename T>
+void fill_impl(T* data, size_t size, T value) {
+    for (size_t i = 0; i < size; ++i) {
+        data[i] = value;
+    }
+}
+
+TensorDataPtr zeros(const std::vector<size_t>& shape, DType dtype) {
+    auto out = std::make_shared<TensorData>(shape, dtype, Device::CPU);
+    if (dtype == DType::Float32) {
+        fill_impl(static_cast<float*>(out->data()), out->size(), 0.0f);
+    } else if (dtype == DType::Int32) {
+        fill_impl(static_cast<int32_t*>(out->data()), out->size(), 0);
+    } else {
+        throw std::runtime_error("zeros only implemented for Float32 and Int32");
+    }
+    return out;
+}
+
+TensorDataPtr ones(const std::vector<size_t>& shape, DType dtype) {
+    auto out = std::make_shared<TensorData>(shape, dtype, Device::CPU);
+    if (dtype == DType::Float32) {
+        fill_impl(static_cast<float*>(out->data()), out->size(), 1.0f);
+    } else if (dtype == DType::Int32) {
+        fill_impl(static_cast<int32_t*>(out->data()), out->size(), 1);
+    } else {
+        throw std::runtime_error("ones only implemented for Float32 and Int32");
+    }
     return out;
 }
 
