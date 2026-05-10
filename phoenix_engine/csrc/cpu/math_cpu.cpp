@@ -178,6 +178,44 @@ TensorDataPtr sqrt(const TensorDataPtr& a) {
     return out;
 }
 
+TensorDataPtr embedding_forward(const TensorDataPtr& indices, const TensorDataPtr& weight) {
+    // indices: [batch, seq_len] or any shape of Int32
+    // weight: [vocab_size, embed_dim] of Float32
+    // output: [indices_shape..., embed_dim]
+    
+    if (indices->dtype() != DType::Int32) {
+        throw std::runtime_error("Embedding indices must be Int32");
+    }
+    if (weight->dtype() != DType::Float32) {
+        throw std::runtime_error("Embedding weights must be Float32");
+    }
+    
+    std::vector<size_t> out_shape = indices->shape();
+    size_t embed_dim = weight->shape()[1];
+    out_shape.push_back(embed_dim);
+    
+    auto out = std::make_shared<TensorData>(out_shape, DType::Float32, Device::CPU);
+    
+    const int32_t* idx_ptr = static_cast<const int32_t*>(indices->data());
+    const float* w_ptr = static_cast<const float*>(weight->data());
+    float* out_ptr = static_cast<float*>(out->data());
+    
+    size_t num_indices = indices->size();
+    size_t vocab_size = weight->shape()[0];
+    
+    for (size_t i = 0; i < num_indices; ++i) {
+        int32_t idx = idx_ptr[i];
+        if (idx < 0 || (size_t)idx >= vocab_size) {
+            throw std::runtime_error("Embedding index out of range");
+        }
+        
+        // Copy weight[idx] to out[i]
+        std::memcpy(out_ptr + i * embed_dim, w_ptr + idx * embed_dim, embed_dim * sizeof(float));
+    }
+    
+    return out;
+}
+
 template <typename T>
 void gemm_impl(const T* a, const T* b, T* out, size_t m, size_t k, size_t n,
                size_t stride_a0, size_t stride_a1,
