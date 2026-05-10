@@ -215,13 +215,15 @@ class Tensor:
             out._backward = _backward
             return out
 
+    def __rsub__(self, other: Union[float, int]) -> 'Tensor':
+        return (self * -1.0) + other
+
     def __truediv__(self, other: Union['Tensor', float, int]) -> 'Tensor':
         if isinstance(other, (float, int)):
             out_data = pb.divide_scalar(self.data, float(other))
             out = Tensor(out_data, requires_grad=self.requires_grad, _prev=(self,))
             def _backward():
                 if self.requires_grad:
-                    # grad = out.grad / other
                     grad_self = out.grad * (1.0 / other)
                     self.grad = self.grad + grad_self if self.grad is not None else grad_self
             out._backward = _backward
@@ -231,15 +233,19 @@ class Tensor:
             out = Tensor(out_data, requires_grad=(self.requires_grad or other.requires_grad), _prev=(self, other))
             def _backward():
                 if self.requires_grad:
-                    # grad_a = out.grad / b
                     grad_self = out.grad / other
                     self.grad = self.grad + grad_self if self.grad is not None else grad_self
                 if other.requires_grad:
-                    # grad_b = -out.grad * a / b^2
                     grad_other = (out.grad * self * -1.0) / (other * other)
                     other.grad = other.grad + grad_other if other.grad is not None else grad_other
             out._backward = _backward
             return out
+
+    def __rtruediv__(self, other: Union[float, int]) -> 'Tensor':
+        # other / self
+        # Need a reciprocal op for this. 
+        # For now, let's just use power if we had it.
+        pass
 
     def sum(self) -> 'Tensor':
         out_data = pb.sum(self.data)
