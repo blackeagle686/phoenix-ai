@@ -32,7 +32,7 @@ class Embedding(Module):
         self.weight = Parameter(w_data)
         
     def forward(self, indices: Tensor) -> Tensor:
-        import phoenix_engine._C as pb
+        import _phoenix_backend as pb
         out_data = pb.embedding(self.weight.data, indices.data)
         out = Tensor(out_data, _prev=(self.weight, indices))
         
