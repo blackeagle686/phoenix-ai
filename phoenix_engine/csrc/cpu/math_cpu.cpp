@@ -166,7 +166,7 @@ TensorDataPtr randn(const std::vector<size_t>& shape, DType dtype) {
         float* data = static_cast<float*>(out->data());
         // Using a static generator is fast enough for now, but not thread-safe.
         static std::random_device rd;
-        static std::mt19937 gen(rd());
+        static std::mt19937 gen{rd()};
         std::normal_distribution<float> d(0.0f, 1.0f);
         
         for (size_t i = 0; i < out->size(); ++i) {
