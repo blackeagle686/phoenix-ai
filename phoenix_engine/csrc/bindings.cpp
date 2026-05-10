@@ -44,6 +44,7 @@ PYBIND11_MODULE(_phoenix_backend, m) {
         .def("view", &TensorData::view)
         .def("transpose", &TensorData::transpose)
         .def("permute", &TensorData::permute)
+        .def("contiguous", &TensorData::contiguous)
         .def("__repr__", &TensorData::to_string);
 
     // Math Kernels
