@@ -42,21 +42,36 @@ class AdamW:
             if p.grad is None:
                 continue
             
-            # Weight decay: p = p * (1 - lr * wd)
+            # 1. Weight decay (AdamW style: decay applied before moment updates)
             if self.weight_decay != 0:
-                decay_factor = 1.0 - self.lr * self.weight_decay
-                p.data = pb.multiply_scalar(p.data, decay_factor)
+                # p = p - lr * weight_decay * p
+                decay_step = p.data.multiply_scalar(self.lr * self.weight_decay)
+                p.data = pb.sub(p.data, decay_step)
             
+            # 2. Update biased first moment estimate
             # m = b1 * m + (1 - b1) * grad
-            self.m[i] = self.m[i] * b1 + p.grad * (1.0 - b1)
+            m_term1 = self.m[i].data.multiply_scalar(b1)
+            m_term2 = p.grad.data.multiply_scalar(1.0 - b1)
+            self.m[i].data = pb.add(m_term1, m_term2)
+            
+            # 3. Update biased second raw moment estimate
             # v = b2 * v + (1 - b2) * grad^2
-            self.v[i] = self.v[i] * b2 + (p.grad * p.grad) * (1.0 - b2)
+            v_term1 = self.v[i].data.multiply_scalar(b2)
+            grad_sq = pb.multiply(p.grad.data, p.grad.data)
+            v_term2 = grad_sq.multiply_scalar(1.0 - b2)
+            self.v[i].data = pb.add(v_term1, v_term2)
             
-            # Bias correction
-            m_hat = self.m[i] * (1.0 / (1.0 - b1**self.t))
-            v_hat = self.v[i] * (1.0 / (1.0 - b2**self.t))
+            # 4. Bias correction
+            m_corr = 1.0 / (1.0 - b1**self.t)
+            v_corr = 1.0 / (1.0 - b2**self.t)
             
-            # p = p - lr * m_hat / (sqrt(v_hat) + eps)
-            # We don't have sqrt yet! 
-            # I need to add sqrt to C++ backend.
-            pass
+            # 5. Compute update
+            # step = lr * (m / (1-b1^t)) / (sqrt(v / (1-b2^t)) + eps)
+            m_hat = self.m[i].data.multiply_scalar(m_corr)
+            v_hat = self.v[i].data.multiply_scalar(v_corr)
+            
+            denom = pb.sqrt(v_hat).add_scalar(self.eps)
+            update = pb.divide(m_hat, denom).multiply_scalar(self.lr)
+            
+            # 6. Apply update
+            p.data = pb.sub(p.data, update)
