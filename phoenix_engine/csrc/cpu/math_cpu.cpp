@@ -216,6 +216,50 @@ TensorDataPtr embedding_forward(const TensorDataPtr& indices, const TensorDataPt
     return out;
 }
 
+TensorDataPtr masked_fill(const TensorDataPtr& a, const TensorDataPtr& mask, float value) {
+    if (a->shape() != mask->shape()) {
+        throw std::runtime_error("Shapes must match for masked_fill");
+    }
+    
+    auto out = std::make_shared<TensorData>(a->shape(), a->dtype(), Device::CPU);
+    size_t size = a->size();
+    
+    const float* a_ptr = static_cast<const float*>(a->data());
+    const int32_t* m_ptr = static_cast<const int32_t*>(mask->data());
+    float* out_ptr = static_cast<float*>(out->data());
+    
+    for (size_t i = 0; i < size; ++i) {
+        out_ptr[i] = (m_ptr[i] != 0) ? value : a_ptr[i];
+    }
+    
+    return out;
+}
+
+TensorDataPtr tril(const std::vector<size_t>& shape) {
+    if (shape.size() < 2) {
+        throw std::runtime_error("tril requires at least 2D shape");
+    }
+    
+    auto out = std::make_shared<TensorData>(shape, DType::Int32, Device::CPU);
+    int32_t* data = static_cast<int32_t*>(out->data());
+    size_t size = out->size();
+    std::fill(data, data + size, 0);
+    
+    size_t rows = shape[shape.size() - 2];
+    size_t cols = shape[shape.size() - 1];
+    size_t batch_size = size / (rows * cols);
+    
+    for (size_t b = 0; b < batch_size; ++b) {
+        for (size_t i = 0; i < rows; ++i) {
+            for (size_t j = 0; j <= i && j < cols; ++j) {
+                data[b * rows * cols + i * cols + j] = 1;
+            }
+        }
+    }
+    
+    return out;
+}
+
 template <typename T>
 void gemm_impl(const T* a, const T* b, T* out, size_t m, size_t k, size_t n,
                size_t stride_a0, size_t stride_a1,
