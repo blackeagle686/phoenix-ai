@@ -40,6 +40,17 @@ class Tensor:
         out = Tensor(out_data, _prev=(self,))
         # Backward for permute is the inverse permutation
         return out
+
+    def contiguous(self) -> 'Tensor':
+        out_data = self.data.contiguous()
+        out = Tensor(out_data, _prev=(self,))
+        
+        def _backward():
+            if self.requires_grad:
+                pass
+        
+        out._backward = _backward
+        return out
         
     @property
     def dtype(self):
