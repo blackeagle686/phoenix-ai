@@ -18,11 +18,24 @@ class Linear(Module):
             self.bias = None
 
     def forward(self, x: Tensor) -> Tensor:
+        # If x is > 2D (e.g. [B, T, C]), we need to flatten the batch dimensions for matmul
+        original_shape = x.shape
+        if len(original_shape) > 2:
+            flat_batch = 1
+            for d in original_shape[:-1]:
+                flat_batch *= d
+            x = x.contiguous().view(flat_batch, original_shape[-1])
+
         out = x.matmul(self.weight)
+        
+        if len(original_shape) > 2:
+            out_shape = list(original_shape[:-1]) + [self.out_features]
+            out = out.view(*out_shape)
+            
         if self.bias is not None:
+            # Broadcast addition
             out = out + self.bias
         return out
 
     def __repr__(self):
         return f"Linear(in_features={self.in_features}, out_features={self.out_features}, bias={self.bias is not None})"
-
