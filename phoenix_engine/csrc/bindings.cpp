@@ -57,6 +57,7 @@ PYBIND11_MODULE(_phoenix_backend, m) {
     m.def("softmax", &cpu::softmax, "Fused Softmax (along the last dimension)");
     m.def("layernorm", &cpu::layernorm, "Fused LayerNorm (along the last dimension)",
           py::arg("a"), py::arg("weight") = nullptr, py::arg("bias") = nullptr, py::arg("eps") = 1e-5f);
+    m.def("embedding", &cpu::embedding, "Embedding lookup table");
     m.def("randn", &cpu::randn, "Random standard normal initialization",
           py::arg("shape"), py::arg("dtype") = DType::Float32);
 }
