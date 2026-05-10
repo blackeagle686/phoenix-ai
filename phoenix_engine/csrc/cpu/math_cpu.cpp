@@ -13,19 +13,35 @@ void add_impl(const T* a, const T* b, T* out, size_t size) {
 }
 
 TensorDataPtr add(const TensorDataPtr& a, const TensorDataPtr& b) {
+    bool can_broadcast = false;
     if (a->shape() != b->shape()) {
-        throw std::invalid_argument("Shapes must match for addition");
-    }
-    if (a->dtype() != b->dtype()) {
-        throw std::invalid_argument("DTypes must match for addition");
+        // Basic broadcasting: if b is [1, N] and a is [M, N]
+        if (a->shape().size() == 2 && b->shape().size() == 2 &&
+            b->shape()[0] == 1 && a->shape()[1] == b->shape()[1]) {
+            can_broadcast = true;
+        } else {
+            throw std::invalid_argument("Shapes must match for addition (Broadcasting not fully implemented yet)");
+        }
     }
 
     auto out = std::make_shared<TensorData>(a->shape(), a->dtype(), Device::CPU);
 
     if (a->dtype() == DType::Float32) {
-        add_impl(static_cast<const float*>(a->data()), 
-                 static_cast<const float*>(b->data()), 
-                 static_cast<float*>(out->data()), a->size());
+        float* a_ptr = static_cast<float*>(a->data());
+        float* b_ptr = static_cast<float*>(b->data());
+        float* out_ptr = static_cast<float*>(out->data());
+        
+        if (can_broadcast) {
+            size_t M = a->shape()[0];
+            size_t N = a->shape()[1];
+            for (size_t i = 0; i < M; ++i) {
+                for (size_t j = 0; j < N; ++j) {
+                    out_ptr[i * N + j] = a_ptr[i * N + j] + b_ptr[j];
+                }
+            }
+        } else {
+            add_impl(a_ptr, b_ptr, out_ptr, a->size());
+        }
     } else {
         throw std::runtime_error("Addition only implemented for Float32 right now");
     }
