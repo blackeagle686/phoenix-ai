@@ -2,6 +2,7 @@
 #include <pybind11/stl.h>
 #include <string>
 #include "core/tensor_data.h"
+#include "cpu/cpu_kernels.h"
 
 namespace py = pybind11;
 using namespace phoenix;
