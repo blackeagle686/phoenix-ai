@@ -58,9 +58,15 @@ std::shared_ptr<TensorData> TensorData::view(const std::vector<size_t>& new_shap
     if (new_size != size_) throw std::runtime_error("Incompatible size for view");
     if (!is_contiguous_) throw std::runtime_error("View only supported on contiguous tensors currently");
 
-    auto out = std::make_shared<TensorData>(new_shape, dtype_, device_, storage_, offset_);
-    out->calculate_strides();
-    return out;
+    // For a contiguous view, we can just calculate new row-major strides
+    std::vector<size_t> new_strides(new_shape.size());
+    size_t s = 1;
+    for (int i = new_shape.size() - 1; i >= 0; --i) {
+        new_strides[i] = s;
+        s *= new_shape[i];
+    }
+
+    return std::make_shared<TensorData>(new_shape, new_strides, dtype_, device_, storage_, offset_);
 }
 
 std::shared_ptr<TensorData> TensorData::transpose(size_t dim0, size_t dim1) {
