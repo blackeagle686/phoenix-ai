@@ -78,14 +78,17 @@ TensorDataPtr multiply(const TensorDataPtr& a, const TensorDataPtr& b) {
 }
 
 template <typename T>
-void gemm_impl(const T* a, const T* b, T* out, size_t m, size_t k, size_t n) {
+void gemm_impl(const T* a, const T* b, T* out, size_t m, size_t k, size_t n,
+               size_t stride_a0, size_t stride_a1,
+               size_t stride_b0, size_t stride_b1,
+               size_t stride_out0, size_t stride_out1) {
     for (size_t i = 0; i < m; ++i) {
         for (size_t j = 0; j < n; ++j) {
             T sum = 0;
             for (size_t p = 0; p < k; ++p) {
-                sum += a[i * k + p] * b[p * n + j];
+                sum += a[i * stride_a0 + p * stride_a1] * b[p * stride_b0 + j * stride_b1];
             }
-            out[i * n + j] = sum;
+            out[i * stride_out0 + j * stride_out1] = sum;
         }
     }
 }
@@ -110,7 +113,10 @@ TensorDataPtr gemm(const TensorDataPtr& a, const TensorDataPtr& b) {
     if (a->dtype() == DType::Float32) {
         gemm_impl(static_cast<const float*>(a->data()), 
                   static_cast<const float*>(b->data()), 
-                  static_cast<float*>(out->data()), m, k, n);
+                  static_cast<float*>(out->data()), m, k, n,
+                  a->strides()[0], a->strides()[1],
+                  b->strides()[0], b->strides()[1],
+                  out->strides()[0], out->strides()[1]);
     } else {
         throw std::runtime_error("GEMM only implemented for Float32 right now");
     }
