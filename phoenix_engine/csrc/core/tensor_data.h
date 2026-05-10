@@ -8,7 +8,7 @@
 
 namespace phoenix {
 
-class TensorData {
+class TensorData : public std::enable_shared_from_this<TensorData> {
 public:
     TensorData(const std::vector<size_t>& shape, DType dtype, Device device);
     // Special constructor for creating views (sharing memory)
@@ -37,8 +37,12 @@ public:
     std::shared_ptr<TensorData> permute(const std::vector<size_t>& dims);
     std::shared_ptr<TensorData> contiguous();
 
-    // Helpers
+    // Data Access
+    std::vector<float> to_float_list();
+    std::vector<int32_t> to_int_list();
     std::string to_string() const;
+
+private:
     void calculate_strides();
 
 private:

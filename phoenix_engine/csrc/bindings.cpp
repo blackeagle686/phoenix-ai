@@ -45,14 +45,22 @@ PYBIND11_MODULE(_phoenix_backend, m) {
         .def("transpose", &TensorData::transpose)
         .def("permute", &TensorData::permute)
         .def("contiguous", &TensorData::contiguous)
+        .def("to_float_list", &TensorData::to_float_list)
+        .def("to_int_list", &TensorData::to_int_list)
         .def("__repr__", &TensorData::to_string);
 
     // Math Kernels
     m.def("add", &cpu::add, "Element-wise addition of two TensorData objects");
+    m.def("add_scalar", &cpu::add_scalar, "Scalar addition of a TensorData object",
+          py::arg("a"), py::arg("scalar"));
     m.def("sub", &cpu::sub, "Element-wise subtraction of two TensorData objects");
+    m.def("divide", &cpu::divide, "Element-wise division of two TensorData objects");
+    m.def("divide_scalar", &cpu::divide_scalar, "Scalar division of a TensorData object",
+          py::arg("a"), py::arg("scalar"));
     m.def("multiply", &cpu::multiply, "Element-wise multiplication of two TensorData objects");
     m.def("multiply_scalar", &cpu::multiply_scalar, "Scalar multiplication of a TensorData object",
           py::arg("a"), py::arg("scalar"));
+    m.def("sqrt", &cpu::sqrt, "Element-wise sqrt of a TensorData object");
     m.def("gemm", &cpu::gemm, "General Matrix Multiply (2D) of two TensorData objects");
     m.def("sum", &cpu::sum, "Sum reduction of a TensorData object");
     m.def("relu", &cpu::relu, "ReLU activation of a TensorData object");

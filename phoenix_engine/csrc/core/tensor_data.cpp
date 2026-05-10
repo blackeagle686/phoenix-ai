@@ -128,6 +128,18 @@ std::shared_ptr<TensorData> TensorData::contiguous() {
     return out;
 }
 
+std::vector<float> TensorData::to_float_list() {
+    auto contig = is_contiguous_ ? shared_from_this() : contiguous();
+    float* data_ptr = static_cast<float*>(contig->data());
+    return std::vector<float>(data_ptr, data_ptr + size_);
+}
+
+std::vector<int32_t> TensorData::to_int_list() {
+    auto contig = is_contiguous_ ? shared_from_this() : contiguous();
+    int32_t* data_ptr = static_cast<int32_t*>(contig->data());
+    return std::vector<int32_t>(data_ptr, data_ptr + size_);
+}
+
 std::string TensorData::to_string() const {
     std::ostringstream oss;
     oss << "TensorData(shape=[";

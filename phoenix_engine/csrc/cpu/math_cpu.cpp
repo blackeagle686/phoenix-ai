@@ -56,6 +56,50 @@ TensorDataPtr add(const TensorDataPtr& a, const TensorDataPtr& b) {
 }
 
 template <typename T>
+void add_scalar_impl(const T* a, T scalar, T* out, size_t size) {
+    for (size_t i = 0; i < size; ++i) {
+        out[i] = a[i] + scalar;
+    }
+}
+
+TensorDataPtr add_scalar(const TensorDataPtr& a, float scalar) {
+    auto out = std::make_shared<TensorData>(a->shape(), a->dtype(), Device::CPU);
+    if (a->dtype() == DType::Float32) {
+        add_scalar_impl(static_cast<const float*>(a->data()), 
+                        scalar, static_cast<float*>(out->data()), a->size());
+    } else {
+        throw std::runtime_error("add_scalar only implemented for Float32 right now");
+    }
+    return out;
+}
+
+template <typename T>
+void div_impl(const T* a, const T* b, T* out, size_t size) {
+    for (size_t i = 0; i < size; ++i) {
+        out[i] = a[i] / b[i];
+    }
+}
+
+TensorDataPtr divide(const TensorDataPtr& a, const TensorDataPtr& b) {
+    if (a->shape() != b->shape()) {
+        throw std::invalid_argument("Shapes must match for division");
+    }
+    auto out = std::make_shared<TensorData>(a->shape(), a->dtype(), Device::CPU);
+    if (a->dtype() == DType::Float32) {
+        div_impl(static_cast<const float*>(a->data()), 
+                 static_cast<const float*>(b->data()), 
+                 static_cast<float*>(out->data()), a->size());
+    } else {
+        throw std::runtime_error("divide only implemented for Float32 right now");
+    }
+    return out;
+}
+
+TensorDataPtr divide_scalar(const TensorDataPtr& a, float scalar) {
+    return multiply_scalar(a, 1.0f / scalar);
+}
+
+template <typename T>
 void mul_impl(const T* a, const T* b, T* out, size_t size) {
     for (size_t i = 0; i < size; ++i) {
         out[i] = a[i] * b[i];
@@ -105,6 +149,30 @@ TensorDataPtr multiply_scalar(const TensorDataPtr& a, float scalar) {
                              static_cast<float*>(out->data()), a->size());
     } else {
         throw std::runtime_error("multiply_scalar only implemented for Float32 right now");
+    }
+
+    return out;
+}
+
+template <typename T>
+void sqrt_impl(const T* a, T* out, size_t size) {
+    for (size_t i = 0; i < size; ++i) {
+        out[i] = std::sqrt(a[i]);
+    }
+}
+
+TensorDataPtr sqrt(const TensorDataPtr& a) {
+    if (!a->is_contiguous()) {
+        throw std::runtime_error("sqrt requires contiguous memory for now.");
+    }
+
+    auto out = std::make_shared<TensorData>(a->shape(), a->dtype(), Device::CPU);
+
+    if (a->dtype() == DType::Float32) {
+        sqrt_impl(static_cast<const float*>(a->data()), 
+                  static_cast<float*>(out->data()), a->size());
+    } else {
+        throw std::runtime_error("sqrt only implemented for Float32 right now");
     }
 
     return out;

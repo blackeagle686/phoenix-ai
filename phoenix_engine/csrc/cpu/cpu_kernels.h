@@ -7,13 +7,17 @@ namespace cpu {
 
 // Basic element-wise addition
 TensorDataPtr add(const TensorDataPtr& a, const TensorDataPtr& b);
+TensorDataPtr add_scalar(const TensorDataPtr& a, float scalar);
 
 // Basic element-wise subtraction
 TensorDataPtr sub(const TensorDataPtr& a, const TensorDataPtr& b);
+TensorDataPtr divide(const TensorDataPtr& a, const TensorDataPtr& b);
+TensorDataPtr divide_scalar(const TensorDataPtr& a, float scalar);
 
 // Basic element-wise multiplication
 TensorDataPtr multiply(const TensorDataPtr& a, const TensorDataPtr& b);
 TensorDataPtr multiply_scalar(const TensorDataPtr& a, float scalar);
+TensorDataPtr sqrt(const TensorDataPtr& a);
 
 // General Matrix Multiply (2D)
 TensorDataPtr gemm(const TensorDataPtr& a, const TensorDataPtr& b);
