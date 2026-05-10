@@ -36,10 +36,14 @@ PYBIND11_MODULE(_phoenix_backend, m) {
         .def(py::init<const std::vector<size_t>&, DType, Device>(), 
              py::arg("shape"), py::arg("dtype"), py::arg("device") = Device::CPU)
         .def("shape", &TensorData::shape)
+        .def("strides", &TensorData::strides)
         .def("dtype", &TensorData::dtype)
         .def("device", &TensorData::device)
         .def("size", &TensorData::size)
         .def("num_bytes", &TensorData::num_bytes)
+        .def("view", &TensorData::view)
+        .def("transpose", &TensorData::transpose)
+        .def("permute", &TensorData::permute)
         .def("__repr__", &TensorData::to_string);
 
     // Math Kernels
