@@ -47,6 +47,10 @@ PYBIND11_MODULE(_phoenix_backend, m) {
         .def("contiguous", &TensorData::contiguous)
         .def("to_float_list", &TensorData::to_float_list)
         .def("to_int_list", &TensorData::to_int_list)
+        .def("multiply_scalar", &cpu::multiply_scalar)
+        .def("add_scalar", &cpu::add_scalar)
+        .def("divide_scalar", &cpu::divide_scalar)
+        .def("sqrt", &cpu::sqrt)
         .def("__repr__", &TensorData::to_string);
 
     // Math Kernels
