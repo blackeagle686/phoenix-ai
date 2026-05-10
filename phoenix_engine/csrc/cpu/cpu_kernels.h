@@ -26,5 +26,11 @@ TensorDataPtr relu(const TensorDataPtr& a);
 // Random Initialization (Standard Normal)
 TensorDataPtr randn(const std::vector<size_t>& shape, DType dtype);
 
+// Fused Softmax (along the last dimension)
+TensorDataPtr softmax(const TensorDataPtr& a);
+
+// Fused LayerNorm (along the last dimension)
+TensorDataPtr layernorm(const TensorDataPtr& a, const TensorDataPtr& weight, const TensorDataPtr& bias, float eps);
+
 } // namespace cpu
 } // namespace phoenix
