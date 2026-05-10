@@ -54,6 +54,9 @@ PYBIND11_MODULE(_phoenix_backend, m) {
     m.def("gemm", &cpu::gemm, "General Matrix Multiply (2D) of two TensorData objects");
     m.def("sum", &cpu::sum, "Sum reduction of a TensorData object");
     m.def("relu", &cpu::relu, "ReLU activation of a TensorData object");
+    m.def("softmax", &cpu::softmax, "Fused Softmax (along the last dimension)");
+    m.def("layernorm", &cpu::layernorm, "Fused LayerNorm (along the last dimension)",
+          py::arg("a"), py::arg("weight") = nullptr, py::arg("bias") = nullptr, py::arg("eps") = 1e-5f);
     m.def("randn", &cpu::randn, "Random standard normal initialization",
           py::arg("shape"), py::arg("dtype") = DType::Float32);
 }
