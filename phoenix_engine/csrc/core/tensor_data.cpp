@@ -93,6 +93,32 @@ std::shared_ptr<TensorData> TensorData::permute(const std::vector<size_t>& dims)
     return std::make_shared<TensorData>(new_shape, new_strides, dtype_, device_, storage_, offset_);
 }
 
+std::shared_ptr<TensorData> TensorData::contiguous() {
+    if (is_contiguous_) {
+        return view(shape_); // Return a view of ourselves if already contiguous
+    }
+
+    auto out = std::make_shared<TensorData>(shape_, dtype_, device_);
+    
+    // Generic copy loop (Assuming 2D for now)
+    if (shape_.size() == 2) {
+        float* src = (float*)data_;
+        float* dst = (float*)out->data();
+        size_t M = shape_[0], N = shape_[1];
+        size_t s0 = strides_[0], s1 = strides_[1];
+        
+        for (size_t i = 0; i < M; ++i) {
+            for (size_t j = 0; j < N; ++j) {
+                dst[i * N + j] = src[i * s0 + j * s1];
+            }
+        }
+    } else {
+        throw std::runtime_error("Contiguous only implemented for 2D tensors currently");
+    }
+
+    return out;
+}
+
 std::string TensorData::to_string() const {
     std::ostringstream oss;
     oss << "TensorData(shape=[";
