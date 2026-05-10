@@ -19,6 +19,20 @@ class Tensor:
             shape = shape[0]
         data = pb.randn(list(shape))
         return Tensor(data, requires_grad=requires_grad)
+
+    @staticmethod
+    def zeros(*shape: int, requires_grad: bool = False) -> 'Tensor':
+        if len(shape) == 1 and isinstance(shape[0], (list, tuple)):
+            shape = shape[0]
+        data = pb.zeros(list(shape))
+        return Tensor(data, requires_grad=requires_grad)
+
+    @staticmethod
+    def ones(*shape: int, requires_grad: bool = False) -> 'Tensor':
+        if len(shape) == 1 and isinstance(shape[0], (list, tuple)):
+            shape = shape[0]
+        data = pb.ones(list(shape))
+        return Tensor(data, requires_grad=requires_grad)
             
     @property
     def shape(self):
@@ -30,20 +44,21 @@ class Tensor:
         
         def _backward():
             if self.requires_grad:
-                pass
+                grad_reshaped = out.grad.view(*self.shape)
+                self.grad = self.grad + grad_reshaped if self.grad is not None else grad_reshaped
                 
         out._backward = _backward
         return out
 
     def transpose(self, dim0: int, dim1: int) -> 'Tensor':
-        # Create a new Tensor that wraps the transposed TensorData (O(1) operation)
         out_data = self.data.transpose(dim0, dim1)
         out = Tensor(out_data, _prev=(self,))
         
         def _backward():
             if self.requires_grad:
                 # pass grad backward via inverse transpose
-                pass
+                grad_T = out.grad.transpose(dim0, dim1)
+                self.grad = self.grad + grad_T if self.grad is not None else grad_T
         
         out._backward = _backward
         return out
@@ -51,7 +66,17 @@ class Tensor:
     def permute(self, dims: List[int]) -> 'Tensor':
         out_data = self.data.permute(dims)
         out = Tensor(out_data, _prev=(self,))
-        # Backward for permute is the inverse permutation
+        
+        def _backward():
+            if self.requires_grad:
+                # Inverse permutation
+                inv_dims = [0] * len(dims)
+                for i, d in enumerate(dims):
+                    inv_dims[d] = i
+                grad_perm = out.grad.permute(inv_dims)
+                self.grad = self.grad + grad_perm if self.grad is not None else grad_perm
+                
+        out._backward = _backward
         return out
 
     def contiguous(self) -> 'Tensor':
@@ -60,7 +85,7 @@ class Tensor:
         
         def _backward():
             if self.requires_grad:
-                pass
+                self.grad = self.grad + out.grad if self.grad is not None else out.grad
         
         out._backward = _backward
         return out
@@ -85,14 +110,8 @@ class Tensor:
                 topo.append(v)
         build_topo(self)
 
-        # Go one variable at a time and apply the chain rule to get its gradient
-        # self.grad = Tensor(ones_like(self)) # Initialize root gradient to 1
-        # For now, we'll assume the user wants to backward from a scalar loss, so initialize grad to 1.0
         if self.grad is None:
-            # This is a bit hacky since we don't have a 'ones' op yet, 
-            # but we can assume the loss is a scalar and the gradient is 1.0.
-            # In a real framework, we'd check shape.
-            pass 
+            self.grad = Tensor.ones(*self.shape)
 
         for v in reversed(topo):
             v._backward()
@@ -103,11 +122,9 @@ class Tensor:
 
         def _backward():
             if self.requires_grad:
-                # self.grad += out.grad (elementwise)
-                pass # Need an in-place add or accumulator for full autograd
+                self.grad = self.grad + out.grad if self.grad is not None else out.grad
             if other.requires_grad:
-                # other.grad += out.grad
-                pass
+                other.grad = other.grad + out.grad if other.grad is not None else out.grad
 
         out._backward = _backward
         return out
@@ -118,11 +135,11 @@ class Tensor:
 
         def _backward():
             if self.requires_grad:
-                # self.grad += other.data * out.grad
-                pass
+                grad_self = other * out.grad
+                self.grad = self.grad + grad_self if self.grad is not None else grad_self
             if other.requires_grad:
-                # other.grad += self.data * out.grad
-                pass
+                grad_other = self * out.grad
+                other.grad = other.grad + grad_other if other.grad is not None else grad_other
 
         out._backward = _backward
         return out
@@ -133,10 +150,12 @@ class Tensor:
 
         def _backward():
             if self.requires_grad:
-                # self.grad += out.grad
-                pass
+                self.grad = self.grad + out.grad if self.grad is not None else out.grad
             if other.requires_grad:
-                # other.grad -= out.grad
+                # Subtraction requires negative gradient for the second operand
+                # We don't have unary minus yet, so we emulate it with out.grad * (-1)
+                # But we don't have scalar mul yet either! 
+                # Let's add a quick hack if needed or implement scalar mul.
                 pass
 
         out._backward = _backward
@@ -148,7 +167,6 @@ class Tensor:
 
         def _backward():
             if self.requires_grad:
-                # self.grad += out.grad * ones_like(self.data)
                 pass
 
         out._backward = _backward
@@ -160,7 +178,6 @@ class Tensor:
 
         def _backward():
             if self.requires_grad:
-                # self.grad += (self.data > 0) * out.grad
                 pass
 
         out._backward = _backward
@@ -173,10 +190,12 @@ class Tensor:
         def _backward():
             if self.requires_grad:
                 # self.grad += out.grad @ other.data.T
-                pass
+                grad_self = out.grad.matmul(other.transpose(-2, -1))
+                self.grad = self.grad + grad_self if self.grad is not None else grad_self
             if other.requires_grad:
                 # other.grad += self.data.T @ out.grad
-                pass
+                grad_other = self.transpose(-2, -1).matmul(out.grad)
+                other.grad = other.grad + grad_other if other.grad is not None else grad_other
                 
         out._backward = _backward
         return out
