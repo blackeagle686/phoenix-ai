@@ -39,6 +39,13 @@ class Tensor:
     def item(self) -> float:
         return self.data.to_float_list()[0]
 
+    @staticmethod
+    def long(data: List[int], shape: Optional[List[int]] = None) -> 'Tensor':
+        if shape is None:
+            shape = [len(data)]
+        data_obj = pb.from_list_int32(data, shape)
+        return Tensor(data_obj, requires_grad=False)
+
     @property
     def shape(self):
         return self.data.shape()
@@ -297,6 +304,20 @@ class Tensor:
 
         out._backward = _backward
         return out
+    def embedding(self, weight: 'Tensor') -> 'Tensor':
+        out_data = pb.embedding_forward(self.data, weight.data)
+        out = Tensor(out_data, requires_grad=weight.requires_grad, _prev=(self, weight))
+
+        def _backward():
+            if weight.requires_grad:
+                # weight.grad[indices] += out.grad
+                # This is a scatter_add operation.
+                # For now, we'll need a C++ kernel for embedding_backward or a scatter_add.
+                pass
+
+        out._backward = _backward
+        return out
+
     def layernorm(self, weight: Optional['Tensor'] = None, bias: Optional['Tensor'] = None, eps: float = 1e-5) -> 'Tensor':
         w_data = weight.data if weight is not None else None
         b_data = bias.data if bias is not None else None
