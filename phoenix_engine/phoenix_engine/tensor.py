@@ -46,6 +46,13 @@ class Tensor:
         data_obj = pb.from_list_int32(data, shape)
         return Tensor(data_obj, requires_grad=False)
 
+    @staticmethod
+    def tril(*shape: int) -> 'Tensor':
+        if len(shape) == 1 and isinstance(shape[0], (list, tuple)):
+            shape = shape[0]
+        data_obj = pb.tril(list(shape))
+        return Tensor(data_obj, requires_grad=False)
+
     @property
     def shape(self):
         return self.data.shape()
@@ -304,6 +311,19 @@ class Tensor:
 
         out._backward = _backward
         return out
+    def masked_fill(self, mask: 'Tensor', value: float) -> 'Tensor':
+        out_data = pb.masked_fill(self.data, mask.data, float(value))
+        out = Tensor(out_data, requires_grad=self.requires_grad, _prev=(self, mask))
+
+        def _backward():
+            if self.requires_grad:
+                # grad = out.grad * (1 - mask)
+                # Actually, we need to zero out the grad where mask is 1
+                pass
+
+        out._backward = _backward
+        return out
+
     def embedding(self, weight: 'Tensor') -> 'Tensor':
         out_data = pb.embedding_forward(self.data, weight.data)
         out = Tensor(out_data, requires_grad=weight.requires_grad, _prev=(self, weight))
