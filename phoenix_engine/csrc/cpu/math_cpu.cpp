@@ -101,5 +101,83 @@ TensorDataPtr gemm(const TensorDataPtr& a, const TensorDataPtr& b) {
     return out;
 }
 
+template <typename T>
+void sub_impl(const T* a, const T* b, T* out, size_t size) {
+    for (size_t i = 0; i < size; ++i) {
+        out[i] = a[i] - b[i];
+    }
+}
+
+TensorDataPtr sub(const TensorDataPtr& a, const TensorDataPtr& b) {
+    if (a->shape() != b->shape()) throw std::invalid_argument("Shapes must match for subtraction");
+    if (a->dtype() != b->dtype()) throw std::invalid_argument("DTypes must match for subtraction");
+
+    auto out = std::make_shared<TensorData>(a->shape(), a->dtype(), Device::CPU);
+    if (a->dtype() == DType::Float32) {
+        sub_impl(static_cast<const float*>(a->data()), static_cast<const float*>(b->data()), static_cast<float*>(out->data()), a->size());
+    } else {
+        throw std::runtime_error("Subtraction only implemented for Float32");
+    }
+    return out;
+}
+
+template <typename T>
+void sum_impl(const T* a, T* out, size_t size) {
+    T sum_val = 0;
+    for (size_t i = 0; i < size; ++i) {
+        sum_val += a[i];
+    }
+    out[0] = sum_val;
+}
+
+TensorDataPtr sum(const TensorDataPtr& a) {
+    auto out = std::make_shared<TensorData>(std::vector<size_t>{1}, a->dtype(), Device::CPU);
+    if (a->dtype() == DType::Float32) {
+        sum_impl(static_cast<const float*>(a->data()), static_cast<float*>(out->data()), a->size());
+    } else {
+        throw std::runtime_error("Sum only implemented for Float32");
+    }
+    return out;
+}
+
+template <typename T>
+void relu_impl(const T* a, T* out, size_t size) {
+    for (size_t i = 0; i < size; ++i) {
+        out[i] = a[i] > 0 ? a[i] : 0;
+    }
+}
+
+TensorDataPtr relu(const TensorDataPtr& a) {
+    auto out = std::make_shared<TensorData>(a->shape(), a->dtype(), Device::CPU);
+    if (a->dtype() == DType::Float32) {
+        relu_impl(static_cast<const float*>(a->data()), static_cast<float*>(out->data()), a->size());
+    } else {
+        throw std::runtime_error("ReLU only implemented for Float32");
+    }
+    return out;
+}
+
+#include <random>
+
+TensorDataPtr randn(const std::vector<size_t>& shape, DType dtype) {
+    auto out = std::make_shared<TensorData>(shape, dtype, Device::CPU);
+    
+    if (dtype == DType::Float32) {
+        float* data = static_cast<float*>(out->data());
+        // Using a static generator is fast enough for now, but not thread-safe.
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+        std::normal_distribution<float> d(0.0f, 1.0f);
+        
+        for (size_t i = 0; i < out->size(); ++i) {
+            data[i] = d(gen);
+        }
+    } else {
+         throw std::runtime_error("randn only implemented for Float32");
+    }
+    
+    return out;
+}
+
 } // namespace cpu
 } // namespace phoenix
