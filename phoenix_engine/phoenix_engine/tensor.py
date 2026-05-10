@@ -129,20 +129,31 @@ class Tensor:
         out._backward = _backward
         return out
 
-    def __mul__(self, other: 'Tensor') -> 'Tensor':
-        out_data = pb.multiply(self.data, other.data)
-        out = Tensor(out_data, _prev=(self, other))
+    def __mul__(self, other: Union['Tensor', float, int]) -> 'Tensor':
+        if isinstance(other, (float, int)):
+            out_data = pb.multiply_scalar(self.data, float(other))
+            out = Tensor(out_data, _prev=(self,))
+            def _backward():
+                if self.requires_grad:
+                    grad_self = out.grad * other
+                    self.grad = self.grad + grad_self if self.grad is not None else grad_self
+            out._backward = _backward
+            return out
+        else:
+            out_data = pb.multiply(self.data, other.data)
+            out = Tensor(out_data, _prev=(self, other))
+            def _backward():
+                if self.requires_grad:
+                    grad_self = other * out.grad
+                    self.grad = self.grad + grad_self if self.grad is not None else grad_self
+                if other.requires_grad:
+                    grad_other = self * out.grad
+                    other.grad = other.grad + grad_other if other.grad is not None else grad_other
+            out._backward = _backward
+            return out
 
-        def _backward():
-            if self.requires_grad:
-                grad_self = other * out.grad
-                self.grad = self.grad + grad_self if self.grad is not None else grad_self
-            if other.requires_grad:
-                grad_other = self * out.grad
-                other.grad = other.grad + grad_other if other.grad is not None else grad_other
-
-        out._backward = _backward
-        return out
+    def __rmul__(self, other: Union[float, int]) -> 'Tensor':
+        return self * other
 
     def __sub__(self, other: 'Tensor') -> 'Tensor':
         out_data = pb.sub(self.data, other.data)
@@ -152,11 +163,8 @@ class Tensor:
             if self.requires_grad:
                 self.grad = self.grad + out.grad if self.grad is not None else out.grad
             if other.requires_grad:
-                # Subtraction requires negative gradient for the second operand
-                # We don't have unary minus yet, so we emulate it with out.grad * (-1)
-                # But we don't have scalar mul yet either! 
-                # Let's add a quick hack if needed or implement scalar mul.
-                pass
+                grad_other = out.grad * (-1.0)
+                other.grad = other.grad + grad_other if other.grad is not None else grad_other
 
         out._backward = _backward
         return out
