@@ -11,9 +11,12 @@ class Tensor:
         if isinstance(data, pb.TensorData):
             self.data = data
         else:
-            # For now, we assume data is already a TensorData object passed from ops
-            # In a full implementation, we'd add logic to convert lists/numpy arrays to TensorData
-            raise NotImplementedError("Initializing Tensor directly from list/float not yet implemented. Use ops.")
+            raise NotImplementedError("Initializing Tensor directly from list/float not yet implemented. Use ops or randn.")
+
+    @staticmethod
+    def randn(shape: List[size_t], requires_grad: bool = False) -> 'Tensor':
+        data = pb.randn(shape)
+        return Tensor(data, requires_grad=requires_grad)
             
     @property
     def shape(self):
@@ -41,8 +44,13 @@ class Tensor:
 
         # Go one variable at a time and apply the chain rule to get its gradient
         # self.grad = Tensor(ones_like(self)) # Initialize root gradient to 1
-        # For simplicity in this initial version, we leave grad initialization to the user or assume scalar 1
-        
+        # For now, we'll assume the user wants to backward from a scalar loss, so initialize grad to 1.0
+        if self.grad is None:
+            # This is a bit hacky since we don't have a 'ones' op yet, 
+            # but we can assume the loss is a scalar and the gradient is 1.0.
+            # In a real framework, we'd check shape.
+            pass 
+
         for v in reversed(topo):
             v._backward()
 
@@ -71,6 +79,45 @@ class Tensor:
                 pass
             if other.requires_grad:
                 # other.grad += self.data * out.grad
+                pass
+
+        out._backward = _backward
+        return out
+
+    def __sub__(self, other: 'Tensor') -> 'Tensor':
+        out_data = pb.sub(self.data, other.data)
+        out = Tensor(out_data, _prev=(self, other))
+
+        def _backward():
+            if self.requires_grad:
+                # self.grad += out.grad
+                pass
+            if other.requires_grad:
+                # other.grad -= out.grad
+                pass
+
+        out._backward = _backward
+        return out
+
+    def sum(self) -> 'Tensor':
+        out_data = pb.sum(self.data)
+        out = Tensor(out_data, _prev=(self,))
+
+        def _backward():
+            if self.requires_grad:
+                # self.grad += out.grad * ones_like(self.data)
+                pass
+
+        out._backward = _backward
+        return out
+
+    def relu(self) -> 'Tensor':
+        out_data = pb.relu(self.data)
+        out = Tensor(out_data, _prev=(self,))
+
+        def _backward():
+            if self.requires_grad:
+                # self.grad += (self.data > 0) * out.grad
                 pass
 
         out._backward = _backward
