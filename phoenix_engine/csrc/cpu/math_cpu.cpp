@@ -260,9 +260,6 @@ TensorDataPtr tril(const std::vector<size_t>& shape) {
     return out;
 }
 
-    return out;
-}
-
 TensorDataPtr softmax_cross_entropy(const TensorDataPtr& logits, const TensorDataPtr& targets) {
     // logits: [batch..., vocab_size]
     // targets: [batch...]
