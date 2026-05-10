@@ -15,8 +15,8 @@ class LayerNorm(Module):
         
         # We need a fill operation, but for now we can just use randn and set requires_grad=True
         # In a real engine, we'd use ones() and zeros()
-        self.weight = Parameter(Tensor(w_data))
-        self.bias = Parameter(Tensor(b_data))
+        self.weight = Parameter(w_data)
+        self.bias = Parameter(b_data)
         
     def forward(self, x: Tensor) -> Tensor:
         return x.layernorm(self.weight, self.bias, self.eps)
@@ -29,7 +29,7 @@ class Embedding(Module):
         
         # Standard normal initialization
         w_data = Tensor.randn(num_embeddings, embedding_dim).data
-        self.weight = Parameter(Tensor(w_data))
+        self.weight = Parameter(w_data)
         
     def forward(self, indices: Tensor) -> Tensor:
         import phoenix_engine._C as pb
