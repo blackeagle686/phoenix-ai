@@ -14,7 +14,7 @@ class Tensor:
             raise NotImplementedError("Initializing Tensor directly from list/float not yet implemented. Use ops or randn.")
 
     @staticmethod
-    def randn(shape: List[size_t], requires_grad: bool = False) -> 'Tensor':
+    def randn(shape: List[int], requires_grad: bool = False) -> 'Tensor':
         data = pb.randn(shape)
         return Tensor(data, requires_grad=requires_grad)
             
