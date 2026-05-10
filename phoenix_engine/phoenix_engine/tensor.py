@@ -14,8 +14,10 @@ class Tensor:
             raise NotImplementedError("Initializing Tensor directly from list/float not yet implemented. Use ops or randn.")
 
     @staticmethod
-    def randn(shape: List[int], requires_grad: bool = False) -> 'Tensor':
-        data = pb.randn(shape)
+    def randn(*shape: int, requires_grad: bool = False) -> 'Tensor':
+        if len(shape) == 1 and isinstance(shape[0], (list, tuple)):
+            shape = shape[0]
+        data = pb.randn(list(shape))
         return Tensor(data, requires_grad=requires_grad)
             
     @property
