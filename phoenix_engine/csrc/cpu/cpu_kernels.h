@@ -32,5 +32,8 @@ TensorDataPtr softmax(const TensorDataPtr& a);
 // Fused LayerNorm (along the last dimension)
 TensorDataPtr layernorm(const TensorDataPtr& a, const TensorDataPtr& weight, const TensorDataPtr& bias, float eps);
 
+// Embedding lookup
+TensorDataPtr embedding(const TensorDataPtr& weight, const TensorDataPtr& indices);
+
 } // namespace cpu
 } // namespace phoenix
