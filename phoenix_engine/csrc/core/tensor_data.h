@@ -35,6 +35,7 @@ public:
     std::shared_ptr<TensorData> view(const std::vector<size_t>& new_shape);
     std::shared_ptr<TensorData> transpose(size_t dim0, size_t dim1);
     std::shared_ptr<TensorData> permute(const std::vector<size_t>& dims);
+    std::shared_ptr<TensorData> contiguous();
 
     // Helpers
     std::string to_string() const;
