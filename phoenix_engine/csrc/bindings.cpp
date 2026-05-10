@@ -60,4 +60,8 @@ PYBIND11_MODULE(_phoenix_backend, m) {
     m.def("embedding", &cpu::embedding, "Embedding lookup table");
     m.def("randn", &cpu::randn, "Random standard normal initialization",
           py::arg("shape"), py::arg("dtype") = DType::Float32);
+    m.def("zeros", &cpu::zeros, "Zeros initialization",
+          py::arg("shape"), py::arg("dtype") = DType::Float32);
+    m.def("ones", &cpu::ones, "Ones initialization",
+          py::arg("shape"), py::arg("dtype") = DType::Float32);
 }
