@@ -6,14 +6,24 @@
 namespace phoenix {
 
 TensorData::TensorData(const std::vector<size_t>& shape, DType dtype, Device device)
-    : shape_(shape), dtype_(dtype), device_(device), data_(nullptr) {
+    : shape_(shape), dtype_(dtype), device_(device), data_(nullptr), is_contiguous_(true) {
     
     size_ = 1;
     for (auto dim : shape) {
         size_ *= dim;
     }
 
+    calculate_strides();
     allocate();
+}
+
+void TensorData::calculate_strides() {
+    strides_.resize(shape_.size());
+    size_t stride = 1;
+    for (int i = shape_.size() - 1; i >= 0; --i) {
+        strides_[i] = stride;
+        stride *= shape_[i];
+    }
 }
 
 TensorData::~TensorData() {
