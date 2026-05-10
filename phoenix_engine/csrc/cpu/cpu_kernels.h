@@ -26,6 +26,10 @@ TensorDataPtr relu(const TensorDataPtr& a);
 // Random Initialization (Standard Normal)
 TensorDataPtr randn(const std::vector<size_t>& shape, DType dtype);
 
+// Fill Initialization
+TensorDataPtr zeros(const std::vector<size_t>& shape, DType dtype);
+TensorDataPtr ones(const std::vector<size_t>& shape, DType dtype);
+
 // Fused Softmax (along the last dimension)
 TensorDataPtr softmax(const TensorDataPtr& a);
 
