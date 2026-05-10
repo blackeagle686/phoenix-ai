@@ -1,5 +1,6 @@
 #include "cpu_kernels.h"
 #include <stdexcept>
+#include <random>
 
 namespace phoenix {
 namespace cpu {
@@ -156,8 +157,6 @@ TensorDataPtr relu(const TensorDataPtr& a) {
     }
     return out;
 }
-
-#include <random>
 
 TensorDataPtr randn(const std::vector<size_t>& shape, DType dtype) {
     auto out = std::make_shared<TensorData>(shape, dtype, Device::CPU);
