@@ -330,6 +330,19 @@ class Tensor:
         out._backward = _backward
         return out
 
+    def narrow(self, dim: int, start: int, length: int) -> 'Tensor':
+        out_data = pb.narrow(self.data, dim, start, length)
+        out = Tensor(out_data, requires_grad=self.requires_grad, _prev=(self,))
+
+        def _backward():
+            if self.requires_grad:
+                # This needs a scatter_add or a zero-padded grad.
+                # For now, we'll skip the exact implementation until we have scatter_add.
+                pass
+
+        out._backward = _backward
+        return out
+
     def embedding(self, weight: 'Tensor') -> 'Tensor':
         out_data = pb.embedding_forward(self.data, weight.data)
         out = Tensor(out_data, requires_grad=weight.requires_grad, _prev=(self, weight))

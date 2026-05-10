@@ -52,11 +52,11 @@ class GPT(Module):
         
         # Token and position embeddings
         tok_emb = self.token_embedding(idx) # [B, T, C]
-        pos_emb = self.position_embedding.view(1, self.max_seq_len, -1) # Broad-castable
         # Crop position embedding to actual length T
-        # (Need slicing support for this, or just take the first T rows)
-        # For now, let's assume we use full max_seq_len or add a slice kernel
-        x = tok_emb + pos_emb.view(1, T, -1) if T == self.max_seq_len else tok_emb # Placeholder
+        pos_emb = self.position_embedding.narrow(0, 0, T) # [T, C]
+        pos_emb = pos_emb.view(1, T, C) # Broad-castable [1, T, C]
+        
+        x = tok_emb + pos_emb
         
         # Transformer blocks
         for block in self.blocks:
