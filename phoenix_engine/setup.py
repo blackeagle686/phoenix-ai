@@ -92,6 +92,5 @@ setup(
     cmdclass={'build_ext': BuildExt},
     zip_safe=False,
     packages=['phoenix_engine'],
-    package_dir={'phoenix_engine': 'python'},
 )
 
