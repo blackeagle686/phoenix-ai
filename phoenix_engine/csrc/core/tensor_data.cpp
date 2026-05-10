@@ -25,9 +25,9 @@ void TensorData::calculate_strides() {
 }
 
 TensorData::TensorData(const std::vector<size_t>& shape, const std::vector<size_t>& strides, 
-                       DType dtype, Device device, std::shared_ptr<void> storage, size_t offset)
+                       DType dtype, Device device, std::shared_ptr<void> storage, size_t offset, bool is_contiguous)
     : shape_(shape), strides_(strides), dtype_(dtype), device_(device), 
-      storage_(storage), offset_(offset), is_contiguous_(false) {
+      storage_(storage), offset_(offset), is_contiguous_(is_contiguous) {
     
     size_ = 1;
     for (auto dim : shape) size_ *= dim;
@@ -66,7 +66,7 @@ std::shared_ptr<TensorData> TensorData::view(const std::vector<size_t>& new_shap
         s *= new_shape[i];
     }
 
-    return std::make_shared<TensorData>(new_shape, new_strides, dtype_, device_, storage_, offset_);
+    return std::make_shared<TensorData>(new_shape, new_strides, dtype_, device_, storage_, offset_, true);
 }
 
 std::shared_ptr<TensorData> TensorData::transpose(size_t dim0, size_t dim1) {
