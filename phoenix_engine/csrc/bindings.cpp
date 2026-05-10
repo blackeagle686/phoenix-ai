@@ -44,6 +44,11 @@ PYBIND11_MODULE(_phoenix_backend, m) {
 
     // Math Kernels
     m.def("add", &cpu::add, "Element-wise addition of two TensorData objects");
+    m.def("sub", &cpu::sub, "Element-wise subtraction of two TensorData objects");
     m.def("multiply", &cpu::multiply, "Element-wise multiplication of two TensorData objects");
     m.def("gemm", &cpu::gemm, "General Matrix Multiply (2D) of two TensorData objects");
+    m.def("sum", &cpu::sum, "Sum reduction of a TensorData object");
+    m.def("relu", &cpu::relu, "ReLU activation of a TensorData object");
+    m.def("randn", &cpu::randn, "Random standard normal initialization",
+          py::arg("shape"), py::arg("dtype") = DType::Float32);
 }
