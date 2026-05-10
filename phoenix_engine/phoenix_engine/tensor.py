@@ -168,5 +168,39 @@ class Tensor:
         out._backward = _backward
         return out
 
+    def softmax(self) -> 'Tensor':
+        out_data = pb.softmax(self.data)
+        out = Tensor(out_data, _prev=(self,))
+
+        def _backward():
+            if self.requires_grad:
+                pass
+
+        out._backward = _backward
+        return out
+
+    def layernorm(self, weight: Optional['Tensor'] = None, bias: Optional['Tensor'] = None, eps: float = 1e-5) -> 'Tensor':
+        w_data = weight.data if weight is not None else None
+        b_data = bias.data if bias is not None else None
+        
+        out_data = pb.layernorm(self.data, w_data, b_data, eps)
+        
+        prevs = [self]
+        if weight is not None: prevs.append(weight)
+        if bias is not None: prevs.append(bias)
+        
+        out = Tensor(out_data, _prev=tuple(prevs))
+
+        def _backward():
+            if self.requires_grad:
+                pass
+            if weight is not None and weight.requires_grad:
+                pass
+            if bias is not None and bias.requires_grad:
+                pass
+
+        out._backward = _backward
+        return out
+
     def __repr__(self):
         return f"Tensor(shape={self.shape}, requires_grad={self.requires_grad})"
