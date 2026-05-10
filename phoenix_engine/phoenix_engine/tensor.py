@@ -21,6 +21,25 @@ class Tensor:
     @property
     def shape(self):
         return self.data.shape()
+
+    def transpose(self, dim0: int, dim1: int) -> 'Tensor':
+        # Create a new Tensor that wraps the transposed TensorData (O(1) operation)
+        out_data = self.data.transpose(dim0, dim1)
+        out = Tensor(out_data, _prev=(self,))
+        
+        def _backward():
+            if self.requires_grad:
+                # pass grad backward via inverse transpose
+                pass
+        
+        out._backward = _backward
+        return out
+
+    def permute(self, dims: List[int]) -> 'Tensor':
+        out_data = self.data.permute(dims)
+        out = Tensor(out_data, _prev=(self,))
+        # Backward for permute is the inverse permutation
+        return out
         
     @property
     def dtype(self):
