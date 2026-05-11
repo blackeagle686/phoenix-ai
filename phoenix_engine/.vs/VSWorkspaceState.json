@@ -1,0 +1,14 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\csrc",
+    "\\csrc\\core",
+    "\\csrc\\cpu",
+    "\\csrc\\cuda",
+    "\\csrc\\quantum",
+    "\\phoenix_engine",
+    "\\phoenix_engine\\optim"
+  ],
+  "SelectedNode": "\\phoenix_engine\\optim.py",
+  "PreviewInSolutionExplorer": false
+}
