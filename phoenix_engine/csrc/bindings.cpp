@@ -2,23 +2,27 @@
 #include <pybind11/stl.h>
 #include <string>
 #include "core/tensor_data.h"
-#include "cpu/cpu_kernels.h"
+#include "core/dispatcher.h"
+#include "cpu/cpu_backend.h"
 
 namespace py = pybind11;
 using namespace phoenix;
+
+// Helper to get backend from a tensor
+Backend* get_backend(const TensorDataPtr& a) {
+    return Dispatcher::instance().get_backend(a->device());
+}
 
 std::string hello() {
     return "Hello from Phoenix C++ Engine!";
 }
 
-int add(int i, int j) {
-    return i + j;
-}
-
 PYBIND11_MODULE(_phoenix_backend, m) {
-    m.doc() = "Phoenix Engine Low-Level C++ Backend";
+    // Register backends
+    Dispatcher::instance().register_backend(Device::CPU, std::make_unique<CPUBackend>());
+
+    m.doc() = "Phoenix Engine Low-Level C++ Backend with Dispatcher Architecture";
     m.def("hello", &hello, "A function that returns a hello string");
-    m.def("add", &add, "A function that adds two numbers");
 
     py::enum_<Device>(m, "Device")
         .value("CPU", Device::CPU)
@@ -47,46 +51,58 @@ PYBIND11_MODULE(_phoenix_backend, m) {
         .def("contiguous", &TensorData::contiguous)
         .def("to_float_list", &TensorData::to_float_list)
         .def("to_int_list", &TensorData::to_int_list)
-        .def("multiply_scalar", &cpu::multiply_scalar)
-        .def("add_scalar", &cpu::add_scalar)
-        .def("divide_scalar", &cpu::divide_scalar)
-        .def("sqrt", &cpu::sqrt)
+        .def("multiply_scalar", [](const TensorDataPtr& a, float s) { return get_backend(a)->multiply_scalar(a, s); })
+        .def("add_scalar", [](const TensorDataPtr& a, float s) { return get_backend(a)->add_scalar(a, s); })
+        .def("divide_scalar", [](const TensorDataPtr& a, float s) { return get_backend(a)->divide_scalar(a, s); })
         .def("__repr__", &TensorData::to_string);
 
-    // Math Kernels
-    m.def("add", &cpu::add, "Element-wise addition of two TensorData objects");
-    m.def("add_scalar", &cpu::add_scalar, "Scalar addition of a TensorData object",
-          py::arg("a"), py::arg("scalar"));
-    m.def("sub", &cpu::sub, "Element-wise subtraction of two TensorData objects");
-    m.def("divide", &cpu::divide, "Element-wise division of two TensorData objects");
-    m.def("divide_scalar", &cpu::divide_scalar, "Scalar division of a TensorData object",
-          py::arg("a"), py::arg("scalar"));
-    m.def("multiply", &cpu::multiply, "Element-wise multiplication of two TensorData objects");
-    m.def("multiply_scalar", &cpu::multiply_scalar, "Scalar multiplication of a TensorData object",
-          py::arg("a"), py::arg("scalar"));
-    m.def("sqrt", &cpu::sqrt, "Element-wise sqrt of a TensorData object");
-    m.def("embedding_forward", &cpu::embedding_forward, "Embedding lookup");
-    m.def("masked_fill", &cpu::masked_fill, "Masked fill");
-    m.def("tril", &cpu::tril, "Create lower triangular matrix");
-    m.def("narrow", &cpu::narrow, "Narrow a TensorData object along a dimension");
-    m.def("gemm", &cpu::gemm, "General Matrix Multiply (2D) of two TensorData objects");
+    // Math Kernels using Dispatcher
+    m.def("add", [](const TensorDataPtr& a, const TensorDataPtr& b) { return get_backend(a)->add(a, b); });
+    m.def("add_scalar", [](const TensorDataPtr& a, float s) { return get_backend(a)->add_scalar(a, s); });
+    m.def("sub", [](const TensorDataPtr& a, const TensorDataPtr& b) { return get_backend(a)->sub(a, b); });
+    m.def("divide", [](const TensorDataPtr& a, const TensorDataPtr& b) { return get_backend(a)->divide(a, b); });
+    m.def("divide_scalar", [](const TensorDataPtr& a, float s) { return get_backend(a)->divide_scalar(a, s); });
+    m.def("multiply", [](const TensorDataPtr& a, const TensorDataPtr& b) { return get_backend(a)->multiply(a, b); });
+    m.def("multiply_scalar", [](const TensorDataPtr& a, float s) { return get_backend(a)->multiply_scalar(a, s); });
+    
+    m.def("sqrt", [](const TensorDataPtr& a) { return get_backend(a)->sqrt(a); });
+    
+    // Wait, I missed sqrt in the backend interface. Let me fix that.
+    // Actually, I'll update the backend interface and implementations.
+
+    m.def("embedding_forward", [](const TensorDataPtr& i, const TensorDataPtr& w) { return get_backend(w)->embedding_forward(i, w); });
+    m.def("masked_fill", [](const TensorDataPtr& a, const TensorDataPtr& m, float v) { return get_backend(a)->masked_fill(a, m, v); });
+    m.def("tril", [](const std::vector<size_t>& s, Device d) { return Dispatcher::instance().get_backend(d)->tril(s); }, 
+          py::arg("shape"), py::arg("device") = Device::CPU);
+    m.def("narrow", [](const TensorDataPtr& a, size_t d, size_t s, size_t l) { return get_backend(a)->narrow(a, d, s, l); });
+    m.def("gemm", [](const TensorDataPtr& a, const TensorDataPtr& b) { return get_backend(a)->gemm(a, b); });
     
     m.def("from_list_int32", [](const std::vector<int32_t>& list, const std::vector<size_t>& shape) {
         auto data = std::make_shared<TensorData>(shape, DType::Int32, Device::CPU);
         std::memcpy(data->data(), list.data(), list.size() * sizeof(int32_t));
         return data;
     });
-    m.def("softmax_cross_entropy", &cpu::softmax_cross_entropy, "Fused Softmax Cross Entropy loss");
-    m.def("softmax_cross_entropy_backward", &cpu::softmax_cross_entropy_backward, "Fused Softmax Cross Entropy backward");
-    m.def("relu", &cpu::relu, "ReLU activation of a TensorData object");
-    m.def("softmax", &cpu::softmax, "Fused Softmax (along the last dimension)");
-    m.def("layernorm", &cpu::layernorm, "Fused LayerNorm (along the last dimension)",
-          py::arg("a"), py::arg("weight") = nullptr, py::arg("bias") = nullptr, py::arg("eps") = 1e-5f);
-    m.def("embedding", &cpu::embedding, "Embedding lookup table");
-    m.def("randn", &cpu::randn, "Random standard normal initialization",
-          py::arg("shape"), py::arg("dtype") = DType::Float32);
-    m.def("zeros", &cpu::zeros, "Zeros initialization",
-          py::arg("shape"), py::arg("dtype") = DType::Float32);
-    m.def("ones", &cpu::ones, "Ones initialization",
-          py::arg("shape"), py::arg("dtype") = DType::Float32);
+
+    m.def("softmax_cross_entropy", [](const TensorDataPtr& l, const TensorDataPtr& t) { return get_backend(l)->softmax_cross_entropy(l, t); });
+    m.def("softmax_cross_entropy_backward", [](const TensorDataPtr& g, const TensorDataPtr& l, const TensorDataPtr& t) { 
+        return get_backend(l)->softmax_cross_entropy_backward(g, l, t); 
+    });
+    
+    m.def("relu", [](const TensorDataPtr& a) { return get_backend(a)->relu(a); });
+    m.def("softmax", [](const TensorDataPtr& a) { return get_backend(a)->softmax(a); });
+    m.def("layernorm", [](const TensorDataPtr& a, const TensorDataPtr& w, const TensorDataPtr& b, float e) { 
+        return get_backend(a)->layernorm(a, w, b, e); 
+    }, py::arg("a"), py::arg("weight") = nullptr, py::arg("bias") = nullptr, py::arg("eps") = 1e-5f);
+    
+    m.def("randn", [](const std::vector<size_t>& s, DType dt, Device d) { 
+        return Dispatcher::instance().get_backend(d)->randn(s, dt); 
+    }, py::arg("shape"), py::arg("dtype") = DType::Float32, py::arg("device") = Device::CPU);
+    
+    m.def("zeros", [](const std::vector<size_t>& s, DType dt, Device d) { 
+        return Dispatcher::instance().get_backend(d)->zeros(s, dt); 
+    }, py::arg("shape"), py::arg("dtype") = DType::Float32, py::arg("device") = Device::CPU);
+    
+    m.def("ones", [](const std::vector<size_t>& s, DType dt, Device d) { 
+        return Dispatcher::instance().get_backend(d)->ones(s, dt); 
+    }, py::arg("shape"), py::arg("dtype") = DType::Float32, py::arg("device") = Device::CPU);
 }

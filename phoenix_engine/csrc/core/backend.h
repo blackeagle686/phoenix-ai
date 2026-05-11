@@ -26,6 +26,7 @@ public:
     virtual TensorDataPtr multiply_scalar(const TensorDataPtr& a, float scalar) = 0;
     virtual TensorDataPtr divide(const TensorDataPtr& a, const TensorDataPtr& b) = 0;
     virtual TensorDataPtr divide_scalar(const TensorDataPtr& a, float scalar) = 0;
+    virtual TensorDataPtr sqrt(const TensorDataPtr& a) = 0;
 
     // Activation & Normalization
     virtual TensorDataPtr relu(const TensorDataPtr& a) = 0;

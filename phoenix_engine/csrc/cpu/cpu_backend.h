@@ -18,6 +18,7 @@ public:
     TensorDataPtr multiply_scalar(const TensorDataPtr& a, float scalar) override;
     TensorDataPtr divide(const TensorDataPtr& a, const TensorDataPtr& b) override;
     TensorDataPtr divide_scalar(const TensorDataPtr& a, float scalar) override;
+    TensorDataPtr sqrt(const TensorDataPtr& a) override;
 
     // Activation & Normalization
     TensorDataPtr relu(const TensorDataPtr& a) override;

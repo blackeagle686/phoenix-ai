@@ -42,6 +42,10 @@ TensorDataPtr CPUBackend::divide_scalar(const TensorDataPtr& a, float scalar) {
     return cpu::divide_scalar(a, scalar);
 }
 
+TensorDataPtr CPUBackend::sqrt(const TensorDataPtr& a) {
+    return cpu::sqrt(a);
+}
+
 TensorDataPtr CPUBackend::relu(const TensorDataPtr& a) {
     return cpu::relu(a);
 }
