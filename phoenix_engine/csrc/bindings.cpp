@@ -66,6 +66,7 @@ PYBIND11_MODULE(_phoenix_backend, m) {
     m.def("multiply_scalar", [](const TensorDataPtr& a, float s) { return get_backend(a)->multiply_scalar(a, s); });
     
     m.def("sqrt", [](const TensorDataPtr& a) { return get_backend(a)->sqrt(a); });
+    m.def("sum", [](const TensorDataPtr& a) { return get_backend(a)->sum(a); });
     
 
     m.def("embedding_forward", [](const TensorDataPtr& i, const TensorDataPtr& w) { return get_backend(w)->embedding_forward(i, w); });

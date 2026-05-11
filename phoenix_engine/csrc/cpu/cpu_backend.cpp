@@ -46,6 +46,10 @@ TensorDataPtr CPUBackend::sqrt(const TensorDataPtr& a) {
     return cpu::sqrt(a);
 }
 
+TensorDataPtr CPUBackend::sum(const TensorDataPtr& a) {
+    return cpu::sum(a);
+}
+
 TensorDataPtr CPUBackend::relu(const TensorDataPtr& a) {
     return cpu::relu(a);
 }
