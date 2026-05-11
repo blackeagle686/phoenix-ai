@@ -4,6 +4,8 @@
 
 namespace phoenix {
 
+#ifdef USE_CUDA
+
 #define CHECK_CUDA(call) \
     do { \
         cudaError_t err = call; \
@@ -23,6 +25,18 @@ void CUDABackend::deallocate(void* ptr) {
         cudaFree(ptr);
     }
 }
+
+#else
+
+void* CUDABackend::allocate(size_t num_bytes) {
+    throw std::runtime_error("CUDABackend::allocate called but USE_CUDA is not defined.");
+}
+
+void CUDABackend::deallocate(void* ptr) {
+    // Nothing to do
+}
+
+#endif
 
 // Stubs for now
 TensorDataPtr CUDABackend::add(const TensorDataPtr& a, const TensorDataPtr& b) { throw std::runtime_error("CUDA add not implemented"); }

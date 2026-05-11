@@ -4,6 +4,7 @@
 #include "core/tensor_data.h"
 #include "core/dispatcher.h"
 #include "cpu/cpu_backend.h"
+#include "cuda/cuda_backend.h"
 
 namespace py = pybind11;
 using namespace phoenix;
@@ -20,6 +21,7 @@ std::string hello() {
 PYBIND11_MODULE(_phoenix_backend, m) {
     // Register backends
     Dispatcher::instance().register_backend(Device::CPU, std::make_unique<CPUBackend>());
+    Dispatcher::instance().register_backend(Device::CUDA, std::make_unique<CUDABackend>());
 
     m.doc() = "Phoenix Engine Low-Level C++ Backend with Dispatcher Architecture";
     m.def("hello", &hello, "A function that returns a hello string");
