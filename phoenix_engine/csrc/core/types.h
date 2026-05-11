@@ -7,7 +7,8 @@ namespace phoenix {
 
 enum class Device {
     CPU,
-    CUDA
+    CUDA,
+    QUANTUM
 };
 
 enum class DType {
@@ -31,6 +32,7 @@ inline std::string device_to_string(Device d) {
     switch (d) {
         case Device::CPU: return "CPU";
         case Device::CUDA: return "CUDA";
+        case Device::QUANTUM: return "QUANTUM";
         default: return "Unknown";
     }
 }
