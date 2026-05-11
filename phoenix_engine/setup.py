@@ -16,6 +16,34 @@ class get_pybind_include(object):
         import pybind11
         return pybind11.get_include(self.user)
 
+import os
+
+def find_cuda():
+    cuda_path = os.environ.get('CUDA_PATH') or os.environ.get('CUDA_HOME')
+    if cuda_path and os.path.exists(cuda_path):
+        return cuda_path
+    # Check common locations
+    for path in ['C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.4', 
+                'C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.1',
+                'C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8']:
+        if os.path.exists(path):
+            return path
+    return None
+
+cuda_path = find_cuda()
+extra_compile_args = []
+include_dirs = [get_pybind_include(), get_pybind_include(user=True), "csrc"]
+libraries = []
+library_dirs = []
+
+if cuda_path:
+    print(f"CUDA found at {cuda_path}")
+    extra_compile_args.append('/DUSE_CUDA')
+    include_dirs.append(os.path.join(cuda_path, 'include'))
+    library_dirs.append(os.path.join(cuda_path, 'lib', 'x64'))
+    libraries.append('cuda')
+    libraries.append('cudart')
+
 ext_modules = [
     Extension(
         '_phoenix_backend',
@@ -24,14 +52,13 @@ ext_modules = [
             'csrc/core/tensor_data.cpp',
             'csrc/core/dispatcher.cpp',
             'csrc/cpu/cpu_backend.cpp',
-            'csrc/cpu/math_cpu.cpp'
+            'csrc/cpu/math_cpu.cpp',
+            'csrc/cuda/cuda_backend.cpp'
         ],
-        include_dirs=[
-            # Path to pybind11 headers
-            get_pybind_include(),
-            get_pybind_include(user=True),
-            "csrc"
-        ],
+        include_dirs=include_dirs,
+        library_dirs=library_dirs,
+        libraries=libraries,
+        extra_compile_args=extra_compile_args,
         language='c++'
     ),
 ]
@@ -79,8 +106,8 @@ class BuildExt(build_ext):
         elif ct == 'msvc':
             opts.append('/DVERSION_INFO=\\"%s\\"' % self.distribution.get_version())
         for ext in self.extensions:
-            ext.extra_compile_args = opts
-            ext.extra_link_args = link_opts
+            ext.extra_compile_args += opts
+            ext.extra_link_args += link_opts
         build_ext.build_extensions(self)
 
 setup(
