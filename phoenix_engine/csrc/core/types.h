@@ -15,7 +15,9 @@ enum class DType {
     Float32,
     Float64,
     Int32,
-    Int64
+    Int64,
+    Complex64,
+    Complex128
 };
 
 inline size_t element_size(DType dtype) {
@@ -24,6 +26,8 @@ inline size_t element_size(DType dtype) {
         case DType::Float64: return 8;
         case DType::Int32:   return 4;
         case DType::Int64:   return 8;
+        case DType::Complex64: return 8;
+        case DType::Complex128: return 16;
         default: return 0;
     }
 }
