@@ -1,7 +1,10 @@
 #pragma once
 
 #include "../core/backend.h"
+
+#ifdef USE_CUDA
 #include <cuda_runtime.h>
+#endif
 
 namespace phoenix {
 
