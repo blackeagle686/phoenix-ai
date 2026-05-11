@@ -22,6 +22,8 @@ ext_modules = [
         [
             'csrc/bindings.cpp',
             'csrc/core/tensor_data.cpp',
+            'csrc/core/dispatcher.cpp',
+            'csrc/cpu/cpu_backend.cpp',
             'csrc/cpu/math_cpu.cpp'
         ],
         include_dirs=[

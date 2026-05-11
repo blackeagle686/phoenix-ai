@@ -67,8 +67,6 @@ PYBIND11_MODULE(_phoenix_backend, m) {
     
     m.def("sqrt", [](const TensorDataPtr& a) { return get_backend(a)->sqrt(a); });
     
-    // Wait, I missed sqrt in the backend interface. Let me fix that.
-    // Actually, I'll update the backend interface and implementations.
 
     m.def("embedding_forward", [](const TensorDataPtr& i, const TensorDataPtr& w) { return get_backend(w)->embedding_forward(i, w); });
     m.def("masked_fill", [](const TensorDataPtr& a, const TensorDataPtr& m, float v) { return get_backend(a)->masked_fill(a, m, v); });
