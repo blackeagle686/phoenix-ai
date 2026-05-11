@@ -1,6 +1,6 @@
 #include "tensor_data.h"
+#include "dispatcher.h"
 #include <numeric>
-#include <cstdlib>
 #include <sstream>
 
 namespace phoenix {
@@ -42,14 +42,13 @@ void TensorData::allocate() {
     if (size_ == 0) return;
     size_t bytes = num_bytes();
     
-    if (device_ == Device::CPU) {
-        void* ptr = std::malloc(bytes);
-        if (!ptr) throw std::runtime_error("Failed to allocate memory on CPU.");
-        storage_ = std::shared_ptr<void>(ptr, std::free);
-        data_ = ptr;
-    } else {
-        throw std::runtime_error("CUDA allocation not yet implemented.");
-    }
+    auto* backend = Dispatcher::instance().get_backend(device_);
+    void* ptr = backend->allocate(bytes);
+    
+    storage_ = std::shared_ptr<void>(ptr, [backend](void* p) {
+        backend->deallocate(p);
+    });
+    data_ = ptr;
 }
 
 std::shared_ptr<TensorData> TensorData::view(const std::vector<size_t>& new_shape) {
