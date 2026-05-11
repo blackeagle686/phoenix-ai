@@ -44,3 +44,5 @@ Thumbs.db
 
 # Local runtime/generated project data
 chroma_db/
+phoenix_engine/.vs/ProjectSettings.json
+phoenix_engine/.vs/phoenix_engine/
