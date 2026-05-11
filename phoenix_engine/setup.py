@@ -53,7 +53,8 @@ ext_modules = [
             'csrc/core/dispatcher.cpp',
             'csrc/cpu/cpu_backend.cpp',
             'csrc/cpu/math_cpu.cpp',
-            'csrc/cuda/cuda_backend.cpp'
+            'csrc/cuda/cuda_backend.cpp',
+            'csrc/quantum/quantum_backend.cpp'
         ],
         include_dirs=include_dirs,
         library_dirs=library_dirs,

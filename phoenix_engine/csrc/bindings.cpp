@@ -5,6 +5,7 @@
 #include "core/dispatcher.h"
 #include "cpu/cpu_backend.h"
 #include "cuda/cuda_backend.h"
+#include "quantum/quantum_backend.h"
 
 namespace py = pybind11;
 using namespace phoenix;
@@ -22,6 +23,7 @@ PYBIND11_MODULE(_phoenix_backend, m) {
     // Register backends
     Dispatcher::instance().register_backend(Device::CPU, std::make_unique<CPUBackend>());
     Dispatcher::instance().register_backend(Device::CUDA, std::make_unique<CUDABackend>());
+    Dispatcher::instance().register_backend(Device::QUANTUM, std::make_unique<QuantumBackend>());
 
     m.doc() = "Phoenix Engine Low-Level C++ Backend with Dispatcher Architecture";
     m.def("hello", &hello, "A function that returns a hello string");
@@ -29,6 +31,7 @@ PYBIND11_MODULE(_phoenix_backend, m) {
     py::enum_<Device>(m, "Device")
         .value("CPU", Device::CPU)
         .value("CUDA", Device::CUDA)
+        .value("QUANTUM", Device::QUANTUM)
         .export_values();
 
     py::enum_<DType>(m, "DType")
@@ -36,6 +39,8 @@ PYBIND11_MODULE(_phoenix_backend, m) {
         .value("Float64", DType::Float64)
         .value("Int32", DType::Int32)
         .value("Int64", DType::Int64)
+        .value("Complex64", DType::Complex64)
+        .value("Complex128", DType::Complex128)
         .export_values();
 
     py::class_<TensorData, std::shared_ptr<TensorData>>(m, "TensorData")
