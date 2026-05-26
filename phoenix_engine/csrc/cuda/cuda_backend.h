@@ -28,7 +28,7 @@ public:
     TensorDataPtr sqrt(const TensorDataPtr& a) override;
     TensorDataPtr sum(const TensorDataPtr& a) override;
 
-    // Activation & Normalization
+    // Activation & Normalization 
     TensorDataPtr relu(const TensorDataPtr& a) override;
     TensorDataPtr softmax(const TensorDataPtr& a) override;
     TensorDataPtr layernorm(const TensorDataPtr& a, const TensorDataPtr& weight, const TensorDataPtr& bias, float eps) override;
