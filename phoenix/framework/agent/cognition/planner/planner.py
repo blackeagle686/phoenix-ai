@@ -123,6 +123,17 @@ Respond with a JSON list only containing the dependency task IDs. Format:
     async def create_task(self, objective: str, user_prompt: str) -> Task:
         await self._ensure_task_store()
         task_id = str(uuid4())
+        
+        registered_tools = []
+        if self.tools:
+            if hasattr(self.tools, "tools"):
+                registered_tools = list(self.tools.tools.keys())
+            elif hasattr(self.tools, "get_all_tools_info"):
+                try:
+                    registered_tools = [t.get("name") for t in self.tools.get_all_tools_info() if t and "name" in t]
+                except Exception:
+                    pass
+
         llm_system_prompt = f"""
 You are given a user prompt and an objective, and you must formulate a structured planning task. 
 Respond with a JSON object strictly following this format:
@@ -134,6 +145,9 @@ Respond with a JSON object strictly following this format:
   "tools_required": ["tool1", "tool2"],
   "dependencies": ["task_id_1", "task_id_2"]
 }}
+
+CRITICAL REQUIREMENT: The "tools_required" list MUST only contain tool names from the following registered list. Do not hallucinate or use any other tool names:
+{json.dumps(registered_tools)}
 """
         prompt = f"{llm_system_prompt}\n\nObjective: {objective}\nUser Prompt: {user_prompt}\n\nJSON Output:"
         response = await self.llm.generate(prompt)
@@ -145,13 +159,16 @@ Respond with a JSON object strictly following this format:
         except ValueError:
             task_status = TaskStatus.IN_PROGRESS
 
+        # Filter to only allow registered tools
+        tools_required = [t for t in data.get("tools_required", []) if t in registered_tools]
+
         task = Task(
             task_id=task_id,
             description=data.get("description") or objective,
             task_summary=data.get("summary") or data.get("description", objective)[:50],
             status=task_status,
             priority=data.get("priority", "medium"),
-            tools_required=data.get("tools_required", []),
+            tools_required=tools_required,
             dependencies=data.get("dependencies", [])
         )
         await self.task_store.set(key=f"task[{task_id}]", value=task.dict())
