@@ -64,14 +64,14 @@ class FileReadResult(BaseModel):
     file_path: str = Field(..., description="Path to the file") # llm define
     content: List[FileContent] = Field(default_factory=list, description="List of content blocks") # llm define
     total_lines: int = Field(..., description="Total lines in the file") # system define
-    
+
 #  Writing/Creation Schemas
 
 class FileWriteTask(BaseModel):
-    file_path: str = Field(..., description="Path to the file to operate on")
-    from_line: int = Field(..., description="Line number to start writing/appending from (1-indexed)")
-    to_line: int = Field(..., description="Line number to end writing/appending at (1-indexed)")
-    write_content: str = Field(..., description="Content to be written/appended to the file")
+    file_path: str = Field(..., description="Path to the file to operate on") # llm define
+    from_line: int = Field(..., description="Line number to start writing/appending from (1-indexed)") # llm define
+    to_line: int = Field(..., description="Line number to end writing/appending at (1-indexed)") # llm define
+    write_content: str = Field(..., description="Content to be written/appended to the file") # llm define
     
 class FileWriteResult(BaseModel):
     file_path: str = Field(..., description="Path to the file")
