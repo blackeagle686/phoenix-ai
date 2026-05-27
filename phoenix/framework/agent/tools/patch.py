@@ -1,6 +1,7 @@
 from phoenix.framework.agent.tools.base import BaseTool, ToolResult
 import os
-from typing import List, Dict
+from typing import List, Dict, Union
+from phoenix.framework.agent.cognition.planner.schema import MultiBlockUpdateEdit, MultiBlockUpdateResult
 
 class MultiBlockUpdateTool(BaseTool):
     """
@@ -8,15 +9,20 @@ class MultiBlockUpdateTool(BaseTool):
     """
     name = "file_update_multi"
     description = (
-        "Updates multiple blocks of code in a file. "
-        "Input: 'file_path' (str), 'edits' (list of dicts containing 'target' and 'replacement'). "
-        "Each 'target' string must be unique and exist exactly in the file."
+        "Updates multiple blocks of code in a file using unique search/replace substrings. "
+        "Input: 'file_path' (str), 'edits' (list of MultiBlockUpdateEdit)."
     )
 
-    async def execute(self, file_path: str, edits: List[Dict[str, str]], **kwargs) -> ToolResult:
+    async def execute(self, file_path: str, edits: List[Union[MultiBlockUpdateEdit, Dict[str, str]]], **kwargs) -> ToolResult:
         try:
             if not os.path.exists(file_path):
-                return ToolResult(success=False, output="", error=f"File not found: {file_path}")
+                result = MultiBlockUpdateResult(
+                    file_path=file_path,
+                    success=False,
+                    applied_count=0,
+                    output=f"File not found: {file_path}"
+                )
+                return ToolResult(success=False, output=result.dict(), error=f"File not found: {file_path}")
 
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -24,26 +30,45 @@ class MultiBlockUpdateTool(BaseTool):
             new_content = content
             applied_count = 0
             
+            processed_edits = []
             for edit in edits:
-                target = edit.get("target")
-                replacement = edit.get("replacement")
+                if isinstance(edit, dict):
+                    processed_edits.append(MultiBlockUpdateEdit(**edit))
+                else:
+                    processed_edits.append(edit)
+
+            for edit in processed_edits:
+                target = edit.target
+                replacement = edit.replacement
                 
                 if not target:
                     continue
                     
                 if target not in new_content:
+                    result = MultiBlockUpdateResult(
+                        file_path=file_path,
+                        success=False,
+                        applied_count=applied_count,
+                        output=f"Target content not found in file: {target[:100]}..."
+                    )
                     return ToolResult(
                         success=False, 
-                        output=f"Applied {applied_count} edits before failure.", 
-                        error=f"Target content not found in file: {target[:50]}..."
+                        output=result.dict(), 
+                        error=f"Target content not found in file: {target[:100]}..."
                     )
                 
                 # Check for multiple occurrences to avoid ambiguity
                 if new_content.count(target) > 1:
+                    result = MultiBlockUpdateResult(
+                        file_path=file_path,
+                        success=False,
+                        applied_count=applied_count,
+                        output=f"Target content is not unique in file: {target[:100]}..."
+                    )
                     return ToolResult(
                         success=False, 
-                        output=f"Applied {applied_count} edits before failure.", 
-                        error=f"Target content is not unique in file (found {new_content.count(target)} occurrences): {target[:50]}..."
+                        output=result.dict(), 
+                        error=f"Target content is not unique in file (found {new_content.count(target)} occurrences): {target[:100]}..."
                     )
 
                 new_content = new_content.replace(target, replacement)
@@ -52,7 +77,19 @@ class MultiBlockUpdateTool(BaseTool):
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(new_content)
 
-            return ToolResult(success=True, output=f"Successfully applied {applied_count} block updates to {file_path}")
+            result = MultiBlockUpdateResult(
+                file_path=file_path,
+                success=True,
+                applied_count=applied_count,
+                output=f"Successfully applied {applied_count} block updates."
+            )
+            return ToolResult(success=True, output=result.dict())
             
         except Exception as e:
-            return ToolResult(success=False, output="", error=str(e))
+            result = MultiBlockUpdateResult(
+                file_path=file_path,
+                success=False,
+                applied_count=0,
+                output=str(e)
+            )
+            return ToolResult(success=False, output=result.dict(), error=str(e))
