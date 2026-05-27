@@ -7,3 +7,6 @@ class TaskStatus(str, Enum):
     IN_PROGRESS = "in_progress"
     DONE = "done"
     SKIPPED = "skipped"
+
+class FileOperation(str, Enum):
+    
