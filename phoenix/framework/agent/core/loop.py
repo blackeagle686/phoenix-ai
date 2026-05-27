@@ -101,10 +101,11 @@ class AgentLoop:
 
         def _on_done(t):
             self._background_tasks.discard(t)
-            try:
-                _ = t.exception()
-            except Exception:
-                pass
+            if not t.cancelled():
+                try:
+                    _ = t.exception()
+                except Exception:
+                    pass
 
         task.add_done_callback(_on_done)
 
