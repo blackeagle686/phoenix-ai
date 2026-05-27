@@ -10,20 +10,14 @@ setup(
         "openai>=1.0.0",
         "markdown>=3.4.0",
         "beautifulsoup4>=4.11.0",
-        "chromadb>=0.4.0",
-        "sentence-transformers>=2.2.0",
         "pypdf>=3.10.0",
         "python-docx>=0.8.11",
-        "qdrant-client>=1.6.0",
         "redis>=4.5.0",
         "celery>=5.3.0",
         "sqlalchemy>=2.0.0",
         "django>=5.0.0",
         "pandas",
         "openpyxl",
-        "gTTS",
-        "SpeechRecognition",
-        "pydub",
         "Pillow",
         "psutil",
         "fastapi",
@@ -33,11 +27,33 @@ setup(
         "paho-mqtt>=1.6.0"
     ],
     extras_require={
+        "local": [
+            "torch",
+            "transformers",
+            "accelerate",
+            "bitsandbytes",
+            "sentence-transformers>=2.2.0"
+        ],
+        "vector": [
+            "chromadb>=0.4.0",
+            "qdrant-client>=1.6.0"
+        ],
+        "audio": [
+            "gTTS",
+            "SpeechRecognition",
+            "pydub"
+        ],
         "full": [
             "torch",
             "transformers",
             "accelerate",
-            "bitsandbytes"
+            "bitsandbytes",
+            "sentence-transformers>=2.2.0",
+            "chromadb>=0.4.0",
+            "qdrant-client>=1.6.0",
+            "gTTS",
+            "SpeechRecognition",
+            "pydub"
         ]
     },
     author="blackeagle686",
