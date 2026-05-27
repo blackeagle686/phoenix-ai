@@ -211,7 +211,7 @@ class AgentLoop:
         actions_taken = 0
 
         for i in range(max_iterations):
-            yield {"type": "status", "content": f"📋 Planning step {i + 1}..."}
+            yield {"type": "status", "content": f"🤔 Planner thinking (step {i + 1})..."}
             
             # Stream the thinking part of the planner
             async for thought in self.planner.stream_thinking(objective, task_file_id=task_file_id, previous_results=previous_results):
