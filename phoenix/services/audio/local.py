@@ -7,15 +7,21 @@ class LocalSTT(BaseSTT):
         self.recognizer = None
 
     async def init(self):
-        import speech_recognition as sr
+        try:
+            import speech_recognition as sr
+        except ImportError:
+            raise ImportError(
+                "speech_recognition is not installed. "
+                "Please install it using: pip install phx-ashborn[audio] or pip install SpeechRecognition"
+            )
         self.recognizer = sr.Recognizer()
 
     async def transcribe(self, audio_path: str, lang: str = "en-US") -> str:
         if not self.recognizer:
             await self.init()
         
-        import speech_recognition as sr
         try:
+            import speech_recognition as sr
             with sr.AudioFile(audio_path) as source:
                 audio_data = self.recognizer.record(source)
                 # Using Google's free web search API for transcription
@@ -32,7 +38,13 @@ class LocalTTS(BaseTTS):
         self.initialized = True
 
     async def synthesize(self, text: str, output_path: str, lang: str = "en") -> str:
-        from gtts import gTTS
+        try:
+            from gtts import gTTS
+        except ImportError:
+            raise ImportError(
+                "gtts is not installed. "
+                "Please install it using: pip install phx-ashborn[audio] or pip install gTTS"
+            )
         try:
             # Generate speech using gTTS (Google Text-to-Speech)
             tts = gTTS(text=text, lang=lang)
@@ -43,4 +55,3 @@ class LocalTTS(BaseTTS):
 
         except Exception as e:
             raise RuntimeError(f"TTS Synthesis failed: {e}")
-
