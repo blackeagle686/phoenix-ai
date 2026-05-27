@@ -78,8 +78,12 @@ class InteractiveMemoryAdapter:
             return await self._custom.get_context(session_id=session_id, query=query)
         return ""
 
-    async def consolidate_reflections(self, llm):
+    async def consolidate_reflections(self, llm, session_id: Optional[str] = None):
         if hasattr(self._custom, "consolidate_reflections"):
+            import inspect
+            sig = inspect.signature(self._custom.consolidate_reflections)
+            if "session_id" in sig.parameters:
+                return await self._custom.consolidate_reflections(llm, session_id=session_id)
             return await self._custom.consolidate_reflections(llm)
         if hasattr(self.reflection, "consolidate"):
             return await self.reflection.consolidate(llm)
