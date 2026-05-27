@@ -1,7 +1,7 @@
 from typing import Dict, List, Type
 from phoenix.framework.agent.tools.base import BaseTool
 from phoenix.framework.agent.tools.search import WebSearchTool
-from phoenix.framework.agent.tools.code import CodeExecutionTool, PythonAnalyzerTool
+from phoenix.framework.agent.tools.code import CodeExecutionTool, PythonAnalyzerTool, CommandExecutionTool, CodeCompileTool
 from phoenix.framework.agent.tools.io import FileReadTool, FileWriteTool, FileSearchTool, FileAppendTool, FileEditTool, FileDeleteTool
 from phoenix.framework.agent.tools.patch import MultiBlockUpdateTool
 
@@ -26,6 +26,8 @@ class ToolRegistry:
         registry.register(WebSearchTool())
         registry.register(CodeExecutionTool())
         registry.register(PythonAnalyzerTool())
+        registry.register(CommandExecutionTool())
+        registry.register(CodeCompileTool())
         registry.register(FileReadTool())
         registry.register(FileWriteTool())
         registry.register(FileAppendTool())
