@@ -65,9 +65,7 @@ class FileReadResult(BaseModel):
     content: List[FileContent] = Field(default_factory=list, description="List of content blocks")
     total_lines: int = Field(..., description="Total lines in the file")
 
-# ==========================================
 #  Writing/Creation Schemas
-# ==========================================
 
 class FileWriteTask(BaseModel):
     file_path: str = Field(..., description="Path to the file to operate on")
@@ -84,9 +82,7 @@ class FileWriteReasoning(BaseModel):
     task: FileWriteTask = Field(..., description="File write task details")
     result: FileWriteResult = Field(..., description="File write result details")
 
-# ==========================================
 #  Searching Schemas
-# ==========================================
 
 class FileSearchMatch(BaseModel):
     line_number: int = Field(..., description="1-indexed line number of the match")
