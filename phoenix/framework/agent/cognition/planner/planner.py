@@ -5,7 +5,8 @@ from .base import BasePlanner
 from ..utils import parse_llm_json
 from phoenix.services.cache import RedisCache
 from phoenix.framework.agent.cognition.planner.schema import * 
-from uuid import UUID
+from uuid import uuid4
+
 async def get_redis_client():
     client = RedisCache()
     await client.init()
