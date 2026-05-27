@@ -100,9 +100,7 @@ class FileSearchResult(BaseModel):
     matches: List[FileSearchMatch] = Field(default_factory=list, description="List of search matches")
     total_matches: int = Field(..., description="Total matches found in the file")
 
-# ==========================================
 #  Updating/Editing Schemas
-# ==========================================
 
 class ReplacementChunk(BaseModel):
     from_line: int = Field(..., description="1-indexed start line of the range to replace")
