@@ -64,8 +64,8 @@ class CognitionPipeline:
 
     def _parse_steps(self, spec: Dict[str, Any]) -> List[PipelineStep]:
         raw_steps = spec.get("steps", [])
-        if not isinstance(raw_steps, list) or not raw_steps:
-            raise PipelineValidationError("Pipeline spec must include non-empty 'steps' array.")
+        if not isinstance(raw_steps, list):
+            raise PipelineValidationError("Pipeline spec must include 'steps' array.")
 
         seen_ids = set()
         parsed: List[PipelineStep] = []
