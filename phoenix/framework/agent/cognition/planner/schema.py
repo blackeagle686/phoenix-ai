@@ -23,6 +23,8 @@ class FileTask(BaseModel):
     search_query: Optional[str] = Field(None, description="Search query for search operation")
     replace_query: Optional[str] = Field(None, description="Replacement query for search operation")
 
+class FileRead
+
 class Task(BaseModel):
     task_id: str = Field(..., description="Unique identifier for the task")
     task_summary: Optional[str] = Field(None, description="Summary of the task")
