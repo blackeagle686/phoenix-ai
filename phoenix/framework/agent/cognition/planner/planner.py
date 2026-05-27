@@ -75,7 +75,6 @@ class Planner(BasePlanner):
             status=TaskStatus.IN_PROGRESS
         )
         await self.task_store.set(key=f"task[{task_id}]", value=task.dict())
-        return "task"+task_id
 
 
     async def stream_thinking(
