@@ -1,7 +1,8 @@
 from phoenix.framework.agent.tools.base import BaseTool, ToolResult
 import os
 import re
-from phoenix.framework.agent.cognition.
+from phoenix.framework.agent.cognition.planner.schema import * 
+
 class FileReadTool(BaseTool):
     name = "file_read"
     description = "Reads the content of a file. Input: 'file_path' (str). Optional: 'chunk_size' (int) to return a list of chunks."
