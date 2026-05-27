@@ -53,16 +53,30 @@ class Planner(BasePlanner):
         Rules:
         1. Actions Over Talking: never claim completion unless verifiable action results show objective is complete.
         2. Verify Completion: use 'finish' only after at least one concrete tool action, except for pure conversational asks.
-        3. Precision Editing: prefer file_read -> file_edit loops for existing files.
+        3. Precision Editing: prefer file_read -> file_edit loops for existing files. Use line-based chunks for edits.
         4. Continue from existing tasks if available.
         
         You must respond with a JSON object strictly following this format:
         {{
             "actions": [
-                {{"tool": "tool_name", "kwargs": {{"arg1": "value1"}}}},
-                {{"tool": "tool_name", "kwargs": {{"arg1": "value1"}}}}
+                {{"tool": "file_read", "kwargs": {{"file_path": "path/to/file.py", "from_line": 1, "to_line": 100}}}},
+                {{"tool": "file_edit", "kwargs": {{"file_path": "path/to/file.py", "chunks": [{{"from_line": 10, "to_line": 12, "target_content": "old code", "replacement_content": "new code"}}]}}}}
             ],
-            "updated_tasks": {{ "task_id": {{ "status": "done", ... }} }}
+            "updated_tasks": {{
+                "task_id_1": {{
+                    "task_id": "task_id_1",
+                    "task_summary": "Summary of the task",
+                    "description": "Description of what needs to be done",
+                    "dependencies": [],
+                    "tools_required": ["file_read", "file_edit"],
+                    "priority": "medium",
+                    "status": "done",
+                    "output": "Optional result output of this task",
+                    "file_tasks": [
+                        {{"file_path": "path/to/file.py", "operation": "edit"}}
+                    ]
+                }}
+            }}
         }}
         If you believe the task is complete, use "tool": "finish".
         """
@@ -233,8 +247,34 @@ CRITICAL REQUIREMENT: The "tools_required" list MUST only contain tool names fro
         if not data:
             return {"tool": "finish", "kwargs": {"reason": "Failed to parse planner output"}}
         
+        # Validate and coerce updated_tasks to match the new Task Pydantic schema
+        if "updated_tasks" in data and isinstance(data["updated_tasks"], dict):
+            validated_tasks = {}
+            for t_id, t_data in data["updated_tasks"].items():
+                if isinstance(t_data, dict):
+                    t_data.setdefault("task_id", t_id)
+                    try:
+                        validated_task_obj = Task(**t_data)
+                        validated_tasks[t_id] = validated_task_obj.dict()
+                    except Exception:
+                        validated_tasks[t_id] = t_data
+                else:
+                    validated_tasks[t_id] = t_data
+            data["updated_tasks"] = validated_tasks
+
         # Auto-update task store if tasks were returned
         if task_file_id and "updated_tasks" in data:
             await self.update_task_file(task_file_id, data["updated_tasks"])
+            
+        # Standardize and map legacy arguments for actions
+        if "actions" in data and isinstance(data["actions"], list):
+            for action in data["actions"]:
+                tool_name = action.get("tool")
+                kwargs = action.get("kwargs", {})
+                if tool_name == "file_search":
+                    if "path" in kwargs and "file_path" not in kwargs:
+                        kwargs["file_path"] = kwargs.pop("path")
+                    if "pattern" in kwargs and "search_query" not in kwargs:
+                        kwargs["search_query"] = kwargs.pop("pattern")
             
         return data
