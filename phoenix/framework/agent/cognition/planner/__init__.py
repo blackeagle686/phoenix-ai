@@ -1,4 +1,45 @@
 from .base import BasePlanner
 from .planner import Planner
+from .schema import (
+    TaskStatus,
+    FileOperation,
+    FileTask,
+    Task,
+    FileContent,
+    File,
+    FileReadTask,
+    FileReadResult,
+    FileWriteTask,
+    FileWriteResult,
+    FileWriteReasoning,
+    FileSearchMatch,
+    FileSearchTask,
+    FileSearchResult,
+    ReplacementChunk,
+    FileUpdateTask,
+    FileUpdateResult,
+    FileUpdateReasoning,
+)
 
-__all__ = ["BasePlanner", "Planner"]
+__all__ = [
+    "BasePlanner",
+    "Planner",
+    "TaskStatus",
+    "FileOperation",
+    "FileTask",
+    "Task",
+    "FileContent",
+    "File",
+    "FileReadTask",
+    "FileReadResult",
+    "FileWriteTask",
+    "FileWriteResult",
+    "FileWriteReasoning",
+    "FileSearchMatch",
+    "FileSearchTask",
+    "FileSearchResult",
+    "ReplacementChunk",
+    "FileUpdateTask",
+    "FileUpdateResult",
+    "FileUpdateReasoning",
+]
