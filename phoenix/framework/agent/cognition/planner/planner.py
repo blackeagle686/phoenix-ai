@@ -78,9 +78,10 @@ class Planner(BasePlanner):
         tasks_summary = [{"task_id": task["task_id"],"summary": task["summary"]} for task in tasks.values() if task["status"] != TaskStatus.DONE]
         prompt = f"""
 Analyze the tasks and return a list of dependency task IDs.
-Tasks Summary: {tasks_summary} 
-
+Tasks Summary: {tasks_summary}
 """
+        response = await self.llm.generate(prompt)
+        data = parse_llm_json(response)
         deps = set()
         for task_data in tasks.values():
             if isinstance(task_data, dict):
