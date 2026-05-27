@@ -1,4 +1,7 @@
-import chromadb
+try:
+    import chromadb
+except ImportError:
+    chromadb = None
 from typing import Any, List, Optional
 from phoenix.services.vector.base import BaseVectorDB
 from phoenix.core.config import config
@@ -15,6 +18,11 @@ class ChromaVectorDB(BaseVectorDB):
         self.collection = None
 
     async def init(self):
+        if chromadb is None:
+            raise ImportError(
+                "chromadb is not installed. "
+                "Please install it using: pip install phx-ashborn[vector] or pip install chromadb"
+            )
         self.client = chromadb.PersistentClient(path=self.persist_directory)
         
         # Link our embedding service to Chroma's interface if provided
