@@ -34,5 +34,12 @@ class Task(BaseModel):
     output: Optional[str] = Field(None, description="Output of the task")
     file_tasks: List[FileTask] = Field(default_factory=list, description="List of file operations to perform")
 
-class ReadFile
+class ReadFileResult(BaseModel):
+    file_path: str = Field(..., description="Path to the file")
+    content: str = Field(..., description="Content of the file")
+
+class TaskFile(BaseModel):
+    task_id: str = Field(..., description="Unique identifier for the task file")
+    tasks: Dict[str, Task] = Field(default_factory=dict, description="Dictionary of tasks")
+    read_results: List[ReadFileResult] = Field(default_factory=list, description="List of file read results")
 
