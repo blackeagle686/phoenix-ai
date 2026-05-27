@@ -106,7 +106,13 @@ class FileWriteTool(BaseTool):
                 # Pad with newlines if from_line is beyond the end of file
                 lines.extend(["\n"] * (start_idx - len(lines)))
                 
-            new_lines = write_content.splitlines(keepends=True)
+            new_lines = actual_content.splitlines(keepends=True)
+            # Add back trailing newline if original content had it
+            if actual_content.endswith('\n') and (not new_lines or not new_lines[-1].endswith('\n')):
+                if new_lines:
+                    new_lines[-1] += '\n'
+                else:
+                    new_lines.append('\n')
             lines[start_idx:end_line] = new_lines
             
             # Save updated file
