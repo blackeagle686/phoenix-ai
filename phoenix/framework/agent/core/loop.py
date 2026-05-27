@@ -123,8 +123,12 @@ class AgentLoop:
                 "root_dir": "."
             }
         )
-        objective = bootstrap_state["thinker_output"]["objective"]
-        analysis = bootstrap_state["analyzer_output"]["analysis"]
+        # Default to raw prompt/empty analysis if not present in bootstrap output
+        thinker_out = bootstrap_state.get("thinker_output", {})
+        objective = thinker_out.get("objective", prompt) if isinstance(thinker_out, dict) else prompt
+        
+        analyzer_out = bootstrap_state.get("analyzer_output", {})
+        analysis = analyzer_out.get("analysis", {}) if isinstance(analyzer_out, dict) else {}
         
         # Initialize task tracking
         task_file_id = generate_unique_id()
@@ -189,7 +193,7 @@ class AgentLoop:
         """
         Streaming version of the workflow.
         """
-        yield {"type": "status", "content": "🤔 Thinking & Analyzing..."}
+        yield {"type": "status", "content": "🤔 Initializing context..."}
         bootstrap_state = await self._bootstrap_pipeline.run(
             self._registry,
             {
@@ -199,8 +203,12 @@ class AgentLoop:
                 "root_dir": "."
             }
         )
-        objective = bootstrap_state["thinker_output"]["objective"]
-        analysis = bootstrap_state["analyzer_output"]["analysis"]
+        # Default to raw prompt/empty analysis if not present in bootstrap output
+        thinker_out = bootstrap_state.get("thinker_output", {})
+        objective = thinker_out.get("objective", prompt) if isinstance(thinker_out, dict) else prompt
+        
+        analyzer_out = bootstrap_state.get("analyzer_output", {})
+        analysis = analyzer_out.get("analysis", {}) if isinstance(analyzer_out, dict) else {}
 
         task_file_id = generate_unique_id()
         memory.session.set("current_objective", objective)
