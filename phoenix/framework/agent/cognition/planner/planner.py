@@ -69,12 +69,10 @@ class Planner(BasePlanner):
 
     async def create_task(self, objective: str, user_prompt:str) -> Task:
         task_id = str(uuid4())
-        llm_system_prompt = f
-"""
+        llm_system_prompt = f"""
 You are given a user prompt and must create a task based on it. 
 Output must be in the format: {{ "description": "task description", "status": "IN_PROGRESS" }}
-
-        """
+"""
         task = Task(
             task_id=task_id,
             description=objective,
