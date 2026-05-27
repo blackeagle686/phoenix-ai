@@ -10,7 +10,7 @@ def get_redis_client():
     await client.init()
     return client 
 
-
+task_cache = get_redis_client()
 
 class Planner(BasePlanner):
     """
@@ -18,7 +18,7 @@ class Planner(BasePlanner):
     Enhanced with stateful task file support.
     """
     
-    def __init__(self, llm, tools, task_store=None, profile=None):
+    def __init__(self, llm, tools, task_store=task_cache, profile=None):
         super().__init__(llm, tools, task_store=task_store, profile=profile)
         self._cached_tool_info = None
 
