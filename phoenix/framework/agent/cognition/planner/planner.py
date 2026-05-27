@@ -75,36 +75,84 @@ class Planner(BasePlanner):
     async def get_dependecies(self) -> List[str]:
         await self._ensure_task_store()
         tasks = await self.task_store.get_all("task[*]")
-        tasks_summary = [{"task_id": task["task_id"],"summary": task["summary"]} for task in tasks.values() if task["status"] != TaskStatus.DONE]
+        
+        tasks_summary = []
+        for task in tasks.values():
+            if isinstance(task, dict):
+                t_id = task.get("task_id")
+                t_summary = task.get("task_summary") or task.get("summary")
+                t_status = task.get("status")
+            else:
+                t_id = getattr(task, "task_id", None)
+                t_summary = getattr(task, "task_summary", None)
+                t_status = getattr(task, "status", None)
+                
+            if t_id and t_status != TaskStatus.DONE:
+                tasks_summary.append({
+                    "task_id": t_id,
+                    "summary": t_summary
+                })
+
         prompt = f"""
-Analyze the tasks and return a list of dependency task IDs.
-Tasks Summary: {tasks_summary}
+You are an expert dependency analyzer. Given a list of active task summaries, analyze them and determine which task IDs are dependencies that must be resolved first.
+Tasks Summary: {json.dumps(tasks_summary)}
+
+Respond with a JSON list only containing the dependency task IDs. Format:
+[
+  "task_id_1",
+  "task_id_2"
+]
 """
         response = await self.llm.generate(prompt)
         data = parse_llm_json(response)
+        
+        if isinstance(data, list):
+            return data
+        elif isinstance(data, dict) and "dependencies" in data:
+            return data["dependencies"]
+            
+        # Fallback to programmatic lookup of dependencies
         deps = set()
-        for task_data in tasks.values():
-            if isinstance(task_data, dict):
-                deps.update(task_data.get("dependencies", []))
+        for task in tasks.values():
+            if isinstance(task, dict):
+                deps.update(task.get("dependencies", []))
+            elif hasattr(task, "dependencies"):
+                deps.update(getattr(task, "dependencies", []))
         return list(deps)
 
     async def create_task(self, objective: str, user_prompt: str) -> Task:
         await self._ensure_task_store()
         task_id = str(uuid4())
         llm_system_prompt = f"""
-You are given a user prompt and must create a task based on it. 
-Output must be in the format: {{ "description": "task description",
- "status": "IN_PROGRESS",
- "summary": "task summary",
- "priority": "task priority",
- "tools_required": ["tool1", "tool2"],
- "dependencies": ["task1", "task2"]
-  }}
+You are given a user prompt and an objective, and you must formulate a structured planning task. 
+Respond with a JSON object strictly following this format:
+{{
+  "description": "Detailed description of the task",
+  "status": "in_progress",
+  "summary": "Short task summary",
+  "priority": "medium",
+  "tools_required": ["tool1", "tool2"],
+  "dependencies": ["task_id_1", "task_id_2"]
+}}
 """
+        prompt = f"{llm_system_prompt}\n\nObjective: {objective}\nUser Prompt: {user_prompt}\n\nJSON Output:"
+        response = await self.llm.generate(prompt)
+        data = parse_llm_json(response) or {}
+        
+        status_str = data.get("status", "in_progress").lower()
+        try:
+            task_status = TaskStatus(status_str)
+        except ValueError:
+            task_status = TaskStatus.IN_PROGRESS
+
         task = Task(
             task_id=task_id,
-            description=objective,
-            status=TaskStatus.IN_PROGRESS
+            description=data.get("description") or objective,
+            task_summary=data.get("summary") or data.get("description", objective)[:50],
+            status=task_status,
+            priority=data.get("priority", "medium"),
+            tools_required=data.get("tools_required", []),
+            dependencies=data.get("dependencies", [])
         )
         await self.task_store.set(key=f"task[{task_id}]", value=task.dict())
         return task
