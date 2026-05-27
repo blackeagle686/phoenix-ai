@@ -6,7 +6,9 @@ from ..utils import parse_llm_json
 from phoenix.services.cache import RedisCache
 
 def get_redis_client():
-    client =  
+    client = RedisCache()
+    await client.init()
+    return client 
 
 class Planner(BasePlanner):
     """
