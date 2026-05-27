@@ -5,7 +5,7 @@ from .base import BasePlanner
 from ..utils import parse_llm_json
 from phoenix.services.cache import RedisCache
 from phoenix.framework.agent.cognition.planner.schema import * 
-
+from uuid import UUID
 async def get_redis_client():
     client = RedisCache()
     await client.init()
@@ -67,7 +67,7 @@ class Planner(BasePlanner):
         return f"{system_prompt}\n\n{planning_context}\n\nPlan (JSON only):"
 
     async def create_task(self):
-        
+
 
 
     async def stream_thinking(
