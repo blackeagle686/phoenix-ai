@@ -197,3 +197,14 @@ class HybridMemoryManager:
         meta["type"] = mem_type
         meta.setdefault("importance_score", 0.65 if role.lower() == "system" else 0.55)
         return meta
+
+    async def add_context_item(self, session_id: str, key: str, value: str, source: str = "system"):
+        self.session.set(key, value)
+
+    async def get_context_bundle(self, session_id: str, query: str = "") -> Dict[str, Any]:
+        full_text = await self.get_full_context(session_id, query)
+        session_vars = self.session.get_all()
+        return {
+            "session_variables": session_vars,
+            "full_text": full_text
+        }
