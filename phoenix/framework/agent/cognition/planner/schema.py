@@ -87,7 +87,7 @@ class FileWriteReasoning(BaseModel):
     result: FileWriteResult = Field(..., description="File write result details")
 
 # ==========================================
-# 🔍 Searching Schemas
+#  Searching Schemas
 # ==========================================
 
 class FileSearchMatch(BaseModel):
