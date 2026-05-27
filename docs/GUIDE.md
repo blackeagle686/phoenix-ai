@@ -92,6 +92,10 @@ async def memory_demo():
     response = await llm.generate("What am I building?", session_id="user_123")
     print(response) # "You are building Phoenix AI!"
 
+### 🤖 Autonomous Agent (Task-Solving Agent)
+For complex, multi-step tasks requiring local tool execution (such as executing commands, reading/writing files, or writing compile-check pipelines) and self-reflection loops, see the complete guide:
+- [Phoenix Agent Guide](file:///home/tlk/Documents/Projects/my_AItools/IRYM_sdk/docs/AGENT_GUIDE.md)
+
 ### 🚀 High-Level Framework: ChatBot
 The `ChatBot` class is the ultimate one-liner for building full AI agents. It orchestrates LLM, VLM, RAG, Memory, and Audio services under a single fluent interface.
 
