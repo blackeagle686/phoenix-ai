@@ -4,7 +4,8 @@ from typing import Dict, Any, AsyncGenerator, Optional
 from .base import BasePlanner
 from ..utils import parse_llm_json
 from phoenix.services.cache import RedisCache
-from 
+from phoenix.framework.agent.schema import * 
+
 async def get_redis_client():
     client = RedisCache()
     await client.init()
