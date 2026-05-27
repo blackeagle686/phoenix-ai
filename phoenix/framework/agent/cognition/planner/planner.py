@@ -71,7 +71,8 @@ class Planner(BasePlanner):
         task_id = str(uuid4())
         llm_system_prompt = f"""
 You are given a user prompt and must create a task based on it. 
-Output must be in the format: {{ "description": "task description", "status": "IN_PROGRESS" }}
+Output must be in the format: {{ "description": "task description",
+ "status": "IN_PROGRESS" }}
 """
         
         task = Task(
