@@ -3,7 +3,8 @@ import re
 from typing import Dict, Any, AsyncGenerator, Optional
 from .base import BasePlanner
 from ..utils import parse_llm_json
-from 
+from phoenix.services.cache import get_cache
+
 def get_redis_client():
 
 class Planner(BasePlanner):
