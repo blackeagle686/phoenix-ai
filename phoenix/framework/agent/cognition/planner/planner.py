@@ -67,7 +67,7 @@ class Planner(BasePlanner):
             
         return f"{system_prompt}\n\n{planning_context}\n\nPlan (JSON only):"
 
-    async def create_task(self, objective: str) -> str:
+    async def create_task(self, objective: str, user_) -> str:
         task_id = str(uuid4())
         task = Task(
             task_id=task_id,
