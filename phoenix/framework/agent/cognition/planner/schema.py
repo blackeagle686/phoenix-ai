@@ -54,6 +54,7 @@ class File(BaseModel):
 class FileReadTask(BaseModel):
     file_path: str = Field(..., description="Path to the file to operate on")
     read_percentage: int = Field(..., description="Percentage of the file to read")
+    block_size: int = Field(..., description="Size of each content block to read")
     
 class FileReadResult(BaseModel):
     file_path: str = Field(..., description="Path to the file")
