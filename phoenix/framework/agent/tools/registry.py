@@ -2,7 +2,7 @@ from typing import Dict, List, Type
 from phoenix.framework.agent.tools.base import BaseTool
 from phoenix.framework.agent.tools.search import WebSearchTool
 from phoenix.framework.agent.tools.code import CodeExecutionTool, PythonAnalyzerTool
-from phoenix.framework.agent.tools.io import FileReadTool, FileWriteTool, FileSearchTool, FileAppendTool, FileEditTool
+from phoenix.framework.agent.tools.io import FileReadTool, FileWriteTool, FileSearchTool, FileAppendTool, FileEditTool, FileDeleteTool
 from phoenix.framework.agent.tools.patch import MultiBlockUpdateTool
 
 class ToolRegistry:
@@ -31,5 +31,6 @@ class ToolRegistry:
         registry.register(FileAppendTool())
         registry.register(FileEditTool())
         registry.register(FileSearchTool())
+        registry.register(FileDeleteTool())
         registry.register(MultiBlockUpdateTool())
         return registry
