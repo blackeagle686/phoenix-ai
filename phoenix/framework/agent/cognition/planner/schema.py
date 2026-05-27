@@ -57,7 +57,7 @@ class FileReadTask(BaseModel):
     file_path: str = Field(..., description="Path to the file to operate on") # llm define
     read_percentage: int = Field(100, description="Percentage of the file to read") # system define 
     block_size: int = Field(100, description="Size of each content block to read in lines") # system define 
-    from_line: Optional[int] = Field(1, description="1-indexed line number to start reading from")
+    from_line: Optional[int] = Field(1, description="1-indexed line number to start reading from") 
     to_line: Optional[int] = Field(None, description="1-indexed line number to end reading at")
     
 class FileReadResult(BaseModel):
