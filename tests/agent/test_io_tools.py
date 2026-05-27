@@ -20,7 +20,8 @@ class TestIOTools(unittest.IsolatedAsyncioTestCase):
         result = await tool.execute(file_path=self.test_file)
         self.assertTrue(result.success)
         print(f"[v] Content Read: {result.output}")
-        self.assertEqual(result.output, self.content)
+        joined_content = "".join([c['content_block'] for c in result.output['content']])
+        self.assertEqual(joined_content, self.content)
 
     async def test_file_write(self):
         print("\n--- Testing FileWriteTool ---")
@@ -40,7 +41,9 @@ class TestIOTools(unittest.IsolatedAsyncioTestCase):
         result = await tool.execute(path=self.test_file, pattern="phoenix")
         self.assertTrue(result.success)
         print(f"[v] Search Result: {result.output}")
-        self.assertIn("io_test.txt:1: hello phoenix", result.output)
+        self.assertEqual(result.output['total_matches'], 1)
+        self.assertEqual(result.output['matches'][0]['line_number'], 1)
+        self.assertEqual(result.output['matches'][0]['line_content'], "hello phoenix")
 
 if __name__ == "__main__":
     unittest.main()
