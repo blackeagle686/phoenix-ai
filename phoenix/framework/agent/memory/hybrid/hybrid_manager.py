@@ -9,19 +9,35 @@ import time
 class HybridMemoryManager:
     """
     Unified memory manager that combines Short-Term, Long-Term, and Semantic memories
-    with advanced ranking.
+    with advanced ranking. Supports Redis caching and persistence for fault tolerance.
     """
     def __init__(self, semantic_memory_instance=None):
-        # In the new architecture, we compose managers
+        # Cache resolving
+        try:
+            from phoenix.core.container import container
+            self._cache = container.get("cache")
+        except Exception:
+            self._cache = None
+
+        # Resolve semantic search from container if not provided
+        if semantic_memory_instance is None:
+            try:
+                from phoenix.core.container import container
+                vector_db = container.get("vector_db")
+                from phoenix.framework.chatbot.memory.semantic.semantic_search import SemanticSearch
+                semantic_memory_instance = SemanticSearch(vector_db)
+            except Exception:
+                pass
+
+        # Compose managers
         self.short_term = ShortTermMemoryManager()
         self.long_term = LongTermMemoryManager(semantic_memory_instance)
         
-        # We'll keep these for backward compatibility if they are still needed
-        # but they should eventually be migrated to task_memory or persistence
         from phoenix.framework.agent.memory.session import SessionMemory
         from phoenix.framework.agent.memory.reflection import ReflectionMemory
         self.session = SessionMemory()
         self.reflection = ReflectionMemory()
+        
         self._search_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
         self._search_cache_ttl = 15.0
         self._max_context_chars = 12000
@@ -39,16 +55,40 @@ class HybridMemoryManager:
         if metadata:
             for key, value in metadata.items():
                 self.session.set(key, value)
+            if self._cache:
+                try:
+                    await self._cache.set(f"session[{session_id}]", self.session.get_all())
+                except Exception:
+                    pass
         self._invalidate_search_cache(session_id)
 
-    async def consolidate_reflections(self, llm):
+    async def consolidate_reflections(self, llm, session_id: Optional[str] = None):
         """
-        Delegates reflection consolidation to the ReflectionMemory component.
+        Delegates reflection consolidation to the ReflectionMemory component and persists to Redis.
         """
         await self.reflection.consolidate(llm)
-
+        if self._cache and session_id:
+            try:
+                await self._cache.set(f"reflection[{session_id}]", self.reflection.reflections)
+            except Exception:
+                pass
 
     async def get_full_context(self, session_id: str, query: str = "") -> str:
+        # Restore session and reflections from Redis if not loaded in memory
+        if self._cache:
+            try:
+                if not self.session.get_all():
+                    s_vars = await self._cache.get(f"session[{session_id}]")
+                    if s_vars and isinstance(s_vars, dict):
+                        for k, v in s_vars.items():
+                            self.session.set(k, v)
+                if not self.reflection.reflections:
+                    refs = await self._cache.get(f"reflection[{session_id}]")
+                    if refs and isinstance(refs, list):
+                        self.reflection.reflections = refs
+            except Exception:
+                pass
+
         reflections_task = asyncio.to_thread(self.reflection.get_reflections)
         session_vars_task = asyncio.to_thread(self.session.get_all)
         stm_cells_task = self.short_term.get(session_id, limit=10)
@@ -82,7 +122,11 @@ class HybridMemoryManager:
 
         ltm_text = "\n".join([self._extract_content(x) for x in trimmed_ltm if self._extract_content(x)])
         stm_text = "\n".join([f"{c.role.capitalize()}: {c.content}" for c in stm_cells]) if stm_cells else ""
-        session_text = str(session_vars) if session_vars else ""
+        
+        # Optimize context presentation by formatting session variables as bullet points
+        session_text = ""
+        if session_vars:
+            session_text = "\n".join([f"- {k}: {v}" for k, v in session_vars.items()])
 
         _append_section("Relevant Past Knowledge", ltm_text)
         _append_section("Recent Conversation", stm_text)
@@ -124,6 +168,8 @@ class HybridMemoryManager:
     def _extract_content(self, item: Any) -> str:
         if hasattr(item, "content"):
             return str(item.content)
+        if isinstance(item, dict) and "content" in item:
+            return str(item["content"])
         return str(item)
 
     def _rank_ltm_candidates(self, query: str, candidates: List[Any]) -> List[Any]:
@@ -137,8 +183,24 @@ class HybridMemoryManager:
             content_l = content.lower()
             overlap = len([t for t in query_terms if t in content_l])
             relevance = overlap / max(1, len(query_terms))
-            importance = float(getattr(candidate, "importance_score", 0.5))
-            created_at = float(getattr(candidate, "created_at", now))
+            
+            # Extract attributes from LongMemoryCell object or dict returned by SemanticSearch
+            if hasattr(candidate, "importance_score"):
+                importance = float(getattr(candidate, "importance_score", 0.5))
+            elif isinstance(candidate, dict):
+                metadata = candidate.get("metadata") or {}
+                importance = float(metadata.get("importance_score", 0.5))
+            else:
+                importance = 0.5
+
+            if hasattr(candidate, "created_at"):
+                created_at = float(getattr(candidate, "created_at", now))
+            elif isinstance(candidate, dict):
+                metadata = candidate.get("metadata") or {}
+                created_at = float(metadata.get("created_at", now))
+            else:
+                created_at = now
+
             age_hours = max(0.0, (now - created_at) / 3600.0)
             recency = 1.0 / (1.0 + (age_hours / 24.0))
             final_score = (0.55 * relevance) + (0.30 * importance) + (0.15 * recency)
@@ -152,7 +214,6 @@ class HybridMemoryManager:
         lines = [line for line in reflections_text.splitlines() if line.strip()]
         if not lines:
             return ""
-        # Keep latest reflection bullets only.
         bullet_lines = [ln for ln in lines[1:] if ln.strip().startswith("-")]
         tail = bullet_lines[-max_items:] if bullet_lines else lines[-max_items:]
         return "\n".join(tail)
@@ -200,6 +261,11 @@ class HybridMemoryManager:
 
     async def add_context_item(self, session_id: str, key: str, value: str, source: str = "system"):
         self.session.set(key, value)
+        if self._cache:
+            try:
+                await self._cache.set(f"session[{session_id}]", self.session.get_all())
+            except Exception:
+                pass
 
     async def get_context_bundle(self, session_id: str, query: str = "") -> Dict[str, Any]:
         full_text = await self.get_full_context(session_id, query)
@@ -208,3 +274,15 @@ class HybridMemoryManager:
             "session_variables": session_vars,
             "full_text": full_text
         }
+
+    async def clear(self, session_id: str) -> None:
+        await self.short_term.clear(session_id)
+        await self.long_term.clear(session_id)
+        self.session.clear()
+        self.reflection.clear()
+        if self._cache:
+            try:
+                await self._cache.delete(f"session[{session_id}]")
+                await self._cache.delete(f"reflection[{session_id}]")
+            except Exception:
+                pass
