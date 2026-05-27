@@ -55,10 +55,6 @@ class FileReadResult(BaseModel):
     file_path: str = Field(..., description="Path to the file")
     content: List[FileContent] = Field(default_factory=list, description="List of content blocks")
 
-class FileReadReasoning(BaseModel):
-    task: FileReadTask = Field(..., description="File read task")
-    result: FileReadResult = Field(..., description="File read result")
-
 class FileWriteTask(BaseModel):
     file_path: str = Field(..., description="Path to the file to operate on")
     from_line: int = Field(..., description="Line number to start writing/appending from")
