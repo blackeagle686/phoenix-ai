@@ -1,6 +1,6 @@
 import json
 import redis.asyncio as redis
-from typing import Any, Optional
+from typing import Any, Optional, List, Dict
 from phoenix.services.cache.base import BaseCache
 from phoenix.core.config import config
 from phoenix.services.observability.logger import get_logger
@@ -42,7 +42,7 @@ class RedisCache(BaseCache):
             self._failed = True
         return None
 
-    async def set(self, key: str, value: Any, ttl: int) -> None:
+    async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
         if self._failed:
             return
             
@@ -52,7 +52,10 @@ class RedisCache(BaseCache):
             
         try:
             serialized_value = json.dumps(value)
-            await self.redis.set(key, serialized_value, ex=ttl)
+            kwargs = {}
+            if ttl is not None:
+                kwargs["ex"] = ttl
+            await self.redis.set(key, serialized_value, **kwargs)
         except Exception:
             self._failed = True
 
@@ -68,3 +71,46 @@ class RedisCache(BaseCache):
             await self.redis.delete(key)
         except Exception:
             self._failed = True
+
+    async def keys(self, pattern: str = "*") -> List[str]:
+        if self._failed:
+            return []
+            
+        if not self.redis:
+            await self.init()
+            if self._failed: return []
+            
+        try:
+            matched_keys = []
+            async for key in self.redis.scan_iter(match=pattern):
+                matched_keys.append(key)
+            return matched_keys
+        except Exception:
+            self._failed = True
+            return []
+
+    async def get_all(self, pattern: str = "*") -> Dict[str, Any]:
+        if self._failed:
+            return {}
+            
+        if not self.redis:
+            await self.init()
+            if self._failed: return {}
+            
+        try:
+            matched_keys = await self.keys(pattern)
+            if not matched_keys:
+                return {}
+                
+            results = {}
+            values = await self.redis.mget(matched_keys)
+            for key, val in zip(matched_keys, values):
+                if val is not None:
+                    try:
+                        results[key] = json.loads(val)
+                    except json.JSONDecodeError:
+                        results[key] = val
+            return results
+        except Exception:
+            self._failed = True
+            return {}

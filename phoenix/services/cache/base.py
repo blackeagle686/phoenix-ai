@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Optional, List, Dict
 from phoenix.core.base import BaseService
 
 class BaseCache(BaseService):
