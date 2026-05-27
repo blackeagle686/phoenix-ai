@@ -11,6 +11,9 @@ class BaseCache(BaseService):
     async def delete(self, key: str) -> None:
         raise NotImplementedError
 
+    async def update(self, key: str, value: Dict[str, Any]) -> None:
+        raise NotImplementedError
+
     async def keys(self, pattern: str = "*") -> List[str]:
         raise NotImplementedError
 
