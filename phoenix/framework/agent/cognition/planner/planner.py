@@ -10,6 +10,8 @@ def get_redis_client():
     await client.init()
     return client 
 
+
+
 class Planner(BasePlanner):
     """
     Generates actionable steps and selects tools based on the Thinker's objective.
