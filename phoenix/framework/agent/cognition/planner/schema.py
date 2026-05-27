@@ -46,7 +46,7 @@ class FileContent(BaseModel):
 class File(BaseModel):
     file_path: str = Field(..., description="Path to the file")
     file_type: str = Field(..., description="Type of the file")
-    file_id: 
+    file_id: str = Field(..., description="ID of the file")
     content: List[FileContent] = Field(default_factory=list, description="List of content blocks")
 
 
