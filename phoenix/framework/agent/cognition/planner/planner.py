@@ -5,12 +5,12 @@ from .base import BasePlanner
 from ..utils import parse_llm_json
 from phoenix.services.cache import RedisCache
 
-def get_redis_client():
+async def get_redis_client():
     client = RedisCache()
     await client.init()
     return client 
 
-task_cache = get_redis_client()
+task_cache = await get_redis_client()
 
 class Planner(BasePlanner):
     """
