@@ -122,3 +122,81 @@ class FileUpdateReasoning(BaseModel):
     task: FileUpdateTask = Field(..., description="File update task details")
     reasoning: Optional[str] = Field(None, description="Explanation or step-by-step reasoning for the update")
     result: FileUpdateResult = Field(..., description="File update result details")
+
+# Web Search Schemas
+class WebSearchItem(BaseModel):
+    title: str = Field(..., description="Title of the search result")
+    snippet: str = Field(..., description="Snippet/description of the search result")
+    url: str = Field(..., description="URL of the search result")
+
+class WebSearchTask(BaseModel):
+    query: str = Field(..., description="Search engine query string")
+
+class WebSearchResult(BaseModel):
+    query: str = Field(..., description="Search query performed")
+    results: List[WebSearchItem] = Field(default_factory=list, description="List of search result items")
+
+# Code Execution (REPL) Schemas
+class CodeExecutionTask(BaseModel):
+    code: str = Field(..., description="Safe python code to execute")
+
+class CodeExecutionResult(BaseModel):
+    success: bool = Field(..., description="Whether code ran without raising unhandled exceptions")
+    output: str = Field(..., description="Output from stdout or evaluation result")
+    error: Optional[str] = Field(None, description="Exception stack trace if code failed")
+
+# Python Analysis Schemas
+class PythonMethodInfo(BaseModel):
+    name: str = Field(..., description="Name of the method/function")
+    line_start: int = Field(..., description="Start line number in source")
+    line_end: int = Field(..., description="End line number in source")
+
+class PythonClassInfo(BaseModel):
+    line_start: int = Field(..., description="Start line number in source")
+    line_end: int = Field(..., description="End line number in source")
+    methods: List[PythonMethodInfo] = Field(default_factory=list, description="List of methods defined in the class")
+
+class PythonAnalysisTask(BaseModel):
+    file_path: str = Field(..., description="Path to the Python file to analyze")
+
+class PythonAnalysisResult(BaseModel):
+    file_path: str = Field(..., description="Path of analyzed file")
+    classes: Dict[str, PythonClassInfo] = Field(default_factory=dict, description="Dictionary mapping class names to class metadata")
+    functions: List[PythonMethodInfo] = Field(default_factory=list, description="Top-level functions defined in the file")
+    imports: List[str] = Field(default_factory=list, description="List of import statement strings in the file")
+
+# Multi-Block Update Schemas
+class MultiBlockUpdateEdit(BaseModel):
+    target: str = Field(..., description="Target substring to replace")
+    replacement: str = Field(..., description="Replacement substring")
+
+class MultiBlockUpdateTask(BaseModel):
+    file_path: str = Field(..., description="Path to the file to modify")
+    edits: List[MultiBlockUpdateEdit] = Field(..., description="List of search-and-replace pairs")
+
+class MultiBlockUpdateResult(BaseModel):
+    file_path: str = Field(..., description="Path to the modified file")
+    success: bool = Field(..., description="Whether all edits were successfully applied")
+    applied_count: int = Field(..., description="Number of edits successfully applied")
+    output: str = Field(..., description="Status summary or error details")
+
+# Command / Shell Execution Schemas
+class CommandExecutionTask(BaseModel):
+    command: str = Field(..., description="Shell/Terminal command to execute")
+    cwd: Optional[str] = Field(None, description="Working directory context for execution")
+
+class CommandExecutionResult(BaseModel):
+    command: str = Field(..., description="Executed command")
+    success: bool = Field(..., description="Whether exit code was 0")
+    stdout: str = Field(..., description="Stdout stream output")
+    stderr: str = Field(..., description="Stderr stream output")
+    exit_code: int = Field(..., description="Exit code returned by shell execution")
+
+# Code Compilation / Syntax check Schemas
+class CodeCompileTask(BaseModel):
+    file_path: str = Field(..., description="Path of Python/source file to check/compile")
+
+class CodeCompileResult(BaseModel):
+    file_path: str = Field(..., description="Path of checked file")
+    success: bool = Field(..., description="Whether file compiles/checks with no errors")
+    error: Optional[str] = Field(None, description="Compilation or syntax error details if failed")
