@@ -39,7 +39,7 @@ class FileContent(BaseModel):
     content_block: str = Field(..., description="Content to be written/appended to the file")
     from_line: int = Field(..., description="Line number to start writing/appending from")
     to_line: int = Field(..., description="Line number to end writing/appending at")
-    
+    block_summary: str
     class Meta:
         block_length: Optional[int] = Field(None, description="Length of the content block")
 
