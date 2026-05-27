@@ -171,7 +171,7 @@ class AgentLoop:
             async def memory_updates():
                 await memory.add_interaction(session_id, "system", f"Action Result: {action_result}")
                 await memory.long_term.add(session_id, f"Learned from {objective}: {reflection['reflection']}")
-                await memory.consolidate_reflections(self.reflector.llm)
+                await memory.consolidate_reflections(self.reflector.llm, session_id)
 
             self._schedule_background(memory_updates())
             
@@ -251,7 +251,7 @@ class AgentLoop:
             async def memory_updates():
                 await memory.add_interaction(session_id, "system", f"Result: {action_result}")
                 await memory.long_term.add(session_id, reflection["reflection"])
-                await memory.consolidate_reflections(self.reflector.llm)
+                await memory.consolidate_reflections(self.reflector.llm, session_id)
             self._schedule_background(memory_updates())
 
             previous_results += f"\nResult: {action_result}\n"
