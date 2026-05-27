@@ -4,7 +4,7 @@ from typing import Dict, Any, AsyncGenerator, Optional
 from .base import BasePlanner
 from ..utils import parse_llm_json
 
-
+def get_redis_cli
 
 class Planner(BasePlanner):
     """
