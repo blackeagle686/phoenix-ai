@@ -47,7 +47,7 @@ class File(BaseModel):
     file_id: str = Field(..., description="ID of the file")
     content: List[FileContent] = Field(default_factory=list, description="List of content blocks")
     file_summary: Optional[str] = Field(None, description="Summary of the file")
-
+    total_lines
 
 class FileReadTask(BaseModel):
     file_path: str = Field(..., description="Path to the file to operate on")
