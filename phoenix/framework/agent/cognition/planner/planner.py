@@ -209,10 +209,14 @@ CRITICAL REQUIREMENT: The "tools_required" list MUST only contain tool names fro
         Produce concise thought text.
         """
 
+        import inspect
         stream_fn = getattr(self.llm, "generate_stream", None)
         if callable(stream_fn):
             try:
-                stream = stream_fn(thinking_prompt, session_id=None, max_tokens=200)
+                if inspect.iscoroutinefunction(stream_fn):
+                    stream = await stream_fn(thinking_prompt, session_id=None, max_tokens=200)
+                else:
+                    stream = stream_fn(thinking_prompt, session_id=None, max_tokens=200)
                 if hasattr(stream, "__aiter__"):
                     yielded = False
                     async for chunk in stream:
