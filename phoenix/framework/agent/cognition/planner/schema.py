@@ -48,6 +48,7 @@ class File(BaseModel):
     content: List[FileContent] = Field(default_factory=list, description="List of content blocks")
     file_summary: Optional[str] = Field(None, description="Summary of the file")
     total_lines: int = Field(..., description="Total number of lines in the file")
+    total_blocks: int = Field(..., description="Total number of content blocks in the file")
     
 
 class FileReadTask(BaseModel):
