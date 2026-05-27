@@ -29,8 +29,7 @@ def top_function():
         result = await tool.execute(file_path=self.test_file)
         
         self.assertTrue(result.success)
-        import json
-        data = json.loads(result.output)
+        data = result.output
         print(f"[v] Found Classes: {list(data['classes'].keys())}")
         print(f"[v] Found Functions: {[f['name'] for f in data['functions']]}")
         self.assertIn("MyClass", data["classes"])
