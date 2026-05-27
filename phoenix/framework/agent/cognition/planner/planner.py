@@ -73,6 +73,7 @@ class Planner(BasePlanner):
 You are given a user prompt and must create a task based on it. 
 Output must be in the format: {{ "description": "task description", "status": "IN_PROGRESS" }}
 """
+        
         task = Task(
             task_id=task_id,
             description=objective,
