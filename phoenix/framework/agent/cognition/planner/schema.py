@@ -51,9 +51,7 @@ class File(BaseModel):
     total_lines: int = Field(..., description="Total number of lines in the file")
     total_blocks: int = Field(..., description="Total number of content blocks in the file")
 
-# ==========================================
 #  Reading Schemas
-# ==========================================
 
 class FileReadTask(BaseModel):
     file_path: str = Field(..., description="Path to the file to operate on") # llm define
