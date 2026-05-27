@@ -45,7 +45,7 @@ class FileContent(BaseModel):
 
 class ReadFileResult(BaseModel):
     file_path: str = Field(..., description="Path to the file")
-    content: str = Field(..., description="Content of the file")
+    content: List[FileContent]
 
 class TaskFile(BaseModel):
     task_id: str = Field(..., description="Unique identifier for the task file")
