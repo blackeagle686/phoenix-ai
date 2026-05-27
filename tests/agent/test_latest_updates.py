@@ -36,7 +36,7 @@ class TestLatestUpdates(unittest.IsolatedAsyncioTestCase):
 
         planner = MagicMock()
 
-        async def fake_stream_thinking(objective, previous_results=""):
+        async def fake_stream_thinking(objective, *args, **kwargs):
             yield "Planner thought line 1. "
             yield "Planner thought line 2."
 
@@ -107,7 +107,7 @@ class TestLatestUpdates(unittest.IsolatedAsyncioTestCase):
 
         result = await loop.run("prompt", memory, "s2", max_iterations=3)
         self.assertIn("Action Success", result)
-        actor.execute.assert_called_once()
+        self.assertEqual(actor.execute.call_count, 3)
 
     async def test_file_append_and_file_edit_upsert(self):
         append_tool = FileAppendTool()
