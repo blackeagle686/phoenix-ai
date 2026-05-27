@@ -12,23 +12,28 @@ async def get_redis_client():
     await client.init()
     return client 
 
-task_cache = await get_redis_client()
-
 class Planner(BasePlanner):
     """
     Generates actionable steps and selects tools based on the Thinker's objective.
     Enhanced with stateful task file support.
     """
     
-    def __init__(self, llm, tools, task_store=task_cache, profile=None):
+    def __init__(self, llm, tools, task_store=None, profile=None):
         super().__init__(llm, tools, task_store=task_store, profile=profile)
         self._cached_tool_info = None
+
+    async def _ensure_task_store(self):
+        if self.task_store is None:
+            self.task_store = RedisCache()
+            await self.task_store.init()
+        elif hasattr(self.task_store, "init") and getattr(self.task_store, "redis", None) is None:
+            await self.task_store.init()
 
     def _build_planner_prompt(
         self, 
         objective: str, 
         previous_results: str = "",
-        existing_tasks: Dict[str, Any] = NoneNone
+        existing_tasks: Dict[str, Any] = None
     ) -> str:
         if self._cached_tool_info is None:
             self._cached_tool_info = json.dumps(self.tools.get_all_tools_info(), indent=2)
@@ -68,29 +73,38 @@ class Planner(BasePlanner):
         return f"{system_prompt}\n\n{planning_context}\n\nPlan (JSON only):"
 
     async def get_dependecies(self) -> List[str]:
-        tasks = await self.task_store.get_all()
+        await self._ensure_task_store()
+        tasks = await self.task_store.get_all("task[*]")
         prompt = f"""
+Analyze the tasks and return a list of dependency task IDs.
+Tasks: {tasks}
+"""
+        deps = set()
+        for task_data in tasks.values():
+            if isinstance(task_data, dict):
+                deps.update(task_data.get("dependencies", []))
+        return list(deps)
 
-
-    async def create_task(self, objective: str, user_prompt:str) -> Task:
+    async def create_task(self, objective: str, user_prompt: str) -> Task:
+        await self._ensure_task_store()
         task_id = str(uuid4())
         llm_system_prompt = f"""
 You are given a user prompt and must create a task based on it. 
 Output must be in the format: {{ "description": "task description",
  "status": "IN_PROGRESS",
  "summary": "task summary",
- "priority": "task priority"
+ "priority": "task priority",
  "tools_required": ["tool1", "tool2"],
  "dependencies": ["task1", "task2"]
   }}
 """
-        
         task = Task(
             task_id=task_id,
             description=objective,
             status=TaskStatus.IN_PROGRESS
         )
         await self.task_store.set(key=f"task[{task_id}]", value=task.dict())
+        return task
 
 
     async def stream_thinking(
@@ -99,7 +113,7 @@ Output must be in the format: {{ "description": "task description",
         task_file_id: Optional[str] = None,
         previous_results: str = ""
     ) -> AsyncGenerator[str, None]:
-        
+        await self._ensure_task_store()
         existing_tasks = {}
         if task_file_id:
             existing_tasks = await self.load_task_file(task_file_id)
@@ -139,7 +153,7 @@ Output must be in the format: {{ "description": "task description",
         task_file_id: Optional[str] = None,
         previous_results: str = ""
     ) -> Dict[str, Any]:
-        
+        await self._ensure_task_store()
         existing_tasks = {}
         if task_file_id:
             existing_tasks = await self.load_task_file(task_file_id)
