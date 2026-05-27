@@ -2,6 +2,7 @@ import unittest
 import asyncio
 from unittest.mock import MagicMock, AsyncMock
 from phoenix.framework.agent.core.loop import AgentLoop
+from phoenix.framework.agent.cognition.pipeline import CognitionPipeline
 
 class TestAgentLoop(unittest.IsolatedAsyncioTestCase):
     async def test_loop_run(self):
@@ -28,6 +29,34 @@ class TestAgentLoop(unittest.IsolatedAsyncioTestCase):
         reflector.reflect = AsyncMock(return_value={"is_complete": False, "reflection": "More to do"})
         
         loop = AgentLoop(thinker, planner, actor, reflector, analyzer)
+        
+        # Configure bootstrap pipeline to include thinker and analyzer for testing custom setup
+        loop._bootstrap_pipeline = CognitionPipeline({
+            "name": "test_bootstrap",
+            "version": "1.0",
+            "steps": [
+                {
+                    "id": "thinker_step",
+                    "brain": "thinker",
+                    "required_inputs": ["prompt", "memory", "session_id"],
+                    "input_map": {
+                        "prompt": "prompt",
+                        "memory": "memory",
+                        "session_id": "session_id"
+                    },
+                    "output_key": "thinker_output"
+                },
+                {
+                    "id": "analyzer_step",
+                    "brain": "analyzer",
+                    "required_inputs": ["prompt"],
+                    "input_map": {
+                        "prompt": "prompt"
+                    },
+                    "output_key": "analyzer_output"
+                }
+            ]
+        })
         
         memory = MagicMock()
         memory.session = MagicMock()
