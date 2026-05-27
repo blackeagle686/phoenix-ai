@@ -74,9 +74,9 @@ class FileWriteTask(BaseModel):
     write_content: str = Field(..., description="Content to be written/appended to the file") # llm define
     
 class FileWriteResult(BaseModel):
-    file_path: str = Field(..., description="Path to the file")
-    content: List[FileContent] = Field(default_factory=list, description="List of content blocks")
-    total_lines: int = Field(..., description="Total number of lines in the file after write")
+    file_path: str = Field(..., description="Path to the file") # llm define
+    content: List[FileContent] = Field(default_factory=list, description="List of content blocks") # llm define
+    total_lines: int = Field(..., description="Total number of lines in the file after write") # system define
 
 class FileWriteReasoning(BaseModel):
     task: FileWriteTask = Field(..., description="File write task details")
