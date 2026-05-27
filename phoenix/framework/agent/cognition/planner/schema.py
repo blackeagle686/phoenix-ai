@@ -79,8 +79,8 @@ class FileWriteResult(BaseModel):
     total_lines: int = Field(..., description="Total number of lines in the file after write") # system define
 
 class FileWriteReasoning(BaseModel):
-    task: FileWriteTask = Field(..., description="File write task details")
-    result: FileWriteResult = Field(..., description="File write result details")
+    task: FileWriteTask = Field(..., description="File write task details") # llm define
+    result: FileWriteResult = Field(..., description="File write result details") # llm define
 
 #  Searching Schemas
 
