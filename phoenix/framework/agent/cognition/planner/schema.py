@@ -63,8 +63,8 @@ class FileReadTask(BaseModel):
 class FileReadResult(BaseModel):
     file_path: str = Field(..., description="Path to the file") # llm define
     content: List[FileContent] = Field(default_factory=list, description="List of content blocks") # llm define
-    total_lines: int = Field(..., description="Total lines in the file") # llm define
-
+    total_lines: int = Field(..., description="Total lines in the file") # system define
+    
 #  Writing/Creation Schemas
 
 class FileWriteTask(BaseModel):
