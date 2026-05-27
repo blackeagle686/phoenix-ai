@@ -74,7 +74,7 @@ class Planner(BasePlanner):
             description=objective,
             status=TaskStatus.IN_PROGRESS
         )
-        await self.task_store.set(task_id, task.dict())
+        await self.task_store.set(key=task_id, task.dict())
         return task_id
 
 
