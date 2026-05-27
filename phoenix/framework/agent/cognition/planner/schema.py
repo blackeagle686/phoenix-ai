@@ -59,7 +59,7 @@ class FileWriteTask(BaseModel):
     file_path: str = Field(..., description="Path to the file to operate on")
     from_line: int = Field(..., description="Line number to start writing/appending from")
     to_line: int = Field(..., description="Line number to end writing/appending at")
-    content: str = Field(..., description="Content to be written/appended to the file")
+    write_content: str = Field(..., description="Content to be written/appended to the file")
 
 class FileWriteResult(BaseModel):
     file_path: str = Field(..., description="Path to the file")
