@@ -37,7 +37,7 @@ class Task(BaseModel):
 class FileContent(BaseModel):
     file_path: str = Field(..., description="Path to the file")
     content_block: str = Field(..., description="Content to be written/appended to the file")
-    
+    address
 class ReadFileResult(BaseModel):
     file_path: str = Field(..., description="Path to the file")
     content: str = Field(..., description="Content of the file")
