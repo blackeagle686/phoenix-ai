@@ -61,9 +61,9 @@ class FileReadTask(BaseModel):
     to_line: Optional[int] = Field(None, description="1-indexed line number to end reading at") # llm define
     
 class FileReadResult(BaseModel):
-    file_path: str = Field(..., description="Path to the file") 
-    content: List[FileContent] = Field(default_factory=list, description="List of content blocks")
-    total_lines: int = Field(..., description="Total lines in the file")
+    file_path: str = Field(..., description="Path to the file") # llm define
+    content: List[FileContent] = Field(default_factory=list, description="List of content blocks") # llm define
+    total_lines: int = Field(..., description="Total lines in the file") # llm define
 
 #  Writing/Creation Schemas
 
