@@ -45,8 +45,8 @@ class FileContent(BaseModel):
 
 class ReadFileResult(BaseModel):
     file_path: str = Field(..., description="Path to the file")
-    content: List[FileContent]
-
+    content: List[FileContent] = Field(default_factory=list, description="List of content blocks")
+    
 class TaskFile(BaseModel):
     task_id: str = Field(..., description="Unique identifier for the task file")
     tasks: Dict[str, Task] = Field(default_factory=dict, description="Dictionary of tasks")
