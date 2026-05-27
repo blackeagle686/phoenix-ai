@@ -26,7 +26,7 @@ class Planner(BasePlanner):
 
     def _build_planner_prompt(
         self, 
-        objective: str, # user defined, llm define
+        objective: str, 
         previous_results: str = "",
         existing_tasks: Dict[str, Any] = NoneNone
     ) -> str:
