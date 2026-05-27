@@ -25,6 +25,7 @@ class FileTask(BaseModel):
 
 class Task(BaseModel):
     task_id: str = Field(..., description="Unique identifier for the task")
+    task_
     description: str = Field(..., description="Description of the task")
     dependencies: List[str] = Field(default_factory=list, description="List of task IDs that must be completed before this task")
     tools_required: List[str] = Field(default_factory=list, description="List of tools required to complete this task")
