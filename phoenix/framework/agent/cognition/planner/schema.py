@@ -47,6 +47,9 @@ class File(BaseModel):
     file_id: str = Field(..., description="ID of the file")
     content: List[FileContent] = Field(default_factory=list, description="List of content blocks")
 
+class FileOperationTask(BaseModel):
+    task: Task = Field(..., description="Task to perform on the file")
+
 class FileReadTask(BaseModel):
     file_path: str = Field(..., description="Path to the file to operate on")
 
