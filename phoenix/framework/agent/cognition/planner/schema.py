@@ -16,3 +16,4 @@ class FileOperation(str, Enum):
     DELETE = "delete"
     SEARCH = "search"
 
+class 
