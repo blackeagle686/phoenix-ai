@@ -34,5 +34,5 @@ class Task(BaseModel):
     output: Optional[str] = Field(None, description="Output of the task")
     file_tasks: List[FileTask] = Field(default_factory=list, description="List of file operations to perform")
 
-class 
+class ReadFile
 
