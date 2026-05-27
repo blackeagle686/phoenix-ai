@@ -78,7 +78,7 @@ class Planner(BasePlanner):
         tasks_summary = [task["summary"] for task in tasks.values() if task["status"] != TaskStatus.DONE]
         prompt = f"""
 Analyze the tasks and return a list of dependency task IDs.
-Tasks: {tasks}
+Tasks: {tasks_summary}
 """
         deps = set()
         for task_data in tasks.values():
