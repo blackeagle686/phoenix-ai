@@ -35,44 +35,54 @@ if __name__ == "__main__":
 All agent tools use Pydantic models to enforce strict parameter typing, preventing prompt-injection parameter errors.
 
 ### Registering a Custom Tool
-Use the `Tool` wrapper to define a custom function and register it with the agent's `ToolRegistry`:
+
+You can register custom tools using either the `@tool` decorator (cleanest) or by constructing a `Tool` object explicitly.
+
+#### A. Using the `@tool` Decorator (Recommended)
+Import the `@tool` decorator, decorate your function with name/description details, and register it directly:
 
 ```python
 import asyncio
 from phoenix.framework.agent import Agent
-from phoenix.framework.agent.tools.registry import Tool
+from phoenix.framework.agent.tools import tool
 
-# Define the custom function with python type hints and a descriptive docstring
-def get_user_role(username: str) -> str:
-    """
-    Checks the user permission level in the database.
-    
-    Args:
-        username: The name of the user to query.
-    """
-    if username == "admin":
-        return "Administrator"
-    return "Standard User"
+# 1. Define custom tool using the @tool decorator
+@tool(name="custom_math", description="Calculates the square of a given number. Input: 'number' (int).")
+def custom_math_tool(number: int):
+    return f"The square of {number} is {number ** 2}"
 
 async def main():
     agent = Agent()
     
-    # Create the Tool wrapper
-    custom_tool = Tool(
-        name="check_user_role",
-        description="Verify user permissions.",
-        func=get_user_role
-    )
+    # 2. Register the tool
+    agent.register_tool(custom_math_tool)
     
-    # Register the tool
-    agent.register_tool(custom_tool)
-    
-    # Run the agent
-    reply = await agent.run("Find out what role the user 'admin' has.")
+    # 3. Run the agent
+    reply = await agent.run("Calculate the square of 9.")
     print(reply)
 
 if __name__ == "__main__":
     asyncio.run(main())
+```
+
+#### B. Using the Explicit `Tool` Class
+Alternatively, you can wrap standard python functions with the `Tool` class constructor:
+
+```python
+from phoenix.framework.agent import Agent
+from phoenix.framework.agent.tools.registry import Tool
+
+def get_user_role(username: str) -> str:
+    """Checks the user permission level."""
+    return "Administrator" if username == "admin" else "Standard User"
+
+agent = Agent()
+custom_tool = Tool(
+    name="check_user_role",
+    description="Verify user permissions.",
+    func=get_user_role
+)
+agent.register_tool(custom_tool)
 ```
 
 ---
