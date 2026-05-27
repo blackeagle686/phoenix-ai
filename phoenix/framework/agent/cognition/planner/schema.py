@@ -50,4 +50,9 @@ class File(BaseModel):
 
 class FileReadTask(BaseModel):
     file_path: str = Field(..., description="Path to the file to operate on")
-    
+
+class FileReadResult(BaseModel):
+    file_path: str = Field(..., description="Path to the file")
+    content: List[FileContent] = Field(default_factory=list, description="List of content blocks")
+
+class File
