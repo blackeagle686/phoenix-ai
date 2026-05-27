@@ -40,7 +40,7 @@ class FileContent(BaseModel):
     from_line: int = Field(..., description="Line number to start writing/appending from")
     to_line: int = Field(..., description="Line number to end writing/appending at")
     class Meta:
-        
+        block_length
 
 class ReadFileResult(BaseModel):
     file_path: str = Field(..., description="Path to the file")
