@@ -9,4 +9,10 @@ class TaskStatus(str, Enum):
     SKIPPED = "skipped"
 
 class FileOperation(str, Enum):
+    CREATE = "create"
+    EDIT = "edit"
+    APPEND = "append"
+    READ = "read"
+    DELETE = "delete"
+    SEARCH = "search"
     
