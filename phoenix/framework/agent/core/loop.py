@@ -169,12 +169,9 @@ class AgentLoop:
             memory.reflection.add_reflection(reflection["reflection"])
             
             async def memory_updates():
-                await asyncio.gather(
-                    memory.add_interaction(session_id, "system", f"Action Result: {action_result}"),
-                    # Step 6: Reflector adds to Long-Term Memory
-                    memory.long_term.add(session_id, f"Learned from {objective}: {reflection['reflection']}"),
-                    memory.consolidate_reflections(self.reflector.llm)
-                )
+                await memory.add_interaction(session_id, "system", f"Action Result: {action_result}")
+                await memory.long_term.add(session_id, f"Learned from {objective}: {reflection['reflection']}")
+                await memory.consolidate_reflections(self.reflector.llm)
 
             self._schedule_background(memory_updates())
             
@@ -252,11 +249,9 @@ class AgentLoop:
             memory.reflection.add_reflection(reflection["reflection"])
             
             async def memory_updates():
-                await asyncio.gather(
-                    memory.add_interaction(session_id, "system", f"Result: {action_result}"),
-                    memory.long_term.add(session_id, reflection["reflection"]),
-                    memory.consolidate_reflections(self.reflector.llm)
-                )
+                await memory.add_interaction(session_id, "system", f"Result: {action_result}")
+                await memory.long_term.add(session_id, reflection["reflection"])
+                await memory.consolidate_reflections(self.reflector.llm)
             self._schedule_background(memory_updates())
 
             previous_results += f"\nResult: {action_result}\n"
