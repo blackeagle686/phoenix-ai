@@ -114,3 +114,21 @@ class RedisCache(BaseCache):
         except Exception:
             self._failed = True
             return {}
+
+    async def update(self, key: str, value: Dict[str, Any]) -> None:
+        if self._failed:
+            return
+            
+        if not self.redis:
+            await self.init()
+            if self._failed: return
+
+        try:
+            current = await self.get(key)
+            if isinstance(current, dict):
+                current.update(value)
+                await self.set(key, current)
+            else:
+                await self.set(key, value)
+        except Exception:
+            self._failed = True
