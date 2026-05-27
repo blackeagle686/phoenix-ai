@@ -82,8 +82,12 @@ class FileWriteTool(BaseTool):
     name = "file_write"
     description = "Writes/Appends content to a file at a specific line range and returns FileWriteResult."
 
-    async def execute(self, file_path: str, write_content: str, from_line: int = 1, to_line: Optional[int] = None, **kwargs) -> ToolResult:
+    async def execute(self, file_path: str, write_content: str = None, from_line: int = 1, to_line: Optional[int] = None, content: str = None, **kwargs) -> ToolResult:
         try:
+            actual_content = write_content if write_content is not None else content
+            if actual_content is None:
+                actual_content = ""
+                
             os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
             
             # Read existing lines if file exists
