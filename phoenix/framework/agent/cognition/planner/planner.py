@@ -69,6 +69,7 @@ class Planner(BasePlanner):
 
     async def create_task(self, objective: str, user_prompt:str) -> Task:
         task_id = str(uuid4())
+        
         task = Task(
             task_id=task_id,
             description=objective,
