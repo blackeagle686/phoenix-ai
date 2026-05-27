@@ -15,4 +15,4 @@ class FileOperation(str, Enum):
     READ = "read"
     DELETE = "delete"
     SEARCH = "search"
-    
+    REPLA
