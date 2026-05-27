@@ -32,3 +32,5 @@ class Task(BaseModel):
     status: TaskStatus = Field(default=TaskStatus.PENDING, description="Current status of the task")
     output: Optional[str] = Field(None, description="Output of the task")
     file_tasks: List[FileTask] = Field(default_factory=list, description="List of file operations to perform")
+
+
