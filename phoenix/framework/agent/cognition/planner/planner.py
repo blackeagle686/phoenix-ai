@@ -68,7 +68,7 @@ class Planner(BasePlanner):
         return f"{system_prompt}\n\n{planning_context}\n\nPlan (JSON only):"
 
     async def get_dependecies(self) -> List[str]:
-        
+        tasks = 
         prompt = f"""
 
 
