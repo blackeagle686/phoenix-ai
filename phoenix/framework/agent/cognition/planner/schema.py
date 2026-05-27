@@ -39,16 +39,13 @@ class FileContent(BaseModel):
     content_block: str = Field(..., description="Content to be written/appended to the file")
     from_line: int = Field(..., description="Line number to start writing/appending from")
     to_line: int = Field(..., description="Line number to end writing/appending at")
-    block_summary: str
-    class Meta:
-        block_length: Optional[int] = Field(None, description="Length of the content block")
+    block_summary: str = Field(..., description="Summary of the content block")
 
 class File(BaseModel):
     file_path: str = Field(..., description="Path to the file")
     file_type: str = Field(..., description="Type of the file")
     file_id: str = Field(..., description="ID of the file")
     content: List[FileContent] = Field(default_factory=list, description="List of content blocks")
-
 
 class FileReadTask(BaseModel):
     file_path: str = Field(..., description="Path to the file to operate on")
