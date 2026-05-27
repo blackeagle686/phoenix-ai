@@ -52,7 +52,7 @@ class File(BaseModel):
     total_blocks: int = Field(..., description="Total number of content blocks in the file")
 
 # ==========================================
-# 📖 Reading Schemas
+#  Reading Schemas
 # ==========================================
 
 class FileReadTask(BaseModel):
@@ -68,7 +68,7 @@ class FileReadResult(BaseModel):
     total_lines: int = Field(..., description="Total lines in the file")
 
 # ==========================================
-# ✍️ Writing/Creation Schemas
+#  Writing/Creation Schemas
 # ==========================================
 
 class FileWriteTask(BaseModel):
@@ -107,7 +107,7 @@ class FileSearchResult(BaseModel):
     total_matches: int = Field(..., description="Total matches found in the file")
 
 # ==========================================
-# 🔄 Updating/Editing Schemas
+#  Updating/Editing Schemas
 # ==========================================
 
 class ReplacementChunk(BaseModel):
