@@ -75,7 +75,7 @@ class Planner(BasePlanner):
     async def get_dependecies(self) -> List[str]:
         await self._ensure_task_store()
         tasks = await self.task_store.get_all("task[*]")
-        tasks_summary = [summary for summary in tasks.summary]
+        tasks_summary = [task["summary"] for task in tasks.values()]
         prompt = f"""
 Analyze the tasks and return a list of dependency task IDs.
 Tasks: {tasks}
