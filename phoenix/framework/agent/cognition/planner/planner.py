@@ -4,7 +4,7 @@ from typing import Dict, Any, AsyncGenerator, Optional
 from .base import BasePlanner
 from ..utils import parse_llm_json
 from phoenix.services.cache import RedisCache
-
+from 
 async def get_redis_client():
     client = RedisCache()
     await client.init()
@@ -26,7 +26,7 @@ class Planner(BasePlanner):
         self, 
         objective: str, 
         previous_results: str = "",
-        existing_tasks: Dict[str, Any] = None
+        existing_tasks: Dict[str, Any] = NoneNone
     ) -> str:
         if self._cached_tool_info is None:
             self._cached_tool_info = json.dumps(self.tools.get_all_tools_info(), indent=2)
@@ -66,7 +66,7 @@ class Planner(BasePlanner):
         return f"{system_prompt}\n\n{planning_context}\n\nPlan (JSON only):"
 
     async def create_task(self):
-        
+
 
     async def stream_thinking(
         self, 
