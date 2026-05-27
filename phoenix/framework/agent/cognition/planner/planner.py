@@ -67,8 +67,15 @@ class Planner(BasePlanner):
             
         return f"{system_prompt}\n\n{planning_context}\n\nPlan (JSON only):"
 
-    async def create_task(self):
-
+    async def create_task(self, objective: str) -> str:
+        task_id = str(uuid4())
+        task = Task(
+            task_id=task_id,
+            description=objective,
+            status=TaskStatus.IN_PROGRESS
+        )
+        await self.task_store.save(task_id, task.dict())
+        return task_id
 
 
     async def stream_thinking(
