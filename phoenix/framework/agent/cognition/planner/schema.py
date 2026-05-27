@@ -49,11 +49,12 @@ class File(BaseModel):
     file_summary: Optional[str] = Field(None, description="Summary of the file")
     total_lines: int = Field(..., description="Total number of lines in the file")
     total_blocks: int = Field(..., description="Total number of content blocks in the file")
-    status: TaskStatus = Field(default=TaskStatus.PENDING, description="Current status of the file")
+    
 
 class FileReadTask(BaseModel):
     file_path: str = Field(..., description="Path to the file to operate on")
-
+    read_percentage: int = Field(..., description="Percentage of the file to read")
+    
 class FileReadResult(BaseModel):
     file_path: str = Field(..., description="Path to the file")
     content: List[FileContent] = Field(default_factory=list, description="List of content blocks")
