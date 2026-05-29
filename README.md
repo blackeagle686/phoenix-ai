@@ -325,3 +325,24 @@ async def vision_demo():
     answer = await vlm.ask("What is in this image?", "image.png", use_rag=True)
     print(answer)
 ```
+
+## 📚 Comprehensive Documentation
+
+The Phoenix SDK is heavily documented. Check out our dedicated guides to master different aspects of the framework:
+
+### Core Framework
+- **[Main Framework Guide](docs/GUIDE.md)** ([Arabic Version](docs/GUIDE.ar.md))
+- **[Data Pipelines & RAG](docs/PIPELINES.md)** ([Arabic Version](docs/PIPELINES.ar.md))
+- **[Model Training & Finetuning](docs/TRAINING.md)** ([Arabic Version](docs/TRAINING.ar.md))
+
+### Autonomous Agents
+- **[Agent Framework Architecture](docs/AGENT_GUIDE.md)**
+- **[Multi-Agent Teams](docs/framework/multi_agent.md)**
+- **[The Phoenix Tool Bank & Usage Examples](docs/tool_bank_usage.md)**
+- **[Building Custom Specialized Agents](docs/different_scenarios_usage.md)**
+
+### Integration & Hardware
+- **[Django Integration Guide](docs/DJANGO_INTEGRATION.md)**
+- **[FastAPI / API Integration Guide](docs/API_INTEGRATION.md)**
+- **[GUI App Integration Guide](docs/GUI_INTEGRATION.md)**
+- **[Sensorium Hardware SDK Guide](docs/sensorium.md)**
