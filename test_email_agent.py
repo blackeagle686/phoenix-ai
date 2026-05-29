@@ -1,7 +1,7 @@
 import asyncio
 from phoenix.main import init_phoenix
 from phoenix.framework.agent import Agent
-from phoenix.framework.agent.core.profile import AgentProfile
+from phoenix.framework.agent.core.profile import AgentProfile, Identity, Role, Personality
 from phoenix.framework.agent.tools.bank.productivity.email import EmailTool
 
 async def test():
@@ -10,14 +10,19 @@ async def test():
     
     # 2. Create the agent profile
     profile = AgentProfile(
-        name="EmailBot",
-        role="Outreach Assistant",
-        system_prompt=(
-            "You are an AI assistant. You have access to the EmailTool. "
-            "When requested, use it to send an email to the user's requested address. "
-            "If the tool returns an error about missing credentials, simply tell the user what they need to configure."
+        identity=Identity(name="EmailBot", id="email-bot-1"),
+        role=Role(
+            title="Outreach Assistant",
+            mission="Send emails to users when requested."
         ),
-        max_iterations=5
+        personality=Personality(
+            communication_tone="Professional",
+            response_style="Direct"
+        ),
+        rules=[
+            "If the email tool returns an error about missing credentials, tell the user exactly what is missing."
+        ],
+        tool_access=["email"]
     )
     
     # 3. Instantiate the agent with the EmailTool
