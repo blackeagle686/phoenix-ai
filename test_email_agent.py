@@ -25,8 +25,6 @@ async def test():
         tool_access=["email"]
     )
     
-from phoenix.framework.agent.tools.registry import ToolRegistry
-
     registry = ToolRegistry()
     registry.register(EmailTool())
     
