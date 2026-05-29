@@ -48,4 +48,4 @@ phoenix_engine/.vs/ProjectSettings.json
 phoenix_engine/.vs/phoenix_engine/
 
 agent_venv/
-smart_git.py
+./smart_git.py
