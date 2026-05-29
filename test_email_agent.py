@@ -19,7 +19,7 @@ class MockLLM:
                     {
                         "tool": "email",
                         "kwargs": {
-                            "recipient": "mathematecs1@gmail.com",
+                            "recipient": "mathematecs123@gmail.com",
                             "subject": "Phoenix Test",
                             "body": "hello from your agent"
                         }
@@ -33,6 +33,10 @@ class MockLLM:
 
     async def generate_stream(self, prompt, **kwargs):
         yield "Thinking..."
+
+import os
+os.environ["SMTP_EMAIL"] = "mathematecs1@gmail.com"
+os.environ["SMTP_PASSWORD"] = "csbm araf fwos tjcy"
 
 async def test():
     # 1. Initialize the SDK (loads .env automatically)
