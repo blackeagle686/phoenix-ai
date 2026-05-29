@@ -1,5 +1,8 @@
 import os
-import torch
+try:
+    import torch
+except ImportError:
+    torch = None
 from typing import Optional, Dict, Any
 from phoenix.services.training.base import BaseFineTuner
 from phoenix.core.config import config
@@ -42,6 +45,9 @@ class LocalFineTuner(BaseFineTuner):
             from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
             from trl import SFTTrainer
             from datasets import load_dataset
+
+            if torch is None:
+                raise ImportError("torch is required for local training. Install with: pip install phx-ashborn[local]")
 
             # 1. Hardware Detection
             device = "cuda" if torch.cuda.is_available() else "cpu"
