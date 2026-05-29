@@ -36,7 +36,7 @@ class MockLLM:
 
 import os
 os.environ["SMTP_EMAIL"] = "mathematecs1@gmail.com"
-os.environ["SMTP_PASSWORD"] = "csbm araf fwos tjcy"
+os.environ["SMTP_PASSWORD"] = ""
 
 async def test():
     # 1. Initialize the SDK (loads .env automatically)
