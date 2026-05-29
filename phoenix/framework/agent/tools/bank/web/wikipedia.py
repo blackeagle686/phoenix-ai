@@ -35,7 +35,7 @@ class WikipediaSearchTool(BaseTool):
             
             # 2. Fetch the summary for the article
             summary_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(best_title)}"
-            summary_res = requests.get(summary_url, timeout=10)
+            summary_res = requests.get(summary_url, headers=headers, timeout=10)
             summary_res.raise_for_status()
             summary_data = summary_res.json()
             
