@@ -20,8 +20,11 @@ class WikipediaSearchTool(BaseTool):
                 "format": "json",
                 "srlimit": 1
             }
+            headers = {
+                "User-Agent": "PhoenixAI/1.0 (https://github.com/blackeagle686/IRYM_sdk; bot@phoenix.ai)"
+            }
             
-            search_res = requests.get(search_url, params=search_params, timeout=10)
+            search_res = requests.get(search_url, params=search_params, headers=headers, timeout=10)
             search_res.raise_for_status()
             search_data = search_res.json()
             
