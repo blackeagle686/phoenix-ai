@@ -46,3 +46,5 @@ Thumbs.db
 chroma_db/
 phoenix_engine/.vs/ProjectSettings.json
 phoenix_engine/.vs/phoenix_engine/
+
+agent_venv/

@@ -10,6 +10,12 @@ Whether you are building with FastAPI, Django, or a custom event-driven service,
 
 ```bash
 pip install phx-ashborn
+# Or for advanced features:
+pip install "phx-ashborn[agent]"
+# Or for chat bot features:
+pip install "phx-ashborn[chatbot]"
+# Or for all features:
+pip install "phx-ashborn[full]"
 ```
 
 ## 🐦‍🔥 Key Requirements & Core Features
