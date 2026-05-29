@@ -55,11 +55,17 @@ async def test():
         tool_access=["email"]
     )
     
+from phoenix.framework.agent.memory.adapter import InteractiveMemoryAdapter
+
     registry = ToolRegistry()
     registry.register(EmailTool())
     
-    # 3. Instantiate the agent with the MockLLM
-    agent = Agent(llm=MockLLM(), profile=profile, tools=registry)
+    # 3. Instantiate the agent with the MockLLM and basic memory to avoid VectorDB dependencies
+    class BasicMemory:
+        async def add_interaction(self, session_id, role, content, metadata=None): pass
+        async def get_full_context(self, session_id, query=None): return ""
+        
+    agent = Agent(llm=MockLLM(), memory=BasicMemory(), profile=profile, tools=registry)
     
     print("[*] Agent is starting...")
     print("[*] Request: Send an email to mathematecs1@gmail.com with content 'hello from your agent'\\n")
