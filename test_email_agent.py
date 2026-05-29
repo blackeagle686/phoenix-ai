@@ -26,11 +26,40 @@ async def test():
         tool_access=["email"]
     )
     
+class MockLLM:
+    def __init__(self):
+        self.call_count = 0
+        
+    async def generate(self, prompt, **kwargs):
+        self.call_count += 1
+        if self.call_count == 1:
+            return """
+            ```json
+            {
+                "actions": [
+                    {
+                        "tool": "email",
+                        "kwargs": {
+                            "recipient": "mathematecs1@gmail.com",
+                            "subject": "Phoenix Test",
+                            "body": "hello from your agent"
+                        }
+                    }
+                ]
+            }
+            ```
+            """
+        else:
+            return '{"actions": [{"tool": "finish"}]}'
+
+    async def generate_stream(self, prompt, **kwargs):
+        yield "Thinking..."
+
     registry = ToolRegistry()
     registry.register(EmailTool())
     
-    # 3. Instantiate the agent with the ToolRegistry
-    agent = Agent(profile=profile, tools=registry)
+    # 3. Instantiate the agent with the MockLLM
+    agent = Agent(llm=MockLLM(), profile=profile, tools=registry)
     
     print("[*] Agent is starting...")
     print("[*] Request: Send an email to mathematecs1@gmail.com with content 'hello from your agent'\n")
