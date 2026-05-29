@@ -1,5 +1,8 @@
 import json
-import redis.asyncio as redis
+try:
+    import redis.asyncio as redis
+except ImportError:
+    redis = None
 from typing import Any, Optional, List, Dict
 from phoenix.services.cache.base import BaseCache
 from phoenix.core.config import config
@@ -13,6 +16,11 @@ class RedisCache(BaseCache):
         self._failed = False
 
     async def init(self):
+        if redis is None:
+            logger.warning("redis library is not installed. Caching disabled.")
+            self._failed = True
+            return
+            
         try:
             self.redis = redis.from_url(config.REDIS_URL, decode_responses=True)
             # Ping to verify connection
