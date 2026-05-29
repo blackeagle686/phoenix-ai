@@ -25,8 +25,13 @@ async def test():
         tool_access=["email"]
     )
     
-    # 3. Instantiate the agent with the EmailTool
-    agent = Agent(profile=profile, tools=[EmailTool()])
+from phoenix.framework.agent.tools.registry import ToolRegistry
+
+    registry = ToolRegistry()
+    registry.register(EmailTool())
+    
+    # 3. Instantiate the agent with the ToolRegistry
+    agent = Agent(profile=profile, tools=registry)
     
     print("[*] Agent is starting...")
     print("[*] Request: Send an email to mathematecs1@gmail.com with content 'hello from your agent'\n")
