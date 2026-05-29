@@ -55,7 +55,7 @@ async def test():
         tool_access=["email"]
     )
     
-from phoenix.framework.agent.memory.adapter import InteractiveMemoryAdapter
+    from phoenix.framework.agent.memory.adapter import InteractiveMemoryAdapter
 
     registry = ToolRegistry()
     registry.register(EmailTool())
