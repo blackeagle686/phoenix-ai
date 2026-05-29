@@ -5,38 +5,11 @@ from phoenix.framework.agent import Agent
 from phoenix.framework.agent.core.profile import AgentProfile, Identity, Role, Personality
 from phoenix.framework.agent.tools.bank.productivity.email import EmailTool
 
-class MockLLM:
-    def __init__(self):
-        self.call_count = 0
-        
-    async def generate(self, prompt, **kwargs):
-        self.call_count += 1
-        if self.call_count == 1:
-            return """
-            ```json
-            {
-                "actions": [
-                    {
-                        "tool": "email",
-                        "kwargs": {
-                            "recipient": "mathematecs123@gmail.com",
-                            "subject": "Phoenix Test",
-                            "body": "hello from your agent"
-                        }
-                    }
-                ]
-            }
-            ```
-            """
-        else:
-            return '{"actions": [{"tool": "finish"}]}'
-
-    async def generate_stream(self, prompt, **kwargs):
-        yield "Thinking..."
+from phoenix.services.llm.openai import OpenAILLM
 
 import os
 os.environ["SMTP_EMAIL"] = "mathematecs1@gmail.com"
-os.environ["SMTP_PASSWORD"] = "csbm araf fwos tjcy"
+os.environ["SMTP_PASSWORD"] = ""
 
 async def test():
     # 1. Initialize the SDK (loads .env automatically)
@@ -64,18 +37,27 @@ async def test():
     registry = ToolRegistry()
     registry.register(EmailTool())
     
+    # Initialize the real LLM with Gemini
+    llm = OpenAILLM(
+        api_key=os.environ.get("GEMINI_API_KEY", ""),
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        model="gemini-2.5-flash"
+    )
+    await llm.init()
+    registry.register(EmailTool())
+    
     # 3. Instantiate the agent with the MockLLM and basic memory to avoid VectorDB dependencies
     class BasicMemory:
         async def add_interaction(self, session_id, role, content, metadata=None): pass
         async def get_full_context(self, session_id, query=None): return ""
         
-    agent = Agent(llm=MockLLM(), memory=BasicMemory(), profile=profile, tools=registry)
+    agent = Agent(llm=llm, memory=BasicMemory(), profile=profile, tools=registry)
     
     print("[*] Agent is starting...")
     print("[*] Request: Send an email to mathematecs123@gmail.com with content 'hello from your agent'\\n")
     
     response = await agent.run(
-        "Please send an email to mathematecs123@gmail.com with the subject 'Phoenix Test' and the content 'hello from your agent'.",
+        "Please send an email to mathematecs123@gmail.com that say hello from our agent *_* add some emogies and so on  ",
         mode="plan" # Force planning mode so it uses the tool instead of just chatting
     )
     
@@ -85,5 +67,3 @@ async def test():
 
 if __name__ == "__main__":
     asyncio.run(test())
-
-
