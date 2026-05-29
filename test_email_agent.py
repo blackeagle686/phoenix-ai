@@ -1,5 +1,6 @@
 import asyncio
 from phoenix.main import init_phoenix
+from phoenix.framework.agent.tools.registry import ToolRegistry
 from phoenix.framework.agent import Agent
 from phoenix.framework.agent.core.profile import AgentProfile, Identity, Role, Personality
 from phoenix.framework.agent.tools.bank.productivity.email import EmailTool
