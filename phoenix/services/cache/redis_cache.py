@@ -141,3 +141,4 @@ class RedisCache(BaseCache):
         except Exception:
             self._failed = True
 
+console.log(Hello12)
