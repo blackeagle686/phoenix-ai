@@ -114,7 +114,7 @@ async for event in agent.run_stream("Create 'config.json'"):
 
 ---
 
-## 🧠 Memory Persistence (Redis & Vector DB)
+##  Memory Persistence (Redis & Vector DB)
 
 The Phoenix agent uses a **Hybrid Memory System**:
 - **Short-Term (STM)**: Tracks immediate conversation turns. Stored in Redis cache under `stm[{session_id}]`.

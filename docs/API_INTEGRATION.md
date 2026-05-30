@@ -4,7 +4,7 @@ This guide explains how to connect any external technology—such as **Flutter**
 
 ---
 
-## 🚀 The Quick-Start API Server
+##  The Quick-Start API Server
 
 We provide a pre-configured FastAPI server in `phoenix_api.py`. This server exposes a single `/chat` endpoint that handles text, images (Vision), and audio (STT) automatically.
 
