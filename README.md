@@ -211,13 +211,13 @@ Ready to dive deeper? Explore our dedicated guides to master the Phoenix ecosyst
 - **[Data Pipelines & RAG](docs/PIPELINES.md)** ([Arabic Version](docs/PIPELINES.ar.md))
 - **[Model Training & Finetuning](docs/TRAINING.md)** ([Arabic Version](docs/TRAINING.ar.md))
 
-### 🤖 Autonomous Agents
+###  Autonomous Agents
 - **[Agent Framework Architecture](docs/AGENT_GUIDE.md)**
 - **[Multi-Agent Teams](docs/framework/multi_agent.md)**
 - **[The Phoenix Tool Bank](docs/tool_bank_usage.md)**
 - **[Custom Specialized Agents](docs/different_scenarios_usage.md)**
 
-### 🔌 Integrations & Extensions
+###  Integrations & Extensions
 - **[Django Integration](docs/DJANGO_INTEGRATION.md)**
 - **[FastAPI / Backend Integration](docs/API_INTEGRATION.md)**
 - **[GUI App Integration](docs/GUI_INTEGRATION.md)**
