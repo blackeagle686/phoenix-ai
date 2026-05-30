@@ -153,7 +153,7 @@ def smart_sync():
         print(f"[v] Generated message: {message.splitlines()[0]}")
 
     print("[*] Committing...")
-    if not commit_with_message(message):
+    if not commit_with_message(specific_msg):
         print("[!] Commit failed (or nothing staged). Skipping push.")
         return
 
