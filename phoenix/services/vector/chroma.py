@@ -19,10 +19,10 @@ class ChromaVectorDB(BaseVectorDB):
 
     async def init(self):
         if chromadb is None:
-            raise ImportError(
-                "chromadb is not installed. "
-                "Please install it using: pip install phx-ashborn[vector] or pip install chromadb"
-            )
+            logger.warning("chromadb is not installed. Vector DB disabled. Install using pip install phx-ashborn[vector]")
+            self._failed = True
+            return
+        self._failed = False
         self.client = chromadb.PersistentClient(path=self.persist_directory)
         
         # Link our embedding service to Chroma's interface if provided
