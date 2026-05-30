@@ -16,7 +16,7 @@ The server will start at `http://localhost:8000`. You can access the auto-genera
 
 ---
 
-## 📱 Flutter Integration
+##  Flutter Integration
 
 In Flutter, use the `http` package to send multi-part requests to the Phoenix API.
 
@@ -48,7 +48,7 @@ Future<void> sendToPhoenix(String prompt, String? sessionId) async {
 
 ---
 
-## 💻 .NET / C# Integration
+##  .NET / C# Integration
 
 Use `HttpClient` and `MultipartFormDataContent` to interact with the API from a Windows Desktop or ASP.NET app.
 
