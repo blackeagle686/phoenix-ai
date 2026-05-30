@@ -189,7 +189,7 @@ AUTO_ACCEPT_FALLBACK=true  # Automatically switch to local without asking
 
 ## 🏗️ Advanced Infrastructure
 
-### 🔄 Lifecycle Management
+###  Lifecycle Management
 Use the `LifecycleManager` to register hooks that run on application startup or shutdown. This is ideal for managing database pool connections or loading heavy AI models once.
 
 ```python
@@ -214,7 +214,7 @@ logger = get_logger("my_app")
 logger.info("Starting AI processing...")
 ```
 
-### 🚨 Error Handling
+###  Error Handling
 Phoenix AI provides a typed exception hierarchy for robust error catching.
 
 ```python
