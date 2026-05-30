@@ -9,33 +9,33 @@ The `MultiAgentManager` is the central orchestrator. It manages the lifecycle of
 
 ### 2. Orchestration Patterns
 
-#### 📡 Broadcast (Parallel)
+#### Broadcast (Parallel)
 The same prompt is sent to all agents in the team simultaneously. This is ideal for brainstorming, getting multiple perspectives, or distributed processing.
 - **Method:** `await manager.broadcast(prompt)`
 - **Behavior:** Parallel execution using `asyncio.gather`.
 
-#### 🔗 Pipeline (Sequential)
+#### Pipeline (Sequential)
 Agents are executed in a predefined sequence, where the output of one agent becomes the input for the next. This is perfect for review cycles or multi-stage workflows.
 - **Method:** `await manager.run_pipeline(prompt, ["AgentA", "AgentB"])`
 - **Behavior:** Sequential hand-off.
 
-#### 🎯 Targeted
+#### Targeted
 Send a prompt directly to a specific agent within the team.
 - **Method:** `await manager.run_targeted("AgentName", prompt)`
 
-#### 🤖 Autonomous Routing (Lead Manager)
+#### Autonomous Routing (Lead Manager)
 The manager acts as a "Lead", automatically reading the prompt, evaluating the team's capabilities, and delegating the task to the most qualified agent.
 - **Method:** `await manager.run_autonomous(prompt)`
 - **Behavior:** Dynamic, LLM-based delegation.
 
-#### 🔄 Review Loop (Self-Correcting)
+#### Review Loop (Self-Correcting)
 Run a resilient, self-correcting loop between a "Doer" and a "Reviewer". If the Reviewer rejects the output, it sends feedback back to the Doer to fix the issues, repeating until approved or `max_loops` is reached.
 - **Method:** `await manager.run_with_review(prompt, doer="Giyu", reviewer="Shinobu")`
 - **Behavior:** Iterative execution and feedback generation.
 
 ---
 
-## 🛠️ Configuration
+## Configuration
 
 Multi-agent teams are defined using a structured configuration schema. 
 **Pro-Tip**: Enable `shared_memory` to give all agents access to the same conversation history!
