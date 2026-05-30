@@ -14,7 +14,7 @@ A Call Center agent needs to be polite, empathetic, and possess the ability to i
 import asyncio
 from phoenix.main import init_phoenix
 from phoenix.framework.agent import Agent
-from phoenix.framework.agent.core.profile import AgentProfile
+from phoenix.framework.agent.core.profile import AgentProfile, Identity, Role, Personality
 from phoenix.framework.agent.tools.base import tool
 
 # 1. Initialize the SDK
@@ -32,14 +32,14 @@ async def issue_refund(order_id: str, reason: str) -> str:
 
 # 3. Create the Persona Profile
 profile = AgentProfile(
-    name="SupportBot",
-    role="Customer Support Representative",
-    system_prompt=(
-        "You are a polite, empathetic call center assistant for Acme Corp. "
-        "Always greet the user warmly. Before discussing shipping or refunds, "
-        "you must ask the user for their Order ID. Only use tools when you have the necessary information."
-    ),
-    max_iterations=5
+    identity=Identity(name="SupportBot", id="agent-support-1"),
+    role=Role(title="Customer Support Representative", mission="Empathize with users and interface with internal business systems to resolve customer queries."),
+    personality=Personality(communication_tone="Polite and warm", response_style="Empathetic and structured"),
+    rules=[
+        "Always greet the user warmly.",
+        "Before discussing shipping or refunds, you must ask the user for their Order ID.",
+        "Only use tools when you have the necessary information."
+    ]
 )
 
 # 4. Instantiate the Agent
@@ -63,7 +63,7 @@ A Data Analysis agent doesn't need external web APIs, but it *does* need the abi
 import asyncio
 from phoenix.main import init_phoenix
 from phoenix.framework.agent import Agent
-from phoenix.framework.agent.core.profile import AgentProfile
+from phoenix.framework.agent.core.profile import AgentProfile, Identity, Role, Personality
 from phoenix.framework.agent.tools.code import CodeExecutionTool
 from phoenix.framework.agent.tools.io import FileReadTool, FileWriteTool
 
@@ -71,14 +71,13 @@ init_phoenix()
 
 # 1. Create the Persona Profile
 profile = AgentProfile(
-    name="DataAnalyst",
-    role="Senior Data Scientist",
-    system_prompt=(
-        "You are an expert Data Analyst. You will be given tasks to analyze CSV or JSON datasets. "
-        "Write and execute Python code using your python_repl tool to perform Pandas operations. "
+    identity=Identity(name="DataAnalyst", id="agent-analyst-1"),
+    role=Role(title="Senior Data Scientist", mission="Analyze datasets, write pandas operations, and generate summary reports."),
+    personality=Personality(communication_tone="Analytical and professional", response_style="Concise and fact-based"),
+    rules=[
+        "Write and execute Python code using your python_repl tool to perform Pandas operations.",
         "After analyzing, write your final reports to a markdown file."
-    ),
-    max_iterations=10
+    ]
 )
 
 # 2. Instantiate with Code & IO Tools
@@ -108,7 +107,7 @@ A Software Engineer agent requires deep access to the project's file system, the
 import asyncio
 from phoenix.main import init_phoenix
 from phoenix.framework.agent import Agent
-from phoenix.framework.agent.core.profile import AgentProfile
+from phoenix.framework.agent.core.profile import AgentProfile, Identity, Role, Personality
 
 # Import all advanced development tools
 from phoenix.framework.agent.tools.code import CommandExecutionTool, PythonAnalyzerTool, CodeCompileTool
@@ -119,14 +118,13 @@ init_phoenix()
 
 # 1. Create the Persona Profile
 profile = AgentProfile(
-    name="SeniorDev",
-    role="Principal Software Engineer",
-    system_prompt=(
-        "You are an elite autonomous coding assistant. You have full access to the terminal and file system. "
-        "Before modifying code, search the workspace and read existing files to understand the architecture. "
+    identity=Identity(name="SeniorDev", id="agent-dev-1"),
+    role=Role(title="Principal Software Engineer", mission="Review codebase, modify source files, and run tests to implement new features."),
+    personality=Personality(communication_tone="Professional", response_style="Technical and direct"),
+    rules=[
+        "Before modifying code, search the workspace and read existing files to understand the architecture.",
         "Make code edits carefully, run tests using the terminal tool to verify your changes, and fix any bugs you encounter."
-    ),
-    max_iterations=20 # Give it more cycles to plan, code, and test
+    ]
 )
 
 # 2. Instantiate with a full suite of Developer Tools
