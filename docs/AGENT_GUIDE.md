@@ -4,7 +4,7 @@ The Phoenix Agent framework provides a state-of-the-art, schema-compliant, auton
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### 1. Minimal Initialization (Default Settings)
 By default, the Agent uses `OpenAILLM` (via the environment config `OPENAI_API_KEY` and base URL), registers default File I/O tools, and starts a memory-resident context window backed by Redis:
