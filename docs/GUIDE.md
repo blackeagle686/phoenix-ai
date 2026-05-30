@@ -165,9 +165,6 @@ def ai_chat(request):
 ```
 
 ### ⚠️ Important: Local Model Hardware Requirements
-```
-
-### ⚠️ Important: Local Model Hardware Requirements
 When using local models (Ollama or Transformers), ensure your machine meets these requirements:
 
 - **LLM (Qwen-1.5B/7B)**: Minimum 8GB RAM. 16GB+ recommended for 7B models.
