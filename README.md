@@ -90,7 +90,7 @@ asyncio.run(agent_demo())
 > [!TIP]
 > Phoenix Agents feature **Intelligent Auto-Routing**. By default (`mode="auto"`), the agent analyzes your prompt to decide whether to give a blazing-fast direct answer or spin up its heavy planning loop for complex operations!
 
-### 2. 💬 Multi-Modal ChatBot
+### 2. Multi-Modal ChatBot
 Need a powerful conversational interface without the complexity of building agent loops? The `ChatBot` builder abstracts away RAG, Vision (VLM), and Session Memory into a fluent API.
 
 ```python
@@ -116,7 +116,7 @@ async def chatbot_demo():
 asyncio.run(chatbot_demo())
 ```
 
-### 3. 📚 RAG Pipeline (Retrieval-Augmented Generation)
+### 3. RAG Pipeline (Retrieval-Augmented Generation)
 The `RAGPipeline` handles document extraction, intelligent chunking, and vector storage (ChromaDB/Qdrant) across PDFs, Code files, SQL, APIs, and GitHub repos.
 
 ```python
