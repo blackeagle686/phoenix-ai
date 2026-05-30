@@ -76,7 +76,7 @@ phoenix_service = PhoenixAgentService()
 
 ---
 
-## 🚀 Usage in Django Views
+##  Usage in Django Views
 
 ### 1. Simple Function-Based View (FBV)
 
