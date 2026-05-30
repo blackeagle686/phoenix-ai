@@ -43,8 +43,10 @@ class ChromaVectorDB(BaseVectorDB):
         )
 
     async def search(self, query: str, limit: int = 5, where: Optional[dict] = None) -> List[Any]:
+        if getattr(self, "_failed", False): return []
         if not self.collection:
             await self.init()
+            if self._failed: return []
         
         results = self.collection.query(
             query_texts=[query],
@@ -63,8 +65,10 @@ class ChromaVectorDB(BaseVectorDB):
         return docs
 
     async def add(self, texts: List[str], metadatas: Optional[List[dict]] = None, ids: Optional[List[str]] = None) -> None:
+        if getattr(self, "_failed", False): return
         if not self.collection:
             await self.init()
+            if self._failed: return
         
         if not ids:
             import uuid
@@ -99,25 +103,33 @@ class ChromaVectorDB(BaseVectorDB):
 
 
     async def delete(self, ids: List[str]) -> None:
+        if getattr(self, "_failed", False): return
         if not self.collection:
             await self.init()
+            if self._failed: return
         self.collection.delete(ids=ids)
 
     async def clear(self) -> None:
+        if getattr(self, "_failed", False): return
         if not self.collection:
             await self.init()
+            if self._failed: return
         ids = self.collection.get()['ids']
         if ids:
             self.collection.delete(ids=ids)
 
     async def get_all(self) -> List[Any]:
+        if getattr(self, "_failed", False): return []
         if not self.collection:
             await self.init()
+            if self._failed: return []
         return self.collection.get()
 
     async def get_by_metadata(self, where: dict) -> List[Any]:
+        if getattr(self, "_failed", False): return []
         if not self.collection:
             await self.init()
+            if self._failed: return []
         results = self.collection.get(where=where)
         docs = []
         for i in range(len(results['documents'])):
