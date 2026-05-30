@@ -19,12 +19,12 @@
 
 Whether you are building with FastAPI, Django, or a custom event-driven service, **Phoenix AI** eliminates repetitive backend setup and provides a highly-optimized orchestration layer for large language models, computer vision, and physical hardware.
 
-## ✨ Why Phoenix AI?
+## Why Phoenix AI?
 
-- 🤖 **Autonomous Agents**: Single-line creation of thinking, planning, and executing AI agents.
-- 💬 **High-Level ChatBot**: Turnkey conversational AI with native RAG, Vision, and Memory.
-- ⚡ **"Everything as a Service"**: A unified Dependency Injection container handles Vector DBs, Redis caching, and LLMs seamlessly.
-- 🛡️ **Fail-Loud & Recover**: Auto-fallbacks from Local (Ollama/Transformers) to Cloud (OpenAI) to prevent system crashes.
+- **Autonomous Agents**: Single-line creation of thinking, planning, and executing AI agents.
+- **High-Level ChatBot**: Turnkey conversational AI with native RAG, Vision, and Memory.
+- **"Everything as a Service"**: A unified Dependency Injection container handles Vector DBs, Redis caching, and LLMs seamlessly.
+- **Fail-Loud & Recover**: Auto-fallbacks from Local (Ollama/Transformers) to Cloud (OpenAI) to prevent system crashes.
 - 🧠 **Native PyTorch & 4-bit Quantization**: Run local models directly on your GPU without external servers, automatically optimized for low-VRAM machines.
 - 🤖🦾 **Sensorium (Embodied AI)**: Plug your AI directly into the physical world via IoT, MQTT, and Arduino plugins.
 
