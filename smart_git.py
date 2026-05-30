@@ -147,7 +147,7 @@ def smart_sync():
 
     if not message:
         message = f"Auto-commit: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        specific_msg = "new version "
+        specific_msg = "new version 3.1"
         print(f"[!] LLM failed or no message generated. Using fallback: {message}")
     else:
         print(f"[v] Generated message: {message.splitlines()[0]}")
