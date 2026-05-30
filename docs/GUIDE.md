@@ -249,7 +249,7 @@ async def shutdown():
     await lifecycle.shutdown()
 ```
 
-### 🎸 Django Integration
+###  Django Integration
 Integrate Phoenix AI into your Django views.
 
 ```python
@@ -265,7 +265,7 @@ def ai_chat(request):
 
 ---
 
-## 🧜‍♂️ System Architecture
+##  System Architecture
 ```mermaid
 graph TD
     A[User Request] --> B{Cache Check}
