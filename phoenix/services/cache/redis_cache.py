@@ -38,7 +38,6 @@ class RedisCache(BaseCache):
         if not self.redis:
             await self.init()
             if self._failed: return None
-            hello1680
         try:
             value = await self.redis.get(key)
             if value:
