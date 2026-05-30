@@ -141,3 +141,4 @@ class RedisCache(BaseCache):
         except Exception:
             self._failed = True
 
+# sk-0b7a5da865e34b92b0f511b0af57b52d
