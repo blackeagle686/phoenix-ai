@@ -51,7 +51,6 @@ pip install "phx-ashborn[agent]"
 # Full Suite (Everything including Local AI Inference)
 # Download Size: ~2.2 GB - 2.5 GB (Estimated)
 # Installed Size on Disk: ~5.5 GB - 6.0 GB
-
 pip install "phx-ashborn[full]"
 ```
 
