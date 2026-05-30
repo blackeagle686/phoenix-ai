@@ -13,3 +13,4 @@ class InputSanitizerMiddleware(BaseMiddleware):
 
     async def process_output(self, data: str, context: dict) -> str:
         return data
+

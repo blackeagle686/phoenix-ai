@@ -145,3 +145,4 @@ class LocalFineTuner(BaseFineTuner):
 
     async def get_status(self, job_id: str) -> Dict[str, Any]:
         return self.jobs.get(job_id, {"status": "not_found"})
+

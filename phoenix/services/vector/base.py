@@ -20,3 +20,4 @@ class BaseVectorDB(BaseService):
     async def insert(self, vector: Any) -> None:
         # Legacy support or specific vector insertion if needed
         raise NotImplementedError
+

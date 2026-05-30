@@ -151,3 +151,4 @@ agent.set_cognition_pipeline(
     bootstrap_pipeline_path="./custom_bootstrap.json"
 )
 ```
+

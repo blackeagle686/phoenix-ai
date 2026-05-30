@@ -93,3 +93,4 @@ class MultiBlockUpdateTool(BaseTool):
                 output=str(e)
             )
             return ToolResult(success=False, output=result.dict(), error=str(e))
+

@@ -76,3 +76,4 @@ class SerialProtocol(ProtocolInterface):
 
     def is_connected(self) -> bool:
         return self._connected and self._ser and self._ser.is_open
+

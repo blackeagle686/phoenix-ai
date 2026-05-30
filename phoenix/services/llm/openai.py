@@ -268,3 +268,4 @@ class OpenAILLM(BaseLLM):
         except Exception as e:
             tracer.end_span(span_id, status="error", error=str(e))
             raise RuntimeError(f"OpenAILLM API call failed: {e}")
+

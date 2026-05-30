@@ -36,3 +36,4 @@ async def async_confirm(message: str) -> bool:
     except Exception as e:
         logger.error(f"Error during interactive confirmation: {e}")
         return False
+

@@ -15,3 +15,4 @@ class DeviceCapability(Enum):
     VISION = auto()       # Provides image/video data
     AUDIO = auto()        # Provides audio data
     POSITION = auto()     # Provides GPS/IMU data
+

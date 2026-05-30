@@ -58,3 +58,4 @@ class EmailTool(BaseTool):
             return ToolResult(success=False, output=None, error=f"SMTP Error: {str(e)}")
         except Exception as e:
             return ToolResult(success=False, output=None, error=f"Failed to send email: {str(e)}")
+

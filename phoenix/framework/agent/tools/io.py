@@ -320,3 +320,4 @@ class FileDeleteTool(BaseTool):
             return ToolResult(success=True, output=f"Successfully deleted {file_path}")
         except Exception as e:
             return ToolResult(success=False, output=None, error=str(e))
+

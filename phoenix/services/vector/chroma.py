@@ -143,3 +143,4 @@ class ChromaVectorDB(BaseVectorDB):
     async def insert(self, vector: Any) -> None:
         # Placeholder for raw vector insertion if needed
         pass
+

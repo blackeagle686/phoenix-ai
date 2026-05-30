@@ -62,3 +62,4 @@ class StreamManager:
         """Remove a stream."""
         if stream_id in self._streams:
             del self._streams[stream_id]
+

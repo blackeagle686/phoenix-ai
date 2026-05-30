@@ -37,3 +37,4 @@ class MemoryManager:
         """Clears both short-term and semantic memory for a session."""
         await self.history.clear(session_id)
         await self.semantic.clear(session_id)
+

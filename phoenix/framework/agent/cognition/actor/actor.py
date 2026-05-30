@@ -106,3 +106,4 @@ class Actor(BaseActor):
                 report_sections.append(f"- **Error Details**:\n```text\n{str(error_val).strip()}\n```")
                 
         return "\n".join(report_sections)
+

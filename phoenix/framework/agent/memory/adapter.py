@@ -89,3 +89,4 @@ class InteractiveMemoryAdapter:
             return await self.reflection.consolidate(llm)
         return None
 
+

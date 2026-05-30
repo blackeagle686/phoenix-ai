@@ -215,3 +215,4 @@ response = phoenix_service.run_agent(f"Analyze this file: {full_path}")
 
 **Q: Is the Singleton thread-safe?**
 A: The implementation provided above uses a `threading.Lock` to ensure that only one instance is created even if multiple threads try to access it simultaneously during startup.
+

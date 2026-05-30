@@ -263,3 +263,4 @@ class AgentLoop:
         await memory.add_interaction(session_id, "assistant", final_answer)
         for chunk in final_answer.split():
             yield {"type": "chunk", "content": chunk + " "}
+

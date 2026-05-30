@@ -10,3 +10,4 @@ class BaseTTS(BaseService):
         """Synthesize text to speech and save to output_path."""
         raise NotImplementedError
 
+

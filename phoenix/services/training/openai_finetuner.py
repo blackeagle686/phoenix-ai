@@ -75,3 +75,4 @@ class OpenAIFineTuner(BaseFineTuner):
         except Exception as e:
             logger.error(f"Could not retrieve OpenAI job {job_id}: {e}")
             return {"status": "error", "error": str(e)}
+

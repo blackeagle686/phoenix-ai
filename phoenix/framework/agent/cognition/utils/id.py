@@ -10,3 +10,4 @@ def generate_timestamped_filename(suffix: str) -> str:
     timestamp = datetime.utcnow().isoformat().replace(':', '-')
     unique_id = generate_unique_id()
     return f"{timestamp}_{unique_id}_{suffix}"
+

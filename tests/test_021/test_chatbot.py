@@ -55,3 +55,4 @@ if __name__ == "__main__":
         print("Error: OPENAI_API_KEY not found. Please set it in your environment for full integration testing.")
     else:
         asyncio.run(test_chatbot_full_flow())
+

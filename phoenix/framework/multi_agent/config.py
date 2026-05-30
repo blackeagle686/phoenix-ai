@@ -21,3 +21,4 @@ class MultiAgentConfig(BaseModel):
     agents: List[AgentConfig]
     shared_memory: bool = False
     max_parallel_agents: int = 5
+

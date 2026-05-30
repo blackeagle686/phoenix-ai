@@ -44,3 +44,4 @@ class WebScraperTool(BaseTool):
             
         except Exception as e:
             return ToolResult(success=False, output=None, error=f"Failed to scrape {url}: {str(e)}")
+

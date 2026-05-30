@@ -19,3 +19,4 @@ class BaseCache(BaseService):
 
     async def get_all(self, pattern: str = "*") -> Dict[str, Any]:
         raise NotImplementedError
+

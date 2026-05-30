@@ -77,3 +77,4 @@ class AgentMessage(BaseModel):
         if self.correlation_id:
             lines.append(f"In response to: {self.correlation_id}")
         return "\n".join(lines)
+

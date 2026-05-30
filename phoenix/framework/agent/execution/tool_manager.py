@@ -28,3 +28,4 @@ class ToolManager:
             return str(e)
         except Exception as e:
             return f"Unexpected error during tool execution: {e}"
+

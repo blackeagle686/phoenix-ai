@@ -34,3 +34,4 @@ class WebSearchTool(BaseTool):
             return ToolResult(success=True, output=result.dict())
         except Exception as e:
             return ToolResult(success=False, output=None, error=str(e))
+

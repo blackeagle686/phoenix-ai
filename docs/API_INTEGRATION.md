@@ -112,3 +112,4 @@ curl -X POST http://localhost:8000/chat \
 
 ## 🔒 Security & CORS
 The provided `phoenix_api.py` includes **CORS** middleware enabled with `allow_origins=["*"]`. This is essential for browser-based apps and Flutter web to communicate with the backend without security blocks.
+

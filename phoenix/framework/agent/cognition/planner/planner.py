@@ -282,3 +282,4 @@ CRITICAL REQUIREMENT: The "tools_required" list MUST only contain tool names fro
                         kwargs["search_query"] = kwargs.pop("pattern")
             
         return data
+

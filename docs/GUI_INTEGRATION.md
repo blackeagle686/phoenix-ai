@@ -233,3 +233,4 @@ A: Yes! You can pass a callback function to the Agent (if supported by your loop
 
 **Q: How do I handle closing the app?**
 A: Ensure your background threads are set to `daemon=True` so they exit when the main window closes, or use a cleanup hook to shut down the Phoenix services gracefully.
+

@@ -21,3 +21,4 @@ class BaseStore(ABC):
     @abstractmethod
     async def list_keys(self) -> List[str]:
         pass
+

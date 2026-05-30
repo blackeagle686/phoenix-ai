@@ -122,3 +122,4 @@ class LongTermMemoryManager(BaseMemory):
         storage = self._mock_storage.get(session_id, [])
         results = [c for c in storage if query.lower() in c.content.lower()]
         return results[:limit]
+

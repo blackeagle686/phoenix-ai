@@ -29,3 +29,4 @@ def phoenix_view(request):
         loop.close()
         return JsonResponse({"reply": reply})
     return JsonResponse({"error": "Only POST allowed"}, status=405)
+

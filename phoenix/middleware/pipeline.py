@@ -25,3 +25,4 @@ class MiddlewarePipeline:
         for m in reversed(self._chain):
             data = await m.process_output(data, ctx)
         return data
+

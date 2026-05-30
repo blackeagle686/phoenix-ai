@@ -161,3 +161,4 @@ class InsightEngine(BaseInsightService):
             await self.cache.set(cache_key, response, ttl=300)
 
         return response
+

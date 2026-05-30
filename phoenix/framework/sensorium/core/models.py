@@ -48,3 +48,4 @@ class DeviceEvent:
         self.source_id = source_id
         self.data = data
         self.timestamp = timestamp if timestamp is not None else time.time()
+

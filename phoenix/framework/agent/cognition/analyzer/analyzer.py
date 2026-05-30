@@ -66,3 +66,4 @@ class Analyzer(BaseAnalyzer):
                 "summary": "Failed to analyze workspace"
             }
         return data
+

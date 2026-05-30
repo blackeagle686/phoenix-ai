@@ -160,3 +160,4 @@ Sensorium is built for **Edge AI** (Raspberry Pi/Jetson Nano):
 - **Async-First**: Never blocks the Agent's reasoning loop.
 - **Zero-Lag Streaming**: Uses a frame-dropping buffer for video to ensure real-time response.
 - **Memory Efficient**: Uses Python `__slots__` to handle thousands of events per second.
+

@@ -122,3 +122,4 @@ class MessageBus:
     def clear_inbox(self, agent_name: str) -> None:
         """Clear all pending messages for an agent."""
         self._inboxes[agent_name] = []
+

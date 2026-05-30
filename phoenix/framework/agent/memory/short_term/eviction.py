@@ -15,3 +15,4 @@ class EvictionPolicy:
         if len(cells) <= limit:
             return cells
         return cells[-limit:]
+

@@ -286,3 +286,4 @@ class LocalVLM(BaseVLM):
                 return response.json().get("response", "")
         except Exception as e:
             raise RuntimeError(f"LocalVLM (Ollama) call failed: {e}")
+

@@ -302,3 +302,4 @@ manager.remove_agent("Gyomei")
 
 > [!IMPORTANT]
 > Each agent keeps its own custom cognition (Thinker, Planner, Reflector, Loop), tools, and LLM configuration. The `MultiAgentManager` does **not** override any of these — it only orchestrates the communication between them.
+

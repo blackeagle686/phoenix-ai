@@ -107,3 +107,4 @@ class ShortTermMemoryManager(BaseMemory):
         session_cells = list(self._session_cells.get(session_id, []))
         results = [c for c in session_cells if query.lower() in c.content.lower()]
         return results[-limit:]
+

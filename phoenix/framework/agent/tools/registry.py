@@ -36,3 +36,4 @@ class ToolRegistry:
         registry.register(FileDeleteTool())
         registry.register(MultiBlockUpdateTool())
         return registry
+

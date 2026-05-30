@@ -9,3 +9,4 @@ class BaseAnalyzer(ABC):
     @abstractmethod
     async def analyze_workspace(self, prompt: str, root_dir: str = ".") -> Dict[str, Any]:
         pass
+

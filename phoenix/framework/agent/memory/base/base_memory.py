@@ -25,3 +25,4 @@ class BaseMemory(ABC):
     async def search(self, session_id: str, query: str, limit: int = 5) -> List[Any]:
         """Search across memory."""
         pass
+

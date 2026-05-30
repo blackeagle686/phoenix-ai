@@ -39,3 +39,4 @@ class MockSensorPlugin(DevicePlugin):
 
     async def write(self, data: Any) -> bool:
         return True
+

@@ -166,3 +166,4 @@ class CodeCompileTool(BaseTool):
             return ToolResult(success=success, output=result.dict(), error=error_msg)
         except Exception as e:
             return ToolResult(success=False, output=None, error=str(e))
+

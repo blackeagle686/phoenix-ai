@@ -159,3 +159,4 @@ The flexibility of the framework comes down to **Tool Selection**.
 * Need the agent to speak? Connect it to your Audio pipeline tools. 
 
 Because the `AgentLoop` automatically parses the schemas for any tool you pass in the `tools=[]` list, the LLM will intuitively figure out how to use them to accomplish the objective.
+

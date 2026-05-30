@@ -38,3 +38,4 @@ class ConversationSummarizer:
             return system_msgs + [summary_msg] + to_keep
         except Exception:
             return messages  # Graceful fallback
+

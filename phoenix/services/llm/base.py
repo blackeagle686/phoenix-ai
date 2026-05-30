@@ -20,3 +20,4 @@ class BaseVLM(BaseService):
 
     async def generate_stream(self, prompt: str, session_id: Optional[str] = None):
         raise NotImplementedError
+

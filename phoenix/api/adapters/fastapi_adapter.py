@@ -12,3 +12,4 @@ def mount_chatbot(app, bot_instance, prefix=""):
 def mount_agent(app, agent_instance, prefix=""):
     init_agent(agent_instance)
     app.include_router(agent_router, prefix=prefix)
+

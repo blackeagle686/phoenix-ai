@@ -36,3 +36,4 @@ class DevicePlugin(DeviceInterface):
             "protocol": self.protocol.__class__.__name__ if self.protocol else None
         })
         return info
+

@@ -55,3 +55,4 @@ class APIRESTTool(BaseTool):
             return ToolResult(success=False, output=None, error=f"Request failed: {str(e)}")
         except Exception as e:
             return ToolResult(success=False, output=None, error=f"API Execution Error: {str(e)}")
+

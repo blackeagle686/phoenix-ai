@@ -230,3 +230,4 @@ Ready to dive deeper? Explore our dedicated guides to master the Phoenix ecosyst
 - **[FastAPI / Backend Integration](docs/API_INTEGRATION.md)**
 - **[GUI App Integration](docs/GUI_INTEGRATION.md)**
 - **[Sensorium Embodied AI (Hardware)](docs/sensorium.md)**
+

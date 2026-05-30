@@ -28,3 +28,4 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_json({"session_id": session_id, "reply": reply})
     except WebSocketDisconnect:
         pass
+

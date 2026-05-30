@@ -45,3 +45,4 @@ class WikipediaSearchTool(BaseTool):
             
         except Exception as e:
             return ToolResult(success=False, output=None, error=f"Wikipedia search failed: {str(e)}")
+

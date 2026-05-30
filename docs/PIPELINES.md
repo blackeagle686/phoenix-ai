@@ -63,3 +63,4 @@ await rag.ingest_api(
     data_path="articles" # Path to extract from JSON
 )
 ```
+

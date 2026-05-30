@@ -20,3 +20,4 @@ def test_memory_adapter():
 
 if __name__ == "__main__":
     test_memory_adapter()
+

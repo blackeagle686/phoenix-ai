@@ -27,3 +27,4 @@ def safe_parse_thinker_output(raw_output: str) -> Dict[str, Any]:
             "summary_answer": raw_output
         }
     return data
+

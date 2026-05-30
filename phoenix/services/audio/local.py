@@ -55,3 +55,4 @@ class LocalTTS(BaseTTS):
 
         except Exception as e:
             raise RuntimeError(f"TTS Synthesis failed: {e}")
+

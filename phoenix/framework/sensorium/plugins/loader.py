@@ -54,3 +54,4 @@ class PluginLoader:
     def get_plugins(self) -> Dict[str, Type[DevicePlugin]]:
         """Return all discovered plugins."""
         return self._loaded_plugins
+

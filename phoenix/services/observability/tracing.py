@@ -44,3 +44,4 @@ class Telemetry:
             logger.info(message, extra={"metadata": metadata})
 
 tracer = Telemetry()
+

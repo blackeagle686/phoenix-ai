@@ -76,3 +76,4 @@ class Config:
     RAG_CHUNK_OVERLAP = int(os.getenv("RAG_CHUNK_OVERLAP", "50"))
     
 config = Config()
+

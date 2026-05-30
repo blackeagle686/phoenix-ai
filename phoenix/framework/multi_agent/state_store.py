@@ -114,3 +114,4 @@ class SharedStateStore:
         Useful for injecting into agent prompts as context.
         """
         return {k: {"value": v.value, "owner": v.owner, "version": v.version} for k, v in self._store.items()}
+

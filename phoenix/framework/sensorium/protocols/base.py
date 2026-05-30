@@ -31,3 +31,4 @@ class ProtocolInterface(ABC):
     def is_connected(self) -> bool:
         """Check connection status."""
         pass
+

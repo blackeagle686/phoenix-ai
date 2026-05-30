@@ -9,3 +9,4 @@ class BaseRetriever(ABC):
     @abstractmethod
     async def retrieve(self, query: str, context: Any, limit: int = 5) -> List[Any]:
         pass
+

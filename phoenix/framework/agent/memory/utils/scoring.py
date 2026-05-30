@@ -13,3 +13,4 @@ def calculate_hybrid_score(relevance: float, importance: float, recency: float) 
     final_score = 0.5 * relevance + 0.3 * importance + 0.2 * recency
     """
     return (0.5 * relevance) + (0.3 * importance) + (0.2 * recency)
+

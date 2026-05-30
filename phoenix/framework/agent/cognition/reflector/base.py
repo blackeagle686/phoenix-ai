@@ -9,3 +9,4 @@ class BaseReflector(ABC):
     @abstractmethod
     async def reflect(self, objective: str, action: Dict[str, Any], result: str) -> Dict[str, Any]:
         pass
+

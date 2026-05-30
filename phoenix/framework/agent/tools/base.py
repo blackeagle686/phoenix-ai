@@ -42,3 +42,4 @@ def tool(name: str, description: str):
                     return ToolResult(success=False, output="", error=str(e))
         return FunctionTool()
     return decorator
+

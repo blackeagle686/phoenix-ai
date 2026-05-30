@@ -40,3 +40,4 @@ async def test_deferred_loading():
 
 if __name__ == "__main__":
     asyncio.run(test_deferred_loading())
+

@@ -47,3 +47,4 @@ class DeviceInterface(ABC):
             "status": self.status.value,
             "metadata": self.metadata
         }
+

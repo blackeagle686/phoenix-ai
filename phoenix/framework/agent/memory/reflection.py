@@ -33,3 +33,4 @@ class ReflectionMemory:
 
     def clear(self):
         self.reflections.clear()
+

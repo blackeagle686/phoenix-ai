@@ -40,3 +40,4 @@ class Reflector(BaseReflector):
             "is_complete": bool(data.get("is_complete", False)),
             "reflection": str(data.get("reflection", ""))
         }
+

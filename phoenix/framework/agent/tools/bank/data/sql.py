@@ -95,3 +95,4 @@ class SQLDatabaseTool(BaseTool):
 
         except Exception as e:
             return ToolResult(success=False, output=None, error=f"Database Error: {str(e)}")
+

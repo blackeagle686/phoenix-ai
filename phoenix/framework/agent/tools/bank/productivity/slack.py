@@ -34,3 +34,4 @@ class SlackTool(BaseTool):
             return ToolResult(success=False, output=None, error=f"Failed to send Slack message: {str(e)}")
         except Exception as e:
             return ToolResult(success=False, output=None, error=f"An error occurred while sending to Slack: {str(e)}")
+

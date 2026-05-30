@@ -30,3 +30,4 @@ class DeviceRegistry:
     def get_all(self) -> Dict[str, DeviceInterface]:
         """Get all registered devices."""
         return self._devices.copy()
+

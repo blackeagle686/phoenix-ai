@@ -393,3 +393,4 @@ class RAGPipeline:
     async def clear_data(self) -> None:
         """Clears all data from the vector database."""
         await self.vector_db.clear()
+

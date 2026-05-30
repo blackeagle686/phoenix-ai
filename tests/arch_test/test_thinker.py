@@ -19,3 +19,4 @@ async def test_thinker():
 
 if __name__ == "__main__":
     asyncio.run(test_thinker())
+

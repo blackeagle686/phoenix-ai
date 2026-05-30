@@ -156,3 +156,4 @@ if __name__ == "__main__":
 1. **Combine Registries:** You can mix and match tools from different bank categories (e.g., an agent with `ArxivSearchTool` and `SlackTool` to automatically Slack you new papers).
 2. **Environment Variables:** Most third-party tools require authentication. Phoenix automatically loads your `.env` file upon `init_phoenix()`, allowing the tools to securely pick up credentials without hardcoding them in your logic.
 3. **Graceful Failures:** If an API key is missing, the Tool Bank tools are designed to catch the error and politely inform the LLM, preventing the entire agent process from crashing.
+

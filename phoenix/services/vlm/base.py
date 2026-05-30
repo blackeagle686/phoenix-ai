@@ -12,3 +12,4 @@ class BaseVLM(ABC):
     @abstractmethod
     async def describe(self, image_path: str) -> str:
         pass
+

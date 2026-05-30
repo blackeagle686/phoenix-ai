@@ -16,3 +16,4 @@ class SessionMemory:
 
     def clear(self):
         self.variables.clear()
+

@@ -23,3 +23,4 @@ class ContextWindow:
             total -= len(removed.get("content", ""))
 
         return system + rest
+

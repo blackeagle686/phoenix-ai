@@ -270,3 +270,4 @@ async def vision_demo():
     answer = await vlm.ask("ماذا يوجد في هذه الصورة؟", "image.png", use_rag=True)
     print(answer)
 ```
+

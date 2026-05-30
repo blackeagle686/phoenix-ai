@@ -34,3 +34,4 @@ class LongMemoryCell:
 
     # ===== Relationships =====
     related_memories: List[str] = field(default_factory=list)
+

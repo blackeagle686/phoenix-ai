@@ -31,3 +31,4 @@ async def verify_github_ingestion():
 
 if __name__ == "__main__":
     asyncio.run(verify_github_ingestion())
+

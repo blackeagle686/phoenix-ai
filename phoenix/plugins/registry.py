@@ -37,3 +37,4 @@ class PluginRegistry:
         return {k: list(v.keys()) for k, v in cls._plugins.items()}
 
 registry = PluginRegistry()
+

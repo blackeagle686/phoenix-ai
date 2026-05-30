@@ -24,3 +24,4 @@ class SemanticCacheCell:
     created_at: float = field(default_factory=time.time)
     last_used: float = field(default_factory=time.time)
     ttl: Optional[int] = None  # seconds
+

@@ -20,3 +20,4 @@ class PluginMetadata:
         self.description = description
         self.hardware_requirements = hardware_requirements if hardware_requirements is not None else []
         self.min_phoenix_version = min_phoenix_version
+

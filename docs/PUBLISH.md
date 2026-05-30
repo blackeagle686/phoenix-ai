@@ -51,3 +51,4 @@ Again, use `__token__` as the username and your production API Token as the pass
 - **Name Already Taken**: If `Phoenix AI-sdk` is already taken on PyPI, you will need to change the `name` field in `pyproject.toml` to something unique (e.g., `Phoenix AI-sdk-yourname`).
 - **Version Mismatch**: You cannot upload the same version twice. Increment the `version` in `pyproject.toml` for every update.
 - **Missing Files**: Check `MANIFEST.in` if your `templates/` or `static/` folders are missing after installation.
+

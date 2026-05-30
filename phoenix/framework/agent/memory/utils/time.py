@@ -13,3 +13,4 @@ def has_expired(expiry_timestamp: Optional[float]) -> bool:
     if expiry_timestamp is None:
         return False
     return current_timestamp() > expiry_timestamp
+

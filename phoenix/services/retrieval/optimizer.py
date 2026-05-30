@@ -136,3 +136,4 @@ Hypothetical Answer:"""
             return ""
         query = query.strip()
         return query
+

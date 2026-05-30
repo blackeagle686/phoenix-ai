@@ -104,3 +104,4 @@ class MQTTProtocol(ProtocolInterface):
 
     def is_connected(self) -> bool:
         return self._connected
+

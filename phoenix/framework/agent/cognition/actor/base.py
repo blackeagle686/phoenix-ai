@@ -8,3 +8,4 @@ class BaseActor(ABC):
     @abstractmethod
     async def execute(self, plan: Dict[str, Any]) -> str:
         pass
+

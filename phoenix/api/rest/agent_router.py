@@ -32,3 +32,4 @@ async def run_agent(req: AgentRequest):
         raise HTTPException(status_code=503, detail="Agent not initialized.")
     result = await _agent_instance.run(req.task, session_id=req.session_id, mode=req.mode)
     return AgentResponse(session_id=req.session_id, result=str(result), mode=req.mode)
+

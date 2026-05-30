@@ -140,3 +140,4 @@ class RedisCache(BaseCache):
                 await self.set(key, value)
         except Exception:
             self._failed = True
+

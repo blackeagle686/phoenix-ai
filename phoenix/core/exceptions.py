@@ -9,3 +9,4 @@ class ServiceNotInitializedError(PhoenixAIError):
 class ConfigurationError(PhoenixAIError):
     """Raised when there is a configuration issue."""
     pass
+

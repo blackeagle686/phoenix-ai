@@ -108,3 +108,4 @@ class OpenAIVLM(BaseVLM):
         except Exception as e:
             tracer.end_span(span_id, status="error", error=str(e))
             raise RuntimeError(f"OpenAIVLM API call failed: {e}")
+

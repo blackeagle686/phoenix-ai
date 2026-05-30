@@ -72,3 +72,4 @@ class DeviceManager:
     def get_device(self, name: str) -> Optional[DeviceInterface]:
         """Get a device instance from the registry."""
         return self.registry.get(name)
+

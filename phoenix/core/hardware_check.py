@@ -108,3 +108,4 @@ class HardwareChecker:
 
 if __name__ == "__main__":
     HardwareChecker.check_all()
+

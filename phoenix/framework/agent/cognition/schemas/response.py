@@ -10,3 +10,4 @@ class ThinkerOutput:
     summary_answer: str = ""
     files: Dict[str, FileTask] = field(default_factory=dict)
     tasks: Dict[str, Task] = field(default_factory=dict)
+

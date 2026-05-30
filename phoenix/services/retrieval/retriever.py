@@ -28,3 +28,4 @@ class VectorRetriever:
         # Chroma supports $in operator
         parents = await self.vector_db.get_by_metadata(where={"doc_id": {"$in": parent_ids}})
         return parents
+

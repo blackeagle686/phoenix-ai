@@ -15,3 +15,4 @@ class BaseMiddleware(ABC):
     async def process_output(self, data: str, context: dict) -> str:
         """Transform or filter outgoing response data."""
         return data
+

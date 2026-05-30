@@ -14,3 +14,4 @@ class CeleryQueue(BaseQueue):
         if not self.celery_app:
             return f"Mock enqueued task: {task_name}"
         return self.celery_app.send_task(task_name, args=args, kwargs=kwargs)
+

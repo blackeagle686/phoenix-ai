@@ -60,3 +60,4 @@ class ArxivSearchTool(BaseTool):
             
         except Exception as e:
             return ToolResult(success=False, output=None, error=f"ArXiv search failed: {str(e)}")
+

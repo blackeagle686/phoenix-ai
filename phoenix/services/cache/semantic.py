@@ -33,3 +33,4 @@ class SemanticCache:
     async def add(self, prompt: str, response: str) -> None:
         emb = self.embeddings.embed_query(prompt)
         self._items.append((prompt, response, emb))
+

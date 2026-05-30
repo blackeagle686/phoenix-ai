@@ -297,3 +297,4 @@ class Agent:
         yield {"type": "status", "content": "Preparing final response..."}
         for line in final.splitlines() or [final]:
             yield {"type": "chunk", "content": f"{line}\n"}
+

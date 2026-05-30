@@ -45,3 +45,4 @@ class SemanticSearch(BaseMemory):
             
         results = await self.vector_db.search(query, limit=limit, where={"session_id": session_id})
         return results
+

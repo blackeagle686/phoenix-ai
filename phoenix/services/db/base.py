@@ -10,3 +10,4 @@ class BaseDB(BaseService):
 
     async def fetch_all(self, query: str, *args, **kwargs) -> Any:
         raise NotImplementedError
+

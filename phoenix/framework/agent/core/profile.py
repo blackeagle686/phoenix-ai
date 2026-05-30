@@ -59,3 +59,4 @@ Response Style: {self.personality.response_style}
 [TOOL ACCESS OVERVIEW]
 {tools_str}
 """
+

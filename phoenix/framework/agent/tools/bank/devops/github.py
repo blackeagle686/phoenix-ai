@@ -97,3 +97,4 @@ class GitHubTool(BaseTool):
             return ToolResult(success=False, output=None, error=f"Request failed: {str(e)}")
         except Exception as e:
             return ToolResult(success=False, output=None, error=f"Failed to execute GitHub action: {str(e)}")
+
