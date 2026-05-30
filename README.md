@@ -42,6 +42,9 @@ pip install phx-ashborn
 pip install "phx-ashborn[chatbot]"
 
 # Core + Autonomous Agents & Planners
+# Download Size: ~107 MB (Verified)
+# Installed Size on Disk: ~200 MB
+
 pip install "phx-ashborn[agent]"
 
 # Full Suite (Everything including Local AI Inference)
