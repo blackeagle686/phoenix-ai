@@ -36,6 +36,8 @@ Choose the installation tier that matches your project needs:
 
 ```bash
 # Core Backend Framework
+# Download Size: ~5.2 MB (Verified)
+# Installed Size on Disk: ~15 MB
 pip install phx-ashborn
 
 # Core + ChatBot & Conversation Memory
