@@ -15,6 +15,7 @@ from phoenix import init_phoenix, startup_phoenix, get_rag_pipeline
 async def run_rag():
     init_phoenix()
     await startup_phoenix()
+    rag = get_rag_pipeline()
     # الاستعاب من مصادر متعددة
     await rag.ingest("./docs/")             # ملفات (PDF, MD, TXT, DOCX, XLSX)
     await rag.ingest_url("https://ai.com")  # كاشط الويب
@@ -42,9 +43,13 @@ async def run_rag():
 #### 🎙️ الخدمة المحلية
 ```python
 from phoenix.services.audio.local import LocalSTT, LocalTTS
-audio = LocalAudioService()
-await audio.init()
-text = await audio.stt("input.wav")
+stt = LocalSTT()
+await stt.init()
+text = await stt.transcribe("input.wav")
+
+tts = LocalTTS()
+await tts.init()
+file_path = await tts.synthesize("مرحباً فينيكس", "output.mp3")
 ```
 
 #### ☁️ خدمة OpenAI / السحابية
