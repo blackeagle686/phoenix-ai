@@ -211,7 +211,7 @@ if __name__ == "__main__":
 
 ---
 
-## 4. CustomTkinter (Modern Desktop Look) ✨
+## 4. CustomTkinter (Modern Desktop Look) 
 
 `CustomTkinter` provides a macOS/Windows 11 modern aesthetic. The logic is identical to Tkinter but with premium visuals.
 
