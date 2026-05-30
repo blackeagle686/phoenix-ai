@@ -73,7 +73,7 @@ public async Task<string> AskPhoenix(string prompt, string sessionId = null)
 
 ---
 
-## 🌐 Generic HTTP (cURL)
+##  Generic HTTP (cURL)
 
 Test your endpoint instantly from the terminal:
 
