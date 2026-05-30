@@ -143,7 +143,7 @@ if __name__ == "__main__":
 
 ---
 
-## 3. Tkinter (Built-in Python GUI) 🐍
+## 3. Tkinter (Built-in Python GUI) 
 
 Tkinter is available in the standard library. We use `threading.Thread` and `queue.Queue` or `root.after()` for updates.
 
@@ -158,7 +158,7 @@ from phoenix import Agent
 class TkinterAgentApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("🐦🔥 Phoenix Standard GUI")
+        self.root.title(" Phoenix Standard GUI")
         
         self.chat_window = scrolledtext.ScrolledText(root, state='disabled', width=60, height=20)
         self.chat_window.pack(padx=10, pady=10)
