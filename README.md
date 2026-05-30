@@ -39,6 +39,8 @@ Choose the installation tier that matches your project needs:
 pip install phx-ashborn
 
 # Core + ChatBot & Conversation Memory
+# Download Size: ~35 MB (Estimated)
+# Installed Size on Disk: ~90 MB
 pip install "phx-ashborn[chatbot]"
 
 # Core + Autonomous Agents & Planners
