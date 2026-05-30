@@ -1,4 +1,4 @@
-# 🐦🔥 Phoenix AI
+# Phoenix AI
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/blackeagle686/phoenix-ai/master/docs/statics/images/phx-light-circle.png" alt="Phoenix AI Logo" width="500">
