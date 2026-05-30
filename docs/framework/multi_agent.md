@@ -63,7 +63,7 @@ config = MultiAgentConfig(
 
 ---
 
-## 🚀 Example Usage
+## Example Usage
 
 ```python
 from phoenix.framework import MultiAgentManager
@@ -82,7 +82,7 @@ print(f"Final Outcome: {result}")
 
 ---
 
-## 🧠 Full Complex Example
+## Full Complex Example
 
 Here is a complete, runable example demonstrating how to set up a powerful 3-agent team ("Architect", "Coder", and "Reviewer") that collaborates to solve a complex software engineering problem. 
 
