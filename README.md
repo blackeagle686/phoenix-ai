@@ -150,7 +150,7 @@ asyncio.run(rag_demo())
 
 ## 🏗️ Advanced Architecture
 
-### 👯 Multi-Agent Orchestration
+###  Multi-Agent Orchestration
 Define dynamic teams of specialized agents (e.g., Coder, Reviewer, Security Expert) and coordinate them through parallel broadcasting or sequenced pipelines.
 
 ```python
