@@ -179,7 +179,7 @@ By leveraging the `AgentProfile` system, each agent in the team maintains its un
 
 ---
 
-## 📡 OS-Grade Communication Layer (Message Bus & State Store)
+## OS-Grade Communication Layer (Message Bus & State Store)
 
 When building complex OS-level architectures (like Hashira-OS), passing raw strings between agents is dangerous. The `MultiAgentManager` provides a strict, typed communication infrastructure to guarantee reliability.
 
@@ -235,7 +235,7 @@ manager.state_store.watch("cpu_usage", on_cpu_spike)
 
 ---
 
-## 🔌 Registering Pre-Built Agents
+##  Registering Pre-Built Agents
 
 If you have already built fully customized agents with their own cognition modules, custom tools, and custom loops, you can plug them directly into the `MultiAgentManager` **without** needing to use `AgentConfig` at all.
 
