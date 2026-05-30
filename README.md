@@ -202,7 +202,7 @@ If you run Phoenix using **Local LLMs/VLMs** (via Ollama or native Transformers)
 
 ---
 
-## 📚 Comprehensive Documentation
+##  Comprehensive Documentation
 
 Ready to dive deeper? Explore our dedicated guides to master the Phoenix ecosystem:
 
