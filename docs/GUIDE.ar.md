@@ -97,7 +97,7 @@ async def memory_demo():
     response = await llm.generate("ماذا أبني؟", session_id="user_123")
     print(response) # "أنت تبني Phoenix AI!"
 
-### 🚀 إطار عمل عالي المستوى: ChatBot
+###  إطار عمل عالي المستوى: ChatBot
 فئة `ChatBot` هي الحل النهائي لبناء عملاء ذكاء اصطناعي متكاملين في سطر واحد. يقوم بتنظيم خدمات LLM و VLM و RAG والذاكرة والخدمات الصوتية تحت واجهة واحدة بسيطة.
 
 #### 1. واجهة البناء (Builder API)
