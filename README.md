@@ -25,8 +25,8 @@ Whether you are building with FastAPI, Django, or a custom event-driven service,
 - **High-Level ChatBot**: Turnkey conversational AI with native RAG, Vision, and Memory.
 - **"Everything as a Service"**: A unified Dependency Injection container handles Vector DBs, Redis caching, and LLMs seamlessly.
 - **Fail-Loud & Recover**: Auto-fallbacks from Local (Ollama/Transformers) to Cloud (OpenAI) to prevent system crashes.
-- 🧠 **Native PyTorch & 4-bit Quantization**: Run local models directly on your GPU without external servers, automatically optimized for low-VRAM machines.
-- 🤖🦾 **Sensorium (Embodied AI)**: Plug your AI directly into the physical world via IoT, MQTT, and Arduino plugins.
+- **Native PyTorch & 4-bit Quantization**: Run local models directly on your GPU without external servers, automatically optimized for low-VRAM machines.
+- **Sensorium (Embodied AI)**: Plug your AI directly into the physical world via IoT, MQTT, and Arduino plugins.
 
 ---
 
@@ -53,9 +53,9 @@ pip install "phx-ashborn[full]"
 
 ---
 
-## 🚀 Quickstarts & Core Features
+##  Quickstarts & Core Features
 
-### 1. 🤖 Autonomous Agents
+### 1.  Autonomous Agents
 The Phoenix Agent is a high-speed cognitive engine capable of understanding complex problems, scanning codebases, planning multi-step solutions, and executing parallel tools.
 
 ```python
