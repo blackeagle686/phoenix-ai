@@ -200,7 +200,7 @@ class AiCoreConfig(AppConfig):
 
 ---
 
-## ❓ Frequently Asked Questions
+##  Frequently Asked Questions
 
 **Q: Can I have multiple agents?**
 A: Yes. You can modify the Singleton to be a "Multiton" (Registry pattern) if you need different agents for different tasks (e.g., a "CoderAgent" and a "SupportAgent").

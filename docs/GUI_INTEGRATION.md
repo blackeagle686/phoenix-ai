@@ -1,4 +1,4 @@
-# 🐦‍🔥 Phoenix AI: Python GUI Integration Guide
+#  Phoenix AI: Python GUI Integration Guide
 
 This guide provides detailed instructions and professional patterns for connecting the Phoenix Autonomous Agent to various Python GUI frameworks. Building AI-powered desktop or web-based dashboards requires careful handling of **Asynchronicity** and **Threading** to ensure the user interface remains smooth and responsive while the agent "thinks."
 
