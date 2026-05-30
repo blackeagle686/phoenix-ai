@@ -1,10 +1,10 @@
-# 🐦🔥 Phoenix AI: Django Integration Guide
+#  Phoenix AI: Django Integration Guide
 
 This guide provides a deep dive into integrating the Phoenix Autonomous Agent into a Django application. We will focus on using the **Singleton Pattern** to manage the agent instance efficiently, preventing redundant memory usage and ensuring consistent service availability across your application.
 
 ---
 
-## 🏛️ The Singleton Pattern for AI Agents
+##  The Singleton Pattern for AI Agents
 
 AI Agents are "heavy" objects. They initialize LLMs, load tool registries, and connect to memory systems (Redis/Vector DB). Re-initializing an agent on every HTTP request is slow and resource-intensive.
 
