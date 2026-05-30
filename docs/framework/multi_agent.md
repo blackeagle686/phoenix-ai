@@ -1,8 +1,8 @@
-# 🤖 Multi-Agent Framework Layer
+# Multi-Agent Framework Layer
 
 The Phoenix Multi-Agent layer allows you to orchestrate teams of autonomous agents to solve complex tasks through collaboration, parallel execution, and structured pipelines.
 
-## 🌟 Key Concepts
+## Key Concepts
 
 ### 1. The Multi-Agent Manager
 The `MultiAgentManager` is the central orchestrator. It manages the lifecycle of multiple agents and provides high-level patterns for agent interaction.
