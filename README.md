@@ -150,7 +150,7 @@ asyncio.run(rag_demo())
 
 ## 🏗️ Advanced Architecture
 
-###  Multi-Agent Orchestration
+### Multi-Agent Orchestration
 Define dynamic teams of specialized agents (e.g., Coder, Reviewer, Security Expert) and coordinate them through parallel broadcasting or sequenced pipelines.
 
 ```python
@@ -206,7 +206,7 @@ If you run Phoenix using **Local LLMs/VLMs** (via Ollama or native Transformers)
 
 Ready to dive deeper? Explore our dedicated guides to master the Phoenix ecosystem:
 
-### 🧩 Core Architecture
+###  Core Architecture
 - **[Main Framework Guide](docs/GUIDE.md)** ([Arabic Version](docs/GUIDE.ar.md))
 - **[Data Pipelines & RAG](docs/PIPELINES.md)** ([Arabic Version](docs/PIPELINES.ar.md))
 - **[Model Training & Finetuning](docs/TRAINING.md)** ([Arabic Version](docs/TRAINING.ar.md))
