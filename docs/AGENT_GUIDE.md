@@ -65,24 +65,26 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-#### B. Using the Explicit `Tool` Class
-Alternatively, you can wrap standard python functions with the `Tool` class constructor:
+#### B. Subclassing `BaseTool` (OOP Style)
+For more complex tools that require initialization logic or state management, you can inherit from `BaseTool` directly:
 
 ```python
 from phoenix.framework.agent import Agent
-from phoenix.framework.agent.tools.registry import Tool
+from phoenix.framework.agent.tools import BaseTool, ToolResult
 
-def get_user_role(username: str) -> str:
-    """Checks the user permission level."""
-    return "Administrator" if username == "admin" else "Standard User"
+class UserRoleTool(BaseTool):
+    name = "check_user_role"
+    description = "Verify user permissions. Input: 'username' (str)."
+
+    async def execute(self, username: str, **kwargs) -> ToolResult:
+        try:
+            role = "Administrator" if username == "admin" else "Standard User"
+            return ToolResult(success=True, output=role)
+        except Exception as e:
+            return ToolResult(success=False, output="", error=str(e))
 
 agent = Agent()
-custom_tool = Tool(
-    name="check_user_role",
-    description="Verify user permissions.",
-    func=get_user_role
-)
-agent.register_tool(custom_tool)
+agent.register_tool(UserRoleTool())
 ```
 
 ---
