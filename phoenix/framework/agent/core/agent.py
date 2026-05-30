@@ -34,9 +34,15 @@ class Agent:
         component_factories: Optional[Dict[str, Callable[..., Any]]] = None,
     ):
         # Default LLM to OpenAILLM (using LongCat-Flash-Chat by default via its config fallback)
-        self.llm = llm if llm is not None else OpenAILLM()
-        self.memory = self._prepare_memory(memory)
-        self.tools = tools if tools is not None else ToolRegistry.load_default()
+        # Support passing a list of tools directly or a ToolRegistry
+        if isinstance(tools, list):
+            registry = ToolRegistry()
+            for t in tools:
+                registry.register(t)
+            self.tools = registry
+        else:
+            self.tools = tools if tools is not None else ToolRegistry.load_default()
+            
         self._factories = component_factories or {}
         self._dynamic_components: Dict[str, Any] = {}
         self.loop_cls = loop_cls or AgentLoop
