@@ -15,6 +15,7 @@ from phoenix import init_phoenix, startup_phoenix, get_rag_pipeline
 async def run_rag():
     init_phoenix()
     await startup_phoenix()
+    rag = get_rag_pipeline()
     # Ingest from multiple sources
     await rag.ingest("./docs/")             # Files (PDF, MD, TXT, DOCX, XLSX)
     await rag.ingest_url("https://ai.com")  # Web Scraper
@@ -42,9 +43,13 @@ Handle voice interactions with local or cloud-based models.
 #### 🎙️ Local Service
 ```python
 from phoenix.services.audio.local import LocalSTT, LocalTTS
-audio = LocalAudioService()
-await audio.init()
-text = await audio.stt("input.wav")
+stt = LocalSTT()
+await stt.init()
+text = await stt.transcribe("input.wav")
+
+tts = LocalTTS()
+await tts.init()
+file_path = await tts.synthesize("Hello Phoenix", "output.mp3")
 ```
 
 #### ☁️ OpenAI / Cloud Service
