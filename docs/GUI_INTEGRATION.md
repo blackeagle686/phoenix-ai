@@ -52,7 +52,7 @@ if prompt := st.chat_input("Ask me anything..."):
 
     # Assistant response
     with st.chat_message("assistant"):
-        with st.spinner("🧠 Reasoning..."):
+        with st.spinner(" Reasoning..."):
             # Run async agent code in the current thread
             loop = asyncio.new_event_loop()
             response = loop.run_until_complete(st.session_state.agent.run(prompt))
@@ -62,7 +62,7 @@ if prompt := st.chat_input("Ask me anything..."):
 
 ---
 
-## 2. PyQt6 / PySide6 (Professional Desktop) 💻
+## 2. PyQt6 / PySide6 (Professional Desktop) 
 
 PyQt is the industry standard for cross-platform desktop apps. We use `QThread` and `pyqtSignal` to bridge the AI logic with the UI.
 
@@ -93,7 +93,7 @@ class AgentWorker(QThread):
 class PhoenixWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("🐦🔥 Phoenix Desktop")
+        self.setWindowTitle(" Phoenix Desktop")
         self.resize(600, 400)
 
         # UI Layout
