@@ -40,7 +40,7 @@ async def run_rag():
 ### 2. Audio Service (STT & TTS)
 Handle voice interactions with local or cloud-based models.
 
-#### 🎙️ Local Service
+####  Local Service
 ```python
 from phoenix.services.audio.local import LocalSTT, LocalTTS
 stt = LocalSTT()
