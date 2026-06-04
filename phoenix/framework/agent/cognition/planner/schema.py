@@ -330,8 +330,10 @@ class BaseTaskInputSchema(BaseModel):
     task_description: str = Field(..., description="Task description")
     task_type: str = Field(..., description="Task type")
 
+    file
+
 class BaseTaskOutputSchema(BaseModel): 
-    
+
 
 class WriteTask(BaseModel):
     language: str = Field(..., description="Programming language of the file to be generated")
