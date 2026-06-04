@@ -146,11 +146,11 @@ class Task(BaseModel):
 
     # Strongly Typed Meta Elements
     task_type: TaskType = Field(..., description="The specific systemic I/O operation archetype") # type of the task agent agent specify this value
-    priority: TaskPriority = Field(default=TaskPriority.MEDIUM, description="The execution urgency tier")
-    status: TaskStatus = Field(default=TaskStatus.PENDING, description="Current workflow state machine status")
+    priority: TaskPriority = Field(default=TaskPriority.MEDIUM, description="The execution urgency tier") # priority of the task agent agent specify this value
+    status: TaskStatus = Field(default=TaskStatus.PENDING, description="Current workflow state machine status") # status of the task
     
     # Descriptive Data (For Humans & LLM Reasoning)
-    task_title: str = Field(..., description="Short title of the task")
+    task_title: str = Field(..., description="Short title of the task") # title of the task
     description: str = Field(..., description="Verbose description detailing task goals")
     task_summary: Optional[str] = Field(None, description="Post-execution summary populated after completion")
     
