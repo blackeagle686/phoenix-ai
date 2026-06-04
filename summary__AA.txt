@@ -1,7 +1,0 @@
-This file is a unittest-based test suite for custom user-defined LLM model integration with an Agent framework. It uses IsolatedAsyncioTestCase and defines a mock LLM class (UserCustomLLM) and a custom agent loop (CustomLoop). It contains three asynchronous test cases:
-
-1. **Fast mode inference test**: Tests the Agent's fast mode path where the custom LLM is called directly and its response is processed.
-2. **Plan mode with custom loop test**: Tests the Agent's plan mode using the CustomLoop, verifying that the custom loop is invoked and its plan is executed.
-3. **Streaming response test**: Tests the streaming inference path of the custom LLM, ensuring streamed tokens are correctly accumulated.
-
-Key imports include unittest, asyncio, and agent-related modules. The test class is named TestCustomUserModel (or similar), and it validates that the Agent properly delegates to user-provided LLM implementations across different inference modes.
