@@ -45,7 +45,7 @@ async def test_parallel_arch():
         os.remove(test_file)
         
     prompt = (
-        f"Please calculate the 15th Fibonacci number, "
+        f"plz createa a"
         f"and write the exact result into a new file called {test_file} in the current directory."
     )
     
