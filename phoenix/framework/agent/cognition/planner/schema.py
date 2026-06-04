@@ -95,7 +95,7 @@ class FileIOParams(BaseModel):
     
     # OS Level Flags
     permissions: Optional[str] = Field(None, description="Linux octal permission string (e.g., '0o755' or '0o644')")
-
+    
 class Prompt(BaseModel):
     id: UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the user prompt")
     user_id: UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the user")
@@ -139,7 +139,6 @@ class Task(BaseModel):
 
 
 
-
 class FileContent(BaseModel):
     file_path: str = Field(..., description="Path to the file")
     content_block: str = Field(..., description="Raw text or code content of this specific block")
@@ -155,7 +154,8 @@ class FileContent(BaseModel):
     # المعرفة الدلالية (Semantic Metadata)
     block_summary: Optional[str] = Field(None, description="AI-generated summary of this content block")
     vector_id: Optional[str] = Field(None, description="Reference ID if this block is embedded in a Vector Database")
-    class File(BaseModel):
+    
+class File(BaseModel):
     file_path: str = Field(..., description="Path to the file")
     file_type: str = Field(..., description="Type/extension of the file")
     file_id: Optional[str] = Field(None, description="Unique ID of the file")
