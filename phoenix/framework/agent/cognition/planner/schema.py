@@ -98,7 +98,7 @@ class FileIOParams(BaseModel):
 class Prompt(BaseModel):
     id: UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the user prompt")
     user_id: UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the user")
-    project_id: Optional[UUID] = Field(default_factory=uuid.uuid4, description="Unique identifier for the project")
+    project_id: Optional[UUID] = Field(None, description="Unique identifier for the project")
     user_message: str = Field(..., description="User message")
     system_message: str = Field(..., description="System message")
     tokens_length: int = Field(..., description="Tokens length")
