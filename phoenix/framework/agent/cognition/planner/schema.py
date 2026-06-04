@@ -228,6 +228,34 @@ class FileUpdateStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+
+class BaseTaskInputSchema(BaseModel):
+    task_id: str = Field(..., description="Task ID")
+    task_description: str = Field(..., description="Task description")
+    task_type: TaskType = Field(..., description="Task type")
+
+class BaseTaskOutputSchema(BaseModel):
+    task_id: str = Field(..., description="Task ID")
+    success: bool = Field(..., description="Whether the task execution was successful")
+    error: Optional[str] = Field(None, description="Error message if the task failed")
+
+class BaseFileTaskInputSchema(BaseTaskInputSchema):
+    file_meta: BaseFileMeta = Field(..., description="Meta information of the file")
+
+class PlannerInputSchema(BaseModel):
+    prompt: Prompt = Field(..., description="The user prompt and session details")
+    context: Optional[str] = Field(None, description="Additional context or memory for the planner")
+    existing_tasks: List[Task] = Field(default_factory=list, description="Current state of existing tasks")
+    previous_results: Optional[str] = Field(None, description="Results from previous actions or executions")
+
+class PlannerOutputSchema(BaseModel):
+    plan_id: UUID = Field(default_factory=uuid4, description="Unique ID for this planner interaction")
+    response: str = Field(..., description="Conversational response or direct answer to the user")
+    problems: List[Problem] = Field(default_factory=list, description="Identified problems and complexities")
+    solutions: List[Solution] = Field(default_factory=list, description="Direct solutions, code snippets, or fast answers provided")
+    tasks: List[Task] = Field(default_factory=list, description="The ordered sequence of actionable tasks to execute if needed")
+    summary: str = Field(..., description="A high-level summary of the planner's reasoning and output")
+
 class FileIOMeta(BaseFileMeta):
     file_meta: BaseFileMeta = Field(..., description="Configuration of the file")
     from_line: int = Field(..., description="Start line number of the file")
@@ -235,17 +263,8 @@ class FileIOMeta(BaseFileMeta):
     status: FileUpdateStatus = Field(..., description="Status of the file update")
 
 
-class BaseTaskInputSchema(BaseModel):
-    task_id: str = Field(..., description="Task ID")
-    task_description: str = Field(..., description="Task description")
-    task_type: str = Field(..., description="Task type")
-    file_meta: BaseFileMeta = Field(..., description="Meta information of the file")
 
 
-class BaseTaskMeta(BaseModel): 
-    task_id: str = Field(..., description="Task ID")
-    task_description: str = Field(..., description="Task description")
-    task_type: str = Field(..., description="Task type")
 
 
 class WriteTask(BaseModel):
@@ -256,27 +275,27 @@ class WriteTask(BaseModel):
 
 
 #  Reading Schemas
-class FileReadTask(BaseModel):
+class FileReadTask(BaseFileTaskInputSchema):
     file_path: str = Field(..., description="Path to the file to operate on") # llm define
     read_percentage: int = Field(100, description="Percentage of the file to read") # system define 
     block_size: int = Field(100, description="Size of each content block to read in lines") # system define 
     from_line: Optional[int] = Field(1, description="1-indexed line number to start reading from") # llm define
     to_line: Optional[int] = Field(None, description="1-indexed line number to end reading at") # llm define
     
-class FileReadResult(BaseModel):
+class FileReadResult(BaseTaskOutputSchema):
     file_path: str = Field(..., description="Path to the file") # llm define
     content: List[FileContent] = Field(default_factory=list, description="List of content blocks") # llm define
     total_lines: int = Field(..., description="Total lines in the file") # system define
 
 #  Writing/Creation Schemas
 
-class FileWriteTask(BaseModel):
+class FileWriteTask(BaseFileTaskInputSchema):
     file_path: str = Field(..., description="Path to the file to operate on") # llm define
     from_line: int = Field(..., description="Line number to start writing/appending from (1-indexed)") # llm define
     to_line: int = Field(..., description="Line number to end writing/appending at (1-indexed)") # llm define
     write_content: str = Field(..., description="Content to be written/appended to the file") # llm define
     
-class FileWriteResult(BaseModel):
+class FileWriteResult(BaseTaskOutputSchema):
     file_path: str = Field(..., description="Path to the file") # llm define
     content: List[FileContent] = Field(default_factory=list, description="List of content blocks") # llm define
     total_lines: int = Field(..., description="Total number of lines in the file after write") # system define
@@ -292,13 +311,13 @@ class FileSearchMatch(BaseModel):
     line_content: str = Field(..., description="The content of the matching line")
     block_index: Optional[int] = Field(None, description="Index of the FileContent block containing this match")
 
-class FileSearchTask(BaseModel):
+class FileSearchTask(BaseFileTaskInputSchema):
     file_path: str = Field(..., description="Path to the file to search within")
     search_query: str = Field(..., description="Query string or pattern to look for")
     is_regex: bool = Field(default=False, description="Treat query as a regex pattern")
     case_sensitive: bool = Field(default=False, description="Perform case-sensitive search")
 
-class FileSearchResult(BaseModel):
+class FileSearchResult(BaseTaskOutputSchema):
     file_path: str = Field(..., description="Path to the searched file")
     matches: List[FileSearchMatch] = Field(default_factory=list, description="List of search matches")
     total_matches: int = Field(..., description="Total matches found in the file")
@@ -311,11 +330,11 @@ class ReplacementChunk(BaseModel):
     target_content: str = Field(..., description="The exact content targeted for replacement")
     replacement_content: str = Field(..., description="The content to substitute into the file")
 
-class FileUpdateTask(BaseModel):
+class FileUpdateTask(BaseFileTaskInputSchema):
     file_path: str = Field(..., description="Path to the file to update/edit")
     chunks: List[ReplacementChunk] = Field(..., description="List of replacement chunks for the file")
 
-class FileUpdateResult(BaseModel):
+class FileUpdateResult(BaseTaskOutputSchema):
     file_path: str = Field(..., description="Path to the file")
     success: bool = Field(..., description="Whether the update operation was fully successful")
     content: List[FileContent] = Field(default_factory=list, description="List of updated content blocks")
@@ -332,18 +351,18 @@ class WebSearchItem(BaseModel):
     snippet: str = Field(..., description="Snippet/description of the search result")
     url: str = Field(..., description="URL of the search result")
 
-class WebSearchTask(BaseModel):
+class WebSearchTask(BaseTaskInputSchema):
     query: str = Field(..., description="Search engine query string")
 
-class WebSearchResult(BaseModel):
+class WebSearchResult(BaseTaskOutputSchema):
     query: str = Field(..., description="Search query performed")
     results: List[WebSearchItem] = Field(default_factory=list, description="List of search result items")
 
 # Code Execution (REPL) Schemas
-class CodeExecutionTask(BaseModel):
+class CodeExecutionTask(BaseTaskInputSchema):
     code: str = Field(..., description="Safe python code to execute")
 
-class CodeExecutionResult(BaseModel):
+class CodeExecutionResult(BaseTaskOutputSchema):
     success: bool = Field(..., description="Whether code ran without raising unhandled exceptions")
     output: str = Field(..., description="Output from stdout or evaluation result")
     error: Optional[str] = Field(None, description="Exception stack trace if code failed")
@@ -359,10 +378,10 @@ class PythonClassInfo(BaseModel):
     line_end: int = Field(..., description="End line number in source")
     methods: List[PythonMethodInfo] = Field(default_factory=list, description="List of methods defined in the class")
 
-class PythonAnalysisTask(BaseModel):
+class PythonAnalysisTask(BaseFileTaskInputSchema):
     file_path: str = Field(..., description="Path to the Python file to analyze")
 
-class PythonAnalysisResult(BaseModel):
+class PythonAnalysisResult(BaseTaskOutputSchema):
     file_path: str = Field(..., description="Path of analyzed file")
     classes: Dict[str, PythonClassInfo] = Field(default_factory=dict, description="Dictionary mapping class names to class metadata")
     functions: List[PythonMethodInfo] = Field(default_factory=list, description="Top-level functions defined in the file")
@@ -373,22 +392,22 @@ class MultiBlockUpdateEdit(BaseModel):
     target: str = Field(..., description="Target substring to replace")
     replacement: str = Field(..., description="Replacement substring")
 
-class MultiBlockUpdateTask(BaseModel):
+class MultiBlockUpdateTask(BaseFileTaskInputSchema):
     file_path: str = Field(..., description="Path to the file to modify")
     edits: List[MultiBlockUpdateEdit] = Field(..., description="List of search-and-replace pairs")
 
-class MultiBlockUpdateResult(BaseModel):
+class MultiBlockUpdateResult(BaseTaskOutputSchema):
     file_path: str = Field(..., description="Path to the modified file")
     success: bool = Field(..., description="Whether all edits were successfully applied")
     applied_count: int = Field(..., description="Number of edits successfully applied")
     output: str = Field(..., description="Status summary or error details")
 
 # Command / Shell Execution Schemas
-class CommandExecutionTask(BaseModel):
+class CommandExecutionTask(BaseTaskInputSchema):
     command: str = Field(..., description="Shell/Terminal command to execute")
     cwd: Optional[str] = Field(None, description="Working directory context for execution")
 
-class CommandExecutionResult(BaseModel):
+class CommandExecutionResult(BaseTaskOutputSchema):
     command: str = Field(..., description="Executed command")
     success: bool = Field(..., description="Whether exit code was 0")
     stdout: str = Field(..., description="Stdout stream output")
@@ -396,10 +415,10 @@ class CommandExecutionResult(BaseModel):
     exit_code: int = Field(..., description="Exit code returned by shell execution")
 
 # Code Compilation / Syntax check Schemas
-class CodeCompileTask(BaseModel):
+class CodeCompileTask(BaseFileTaskInputSchema):
     file_path: str = Field(..., description="Path of Python/source file to check/compile")
 
-class CodeCompileResult(BaseModel):
+class CodeCompileResult(BaseTaskOutputSchema):
     file_path: str = Field(..., description="Path of checked file")
     success: bool = Field(..., description="Whether file compiles/checks with no errors")
     error: Optional[str] = Field(None, description="Compilation or syntax error details if failed")
