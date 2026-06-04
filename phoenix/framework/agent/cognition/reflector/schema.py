@@ -10,7 +10,10 @@ class ReflectorType(str, Enum):
 
 class ReflectorInputSchema(BaseModel):
     reflector_type: ReflectorType = Field(..., description="type of reflector")
+    description: str = Field(..., description="description of reflector")
+    context: Dict[str, Any] = Field(..., description="context of reflector")
     
+
 
 class BaseReflectorMeta(BaseModel):
     rateing: int = Field(..., description="rateing of solution")
