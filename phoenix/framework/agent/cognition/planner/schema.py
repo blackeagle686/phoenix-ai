@@ -112,7 +112,12 @@ class SolutionType(str, Enum):
     FASTANSWER = "fastanswer"
     OTHER = "other"
 
-class Problem
+class ProblemComplixity(str, Enum): 
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    EXTREME = "extreme"
+    
 
 class Solution(BaseModel):
     id: UUID = Field(default_factory=uuid4, description="ID")
@@ -128,7 +133,7 @@ class Problem(BaseModel):
     solution: List[Solution] = Field(..., description="solution") # all solutions proposed by the planner
     best_solution: Solution = Field(..., description="best solution") # based one solutions rateing 
     reflector_result: BaseReflectorMeta = Field(..., description="reflector result")
-
+    
 
 class Task(BaseModel):
     # Identifiers & Relationships
