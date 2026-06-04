@@ -252,7 +252,7 @@ class FileSearchTool(BaseTool):
             
             if not target_path:
                 return ToolResult(success=False, output=None, error="No file path provided to search.")
-            if not query:
+            if not final_query:
                 return ToolResult(success=False, output=None, error="No search query/pattern provided.")
                 
             if not os.path.exists(target_path):
