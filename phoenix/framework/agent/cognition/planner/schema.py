@@ -9,7 +9,6 @@ class TaskStatus(str, Enum):
     DONE = "done"
     SKIPPED = "skipped"
 
-from enum import Enum
 
 class TaskType(str, Enum):
     # =========================================================================
