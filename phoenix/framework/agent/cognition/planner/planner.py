@@ -60,7 +60,7 @@ class Planner(BasePlanner):
         {{
             "actions": [
                 {{"tool": "file_read", "kwargs": {{"file_path": "path/to/file.py", "from_line": 1, "to_line": 100}}}},
-                {{"tool": "file_edit", "kwargs": {{"file_path": "path/to/file.py", "chunks": [{{"from_line": 10, "to_line": 12, "target_content": "old code", "replacement_content": "new code"}}]}}}}
+                {{"tool": "file_write", "kwargs": {{"file_path": "path/to/output.txt", "content": "hello world"}}}}
             ],
             "updated_tasks": {{
                 "task_id_1": {{
