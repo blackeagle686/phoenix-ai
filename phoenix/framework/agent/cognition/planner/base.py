@@ -2,7 +2,9 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional, Union
 from phoenix.framework.agent.cognition.planner.schema import (
     Prompt, PlannerInputSchema, PlannerOutputSchema,
-    Task, TaskType, Problem, Solution,
+    Task, TaskType, Problem, Solution
+)
+from phoenix.framework.agent.cognition.actor.schema import (
     BaseTaskInputSchema, BaseTaskOutputSchema,
     BaseFileTaskInputSchema, BaseFileTaskOutputSchema
 )
