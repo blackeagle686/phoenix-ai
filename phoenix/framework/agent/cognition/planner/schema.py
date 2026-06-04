@@ -127,7 +127,7 @@ class Problems(BaseModel):
     solution: List[Solution] = Field(..., description="solution") # all solutions proposed by the planner
     best_solution: Solution = Field(..., description="best solution") # based one solutions rateing 
     reflector_result: BaseReflectorMeta = Field(..., description="reflector result")
-    
+
 
 class Task(BaseModel):
     # Identifiers & Relationships
