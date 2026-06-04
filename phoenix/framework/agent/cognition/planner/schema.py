@@ -1,8 +1,9 @@
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any
 from enum import Enum
 from uuid import UUID, uuid4
-from agent.cognition.reflector import BaseReflectorMeta
+from datetime import datetime
+from phoenix.framework.agent.cognition.reflector import BaseReflectorMeta
 
 class TaskStatus(str, Enum):
     PENDING = "pending"
@@ -96,7 +97,7 @@ class FileIOParams(BaseModel):
     permissions: Optional[str] = Field(None, description="Linux octal permission string (e.g., '0o755' or '0o644')")
     
 class Prompt(BaseModel):
-    id: UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the user prompt")
+    id: UUID = Field(default_factory=uuid4, description="Unique identifier for the user prompt")
     user_id: Optional[UUID] = Field(None, description="Unique identifier for the user")
     project_id: Optional[UUID] = Field(None, description="Unique identifier for the project")
     user_message: str = Field(..., description="User message")
@@ -112,7 +113,7 @@ class SolutionType(str, Enum):
     FASTANSWER = "fastanswer"
     OTHER = "other"
 
-class ProblemComplixity(str, Enum): 
+class ProblemComplexity(str, Enum): 
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -130,7 +131,7 @@ class Problem(BaseModel):
     description: str = Field(..., description="problem description") # agent describe the user problem in this field based on the task
     solution: List[Solution] = Field(..., description="solution") # all solutions proposed by the planner
     best_solution: Solution = Field(..., description="best solution") # based one solutions rateing 
-    complixity: ProblemComplixity = Field(..., description="complixity")
+    complexity: ProblemComplexity = Field(..., description="complexity")
     reflector_result: BaseReflectorMeta = Field(..., description="reflector result")
 
 class Task(BaseModel):
@@ -150,9 +151,9 @@ class Task(BaseModel):
     task_summary: Optional[str] = Field(None, description="Post-execution summary populated after completion") # summary of the task
 
     # handel with task
-    complexity: ProblemComplixity = Field(..., description="complixity") # complixity of the task agent specify this value
+    complexity: ProblemComplexity = Field(..., description="complexity") # complexity of the task agent specify this value
     problems: List[Problem] = Field(..., description="problems") # problems related to the task
-    repeat_count: int = Field(1, description="Number of times the task should be repeated") # based on the task complixity agent specify this value 
+    repeat_count: int = Field(1, description="Number of times the task should be repeated") # based on the task complexity agent specify this value 
 
     # Execution Data (The Machine-Readable Payload)
     payload: Dict[str, Any] = Field(default_factory=dict, description="Input parameters required by the driver (e.g., {'ip': '127.0.0.1', 'bytes': b'...'})") # payload of the task
