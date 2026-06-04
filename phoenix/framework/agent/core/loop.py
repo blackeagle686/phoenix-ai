@@ -51,6 +51,13 @@ class AgentLoop:
         self._registry.register("thinker", thinker_handler)
         self._registry.register("analyzer", analyzer_handler)
 
+    def set_pipeline_specs(self, bootstrap_pipeline_path: Optional[str] = None):
+        """
+        Replace default JSON bootstrap pipeline with user-provided spec.
+        """
+        if bootstrap_pipeline_path:
+            self._bootstrap_pipeline = CognitionPipeline.from_json_file(bootstrap_pipeline_path)
+
     def _schedule_background(self, coro):
         task = asyncio.create_task(coro)
         self._background_tasks.add(task)
