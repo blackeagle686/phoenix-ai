@@ -2,6 +2,47 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, AsyncGenerator, List, Optional
 
 
+class BasePlanner(ABC): 
+    def __init__(self, llm, memory):
+        self.llm = llm 
+        self.memory = memory 
+
+    def user_input(self): 
+        pass
+
+    def actor_input(self): 
+        pass
+
+    def reflector_input(self):
+        pass 
+
+    def user_output(self):
+        pass
+
+    def actor_output(self):
+        pass
+    
+    def reflector_output(self):
+        pass
+    
+    def analysis_input(self): 
+        pass 
+
+    def analysis_output(self): 
+        pass 
+
+    def __task_builder(self): 
+        pass 
+
+    def __problem_builder(self): 
+        pass 
+
+    def __solution_builder(self): 
+        pass 
+
+    def __
+    
+
 class BasePlanner(ABC):
     def __init__(self, llm, tools, task_store=None, profile: Any = None):
         self.llm = llm
