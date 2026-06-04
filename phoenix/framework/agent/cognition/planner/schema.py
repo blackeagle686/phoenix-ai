@@ -95,7 +95,7 @@ class FileIOParams(BaseModel):
     
     # OS Level Flags
     permissions: Optional[str] = Field(None, description="Linux octal permission string (e.g., '0o755' or '0o644')")
-    
+
 class Prompt(BaseModel):
     id: UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the user prompt")
     user_id: UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the user")
@@ -142,12 +142,20 @@ class Task(BaseModel):
 
 class FileContent(BaseModel):
     file_path: str = Field(..., description="Path to the file")
-    content_block: str = Field(..., description="Content of this specific block")
+    content_block: str = Field(..., description="Raw text or code content of this specific block")
+    
+    # تحديد المواقع (Structural Indexing)
     from_line: int = Field(..., description="1-indexed line number where this block starts")
     to_line: int = Field(..., description="1-indexed line number where this block ends (inclusive)")
-    block_summary: Optional[str] = Field(None, description="Summary of the content block")
-
-class File(BaseModel):
+    
+    # حرج جداً لأنظمة الـ AI والـ RAG
+    token_count: Optional[int] = Field(None, description="Calculated LLM token count for this specific block")
+    overlap_lines: int = Field(default=0, description="Number of lines duplicated from the previous block for context preservation")
+    
+    # المعرفة الدلالية (Semantic Metadata)
+    block_summary: Optional[str] = Field(None, description="AI-generated summary of this content block")
+    vector_id: Optional[str] = Field(None, description="Reference ID if this block is embedded in a Vector Database")
+    class File(BaseModel):
     file_path: str = Field(..., description="Path to the file")
     file_type: str = Field(..., description="Type/extension of the file")
     file_id: Optional[str] = Field(None, description="Unique ID of the file")
