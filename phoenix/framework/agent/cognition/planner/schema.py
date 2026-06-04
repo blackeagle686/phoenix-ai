@@ -126,6 +126,7 @@ class Task(BaseModel):
         use_enum_values = True  # Allows smooth JSON serialization when saving to DBs or sending over APIs
 
 
+
 class FileContent(BaseModel):
     file_path: str = Field(..., description="Path to the file")
     content_block: str = Field(..., description="Content of this specific block")
