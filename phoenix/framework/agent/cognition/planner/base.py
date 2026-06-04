@@ -31,7 +31,7 @@ class BasePlanner(ABC):
     def analysis_output(self): 
         pass 
 
-    def __task_builder(self, type, ): 
+    def __task_builder(self, task_type): 
         pass 
 
     def __problem_builder(self): 
