@@ -121,7 +121,7 @@ class Solution(BaseModel):
     reflector_result: BaseReflectorMeta = Field(..., description="reflector result")
 
 
-class Problems(BaseModel): 
+class Problem(BaseModel): 
     id: UUID = Field(default_factory=uuid4, description="ID") 
     description: str = Field(..., description="problem description") # agent describe the user problem in this field based on the task
     solution: List[Solution] = Field(..., description="solution") # all solutions proposed by the planner
@@ -134,7 +134,7 @@ class Task(BaseModel):
     prompt_id: UUID = Field(default_factory=uuid4, description="Unique identifier for the parent session/prompt request")
     task_id: str = Field(..., description="Unique deterministic identifier for this specific task")
     dependencies: List[str] = Field(default_factory=list, description="List of task_ids that must complete successfully first")
-    Problems
+    problems: Problems = Field(..., description="problems")
     # Strongly Typed Meta Elements
     task_type: TaskType = Field(..., description="The specific systemic I/O operation archetype")
     priority: TaskPriority = Field(default=TaskPriority.MEDIUM, description="The execution urgency tier")
