@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Union
 from enum import Enum
 from uuid import UUID, uuid4
-from agent.reflector import BaseReflectorSchema
+from agent.cognition.reflector.schema import BaseReflectorMeta
 
 class TaskStatus(str, Enum):
     PENDING = "pending"
