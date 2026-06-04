@@ -103,7 +103,7 @@ class Prompt(BaseModel):
     tokens_length: int = Field(..., description="Tokens length")
 
 class Problems(BaseModel): 
-    id: UUID 
+    id: UUID = Field(def)
 
 class Task(BaseModel):
     # Identifiers & Relationships
