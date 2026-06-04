@@ -118,13 +118,14 @@ class Solution(BaseModel):
     solution_type: SolutionType = Field(..., description="Type of solution")
     content: str = Field(..., description="solution content")
     rateing: int = Field(..., description="rateing of solution")
-    feed
+    feedback: str = Field(..., description="feedback of solution")
 
 class Problems(BaseModel): 
     id: UUID = Field(default_factory=uuid4, description="ID")
     description: str = Field(..., description="problem description")
     solution: List[Solution] = Field(..., description="solution")
     best_solution: Solution = Field(..., description="best solution")
+    rateing: int = Field(..., description="rateing of solution")
     feedback: str = Field(..., description="feedback")
 
 
