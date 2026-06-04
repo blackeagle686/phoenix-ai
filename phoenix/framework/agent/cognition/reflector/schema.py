@@ -6,5 +6,6 @@ from uuid import UUID, uuid4
 class BaseReflectorMeta(BaseModel):
     rateing: int = Field(..., description="rateing of solution")
     feedback: str = Field(..., description="feedback")
-    
+    confidance: float = Field(..., description="confidance of solution")
+    reasoning: str = Field(..., description="reasoning of solution")
     
