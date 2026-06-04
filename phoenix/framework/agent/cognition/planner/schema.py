@@ -345,8 +345,9 @@ class FileUpdateMeta(BaseFileMeta):
     file_config: BaseFileConfig = Field(..., description="Configuration of the file")
     from_line: int = Field(..., description="Start line number of the file")
     to_line: int = Field(..., description="End line number of the file")
-    status: FileUpdateStatus = Field(..., description="Status of the file")
-    
+    status: FileUpdateStatus = Field(..., description="Status of the file update")
+    confide
+
 
 class BaseTaskInputSchema(BaseModel):
     task_id: str = Field(..., description="Task ID")
