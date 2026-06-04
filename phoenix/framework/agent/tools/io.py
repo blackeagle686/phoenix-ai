@@ -289,7 +289,7 @@ class FileSearchTool(BaseTool):
                             if final_query in line_content:
                                 match_found = True
                         else:
-                            if query.lower() in line_content.lower():
+                            if final_query.lower() in line_content.lower():
                                 match_found = True
                                 
                     if match_found:
