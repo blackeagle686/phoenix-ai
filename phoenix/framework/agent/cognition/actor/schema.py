@@ -48,6 +48,7 @@ class ActorOutputSchema(BaseModel):
     success: bool = Field(..., description="Whether the actor successfully completed the task")
     result: Optional[Dict[str, Any]] = Field(None, description="The normalized tool output payload")
     error_context: Optional[str] = Field(None, description="Additional actor-level error context")
+    reflection: Optional[Any] = Field(None, description="Optional reflection output from the Reflector module")
 
 class ActorToReflectorSchema(BaseModel):
     """Schema to send the Actor's tool execution output directly to the Reflector."""
