@@ -1,13 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, AsyncGenerator, List, Optional
-
+from sch
 
 class BasePlanner(ABC): 
     def __init__(self, llm, memory):
         self.llm = llm 
         self.memory = memory 
 
-    def user_input(self, ): 
+    def user_input(self, prompt:Prompt): 
         pass
 
     def actor_input(self): 
