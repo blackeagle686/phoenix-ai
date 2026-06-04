@@ -173,8 +173,52 @@ class File(BaseModel):
     class Config:
         populate_by_name = True
 
-#  Reading Schemas
 
+
+class BaseFileMeta(BaseModel):
+    file_path: str = Field(..., description="Path of the file")
+    file_name: str = Field(..., description="Name of the file")
+    lines_count: int = Field(..., description="Number of lines in the file")
+    file_size: int = Field(..., description="Size of the file in bytes")
+    file_type: str = Field(..., description="Type of the file")
+    last_modified_time: int = Field(..., description="Last modified time of the file in seconds since epoch")
+
+class FileUpdateStatus(str, Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class FileIOMeta(BaseFileMeta):
+    file_meta: BaseFileMeta = Field(..., description="Configuration of the file")
+    from_line: int = Field(..., description="Start line number of the file")
+    to_line: int = Field(..., description="End line number of the file")
+    status: FileUpdateStatus = Field(..., description="Status of the file update")
+
+
+class BaseTaskInputSchema(BaseModel):
+    task_id: str = Field(..., description="Task ID")
+    task_description: str = Field(..., description="Task description")
+    task_type: str = Field(..., description="Task type")
+    file_meta: BaseFileMeta = Field(..., description="Meta information of the file")
+
+
+class BaseTaskMeta(BaseModel): 
+    task_id: str = Field(..., description="Task ID")
+    task_description: str = Field(..., description="Task description")
+    task_type: str = Field(..., description="Task type")
+
+
+class WriteTask(BaseModel):
+    language: str = Field(..., description="Programming language of the file to be generated")
+    description: str = Field(..., description="Detailed description of the file to be generated")
+    content: str = Field(..., description="Content of the file to be generated")
+
+
+
+#  Reading Schemas
 class FileReadTask(BaseModel):
     file_path: str = Field(..., description="Path to the file to operate on") # llm define
     read_percentage: int = Field(100, description="Percentage of the file to read") # system define 
@@ -322,6 +366,4 @@ class CodeCompileResult(BaseModel):
     file_path: str = Field(..., description="Path of checked file")
     success: bool = Field(..., description="Whether file compiles/checks with no errors")
     error: Optional[str] = Field(None, description="Compilation or syntax error details if failed")
-
-
 
