@@ -109,15 +109,19 @@ class SolutionType(str, Enum):
     NETWORK = "network"
     MISSION = "mission"
     FASTANSWER = "fastanswer"
-    
+    OTHER = "other"
+
 
 class Solution(BaseModel):
     id: UUID = Field(default_factory=uuid4, description="ID")
     description: str = Field(..., description="solution description")
+    solution_type: SolutionType = Field(..., description="Type of solution")
+    content: str = Field(..., description="solution content")
 
 class Problems(BaseModel): 
     id: UUID = Field(default_factory=uuid4, description="ID")
     description: str = Field(..., description="problem description")
+    solution: Solution = Field(..., description="solution")
     
 
 class Task(BaseModel):
