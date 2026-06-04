@@ -347,13 +347,6 @@ class FileIOMeta(BaseFileMeta):
     to_line: int = Field(..., description="End line number of the file")
     status: FileUpdateStatus = Field(..., description="Status of the file update")
 
-class FileSearchMeta(BaseModel): 
-    file_meta: BaseFileMeta = Field(..., description="Configuration of the file")
-    search_query: str = Field(..., description="Search query")
-    search_results: List[str] = Field(..., description="Search results")
-    search_summary: str = Field(..., description="Summary of search results")
-
-
 
 class BaseTaskInputSchema(BaseModel):
     task_id: str = Field(..., description="Task ID")
