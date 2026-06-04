@@ -38,11 +38,13 @@ class Task(BaseModel):
     task_id: str = Field(..., description="Unique identifier for the task")
     task_type: str = Field(..., description="Type of the task")
     task_title: str = Field(..., description="Title of the task")
-    task_summary: Optional[str] = Field(None, description="Summary of the task")
     description: str = Field(..., description="Description of the task")
     dependencies: List[str] = Field(default_factory=list, description="List of task IDs that must be completed before this task")
     priority: str = Field(default="medium", description="Priority level of the task")
     status: TaskStatus = Field(default=TaskStatus.PENDING, description="Current status of the task")
+    task_summary: str = Field(None, description="Summary of the task")
+
+
 class FileContent(BaseModel):
     file_path: str = Field(..., description="Path to the file")
     content_block: str = Field(..., description="Content of this specific block")
