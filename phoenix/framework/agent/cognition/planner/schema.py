@@ -61,7 +61,7 @@ class TaskType(str, Enum):
     PWM_OUTPUT = "pwm_output"       # Generating high-frequency square waves for motor controls
     SENSOR_POLL = "sensor_poll"     # Aggregating data across high-frequency IMUs, Radar, and Sonar
     WATCHDOG_PING = "watchdog_ping" # Periodic heartbeat signal to clear safety timer circuits
-
+    OTHER = "other"                 # Generic fallback for cognitive actions that do not fit into OS/System categories
 class TaskPriority(str, Enum):
     CRITICAL = "critical"  # Real-time systems / Watchdogs
     HIGH = "high"
