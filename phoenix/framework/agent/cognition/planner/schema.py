@@ -76,6 +76,7 @@ class FileOperation(str, Enum):
     REPLACE = "replace"
     DELETE = "delete"
     CHMOD = "chmod"       # Crucial for OS file permissions
+    
 class FileTask(BaseModel):
     file_path: str = Field(..., description="Path to the file to operate on")
     operation: FileOperation = Field(..., description="Operation to perform on the file")
