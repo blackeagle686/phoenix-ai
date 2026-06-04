@@ -332,6 +332,8 @@ class BaseFileMeta(BaseModel):
     file_type: str = Field(..., description="Type of the file")
     last_modified_time: int = Field(..., description="Last modified time of the file in seconds since epoch")
 
+class FileUpdateMeta(BaseFileMeta):
+    )
 
 class BaseTaskInputSchema(BaseModel):
     task_id: str = Field(..., description="Task ID")
