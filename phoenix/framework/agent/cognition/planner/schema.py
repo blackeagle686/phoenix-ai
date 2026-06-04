@@ -143,11 +143,11 @@ class FileContent(BaseModel):
     file_path: str = Field(..., description="Path to the file")
     content_block: str = Field(..., description="Raw text or code content of this specific block")
     
-    # تحديد المواقع (Structural Indexing)
+    # Structural Indexing
     from_line: int = Field(..., description="1-indexed line number where this block starts")
     to_line: int = Field(..., description="1-indexed line number where this block ends (inclusive)")
     
-    #  Token count and overlap
+    # Token count and overlap
     token_count: Optional[int] = Field(None, description="Calculated LLM token count for this specific block")
     overlap_lines: int = Field(default=0, description="Number of lines duplicated from the previous block for context preservation")
     
