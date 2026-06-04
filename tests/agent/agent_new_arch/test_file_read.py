@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from phoenix.framework.agent.core.agent import Agent
 from phoenix.services.llm.openai import OpenAILLM
-from phoenix.framework.agent.tools.io import FileReadTool, FileWriteTool, FileSearchTool
+from phoenix.framework.agent.tools.io import FileReadTool, FileWriteTool, FileSearchTool, FileEditTool, FileAppendTool
 from phoenix.framework.agent.tools.code import PythonAnalyzerTool, CommandExecutionTool
 
 async def test_file_read():
@@ -28,6 +28,8 @@ async def test_file_read():
         FileReadTool(),
         FileWriteTool(),
         FileSearchTool(),
+        FileEditTool(),
+        FileAppendTool(),
         PythonAnalyzerTool(),
         CommandExecutionTool()
     ]
