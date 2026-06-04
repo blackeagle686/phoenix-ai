@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, AsyncGenerator, List, Optional
-from sch
+from .schema import * 
 
 class BasePlanner(ABC): 
     def __init__(self, llm, memory):
@@ -10,7 +10,7 @@ class BasePlanner(ABC):
     def user_input(self, prompt:Prompt): 
         pass
 
-    def actor_input(self): 
+    def actor_input(self, ): 
         pass
 
     def reflector_input(self):
