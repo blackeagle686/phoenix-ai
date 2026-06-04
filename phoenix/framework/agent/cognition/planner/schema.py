@@ -355,7 +355,7 @@ class BaseTaskInputSchema(BaseModel):
     file_meta: BaseFileMeta = Field(..., description="Meta information of the file")
 
 
-class BaseTaskOutputSchema(BaseModel): 
+class BaseTaskMeta(BaseModel): 
     
 
 class WriteTask(BaseModel):
