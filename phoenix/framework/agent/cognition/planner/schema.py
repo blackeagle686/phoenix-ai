@@ -205,7 +205,5 @@ class CodeCompileResult(BaseModel):
 
 
 class UserPrompt(BaseModel):
-    user_objective: str = Field(..., description="User objective")
-    user_input: str = Field(..., description="User input")
-
+    id
     
