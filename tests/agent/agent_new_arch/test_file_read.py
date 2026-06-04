@@ -54,10 +54,12 @@ async def test_file_read():
     print(f"[*] Prompt: {prompt}")
     print("-" * 40)
     
-    result = await agent.run(prompt, max_iterations=6, mode="plan")
-    
-    print("\n[🎯] FINAL ANSWER:")
-    print(result)
+    print("\n[🌊] Streaming Output Started:\n")
+    async for event in agent.run_stream(prompt, max_iterations=6, mode="plan"):
+        if event["type"] == "status":
+            print(f"\n[STATUS] {event['content']}")
+        elif event["type"] == "chunk":
+            print(event["content"], end="", flush=True)
     
     # Verification
     if os.path.exists(test_file):
