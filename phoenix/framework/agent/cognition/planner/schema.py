@@ -142,7 +142,8 @@ class Task(BaseModel):
     dependencies: List[str] = Field(default_factory=list, description="List of task_ids that must complete successfully first")
     complexity: ProblemComplixity = Field(..., description="complixity")
     problems: List[Problem] = Field(..., description="problems")
-    repe
+    repeatable: bool = Field(default=False, description="Whether the task is repeatable")
+    repeat_count: Optional[int] = Field(None, description="Number of times the task should be repeated")
 
     # Strongly Typed Meta Elements
     task_type: TaskType = Field(..., description="The specific systemic I/O operation archetype")
