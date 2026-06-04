@@ -140,9 +140,6 @@ class Task(BaseModel):
     prompt_id: UUID = Field(default_factory=uuid4, description="Unique identifier for the parent session/prompt request") # prompt id
     task_id: str = Field(..., description="Unique deterministic identifier for this specific task") # task id
     dependencies: List[str] = Field(default_factory=list, description="List of task_ids that must complete successfully first") # list of task ids that must complete successfully first
-    complexity: ProblemComplixity = Field(..., description="complixity") # complixity of the task agent specify this value
-    problems: List[Problem] = Field(..., description="problems") # problems related to the task
-    repeat_count: int = Field(1, description="Number of times the task should be repeated") # based on the task complixity agent specify this value 
 
     # Strongly Typed Meta Elements
     task_type: TaskType = Field(..., description="The specific systemic I/O operation archetype") # type of the task agent agent specify this value
@@ -151,12 +148,15 @@ class Task(BaseModel):
     
     # Descriptive Data (For Humans & LLM Reasoning)
     task_title: str = Field(..., description="Short title of the task") # title of the task
-    description: str = Field(..., description="Verbose description detailing task goals")
-    task_summary: Optional[str] = Field(None, description="Post-execution summary populated after completion")
+    description: str = Field(..., description="Verbose description detailing task goals") # description of the task
+    task_summary: Optional[str] = Field(None, description="Post-execution summary populated after completion") # summary of the task
+    complexity: ProblemComplixity = Field(..., description="complixity") # complixity of the task agent specify this value
+    problems: List[Problem] = Field(..., description="problems") # problems related to the task
+    repeat_count: int = Field(1, description="Number of times the task should be repeated") # based on the task complixity agent specify this value 
     
     # Execution Data (The Machine-Readable Payload)
-    payload: Dict[str, Any] = Field(default_factory=dict, description="Input parameters required by the driver (e.g., {'ip': '127.0.0.1', 'bytes': b'...'})")
-    result: Optional[Dict[str, Any]] = Field(None, description="Output returned by the executing module/driver")
+    payload: Dict[str, Any] = Field(default_factory=dict, description="Input parameters required by the driver (e.g., {'ip': '127.0.0.1', 'bytes': b'...'})") # payload of the task
+    result: Optional[Dict[str, Any]] = Field(None, description="Output returned by the executing module/driver") # result of the task
     error: Optional[str] = Field(None, description="Error tracking message if status shifts to FAILED")
 
     # Routing & Governance
