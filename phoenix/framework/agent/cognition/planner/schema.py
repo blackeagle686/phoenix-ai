@@ -10,11 +10,8 @@ class TaskStatus(str, Enum):
     SKIPPED = "skipped"
 
 class TaskType(str, Enum): 
-    FILE_READ = "file_read"
-    FILE_WRITE = "file_write"
-    FILE_SEARCH = "file_search"
-    FILE_UPDATE = "file_update"
-    FILE_DELETE = "file_delete"
+    Read = "read"
+    
 
 class FileOperation(str, Enum):
     CREATE = "create"
