@@ -40,7 +40,7 @@ class BasePlanner(ABC):
     def __solution_builder(self): 
         pass 
 
-    def __
+    def 
     
 
 class BasePlanner(ABC):
