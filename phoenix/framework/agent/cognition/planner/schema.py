@@ -76,14 +76,26 @@ class FileOperation(str, Enum):
     REPLACE = "replace"
     DELETE = "delete"
     CHMOD = "chmod"       # Crucial for OS file permissions
-    
-class FileTask(BaseModel):
-    file_path: str = Field(..., description="Path to the file to operate on")
-    operation: FileOperation = Field(..., description="Operation to perform on the file")
-    content: Optional[str] = Field(None, description="Content to write/append to the file")
-    search_query: Optional[str] = Field(None, description="Search query for search operation")
-    replace_query: Optional[str] = Field(None, description="Replacement query for search operation")
 
+class FileIOParams(BaseModel):
+    file_path: str = Field(..., description="Absolute path to the target file")
+    operation: FileOperation = Field(..., description="The specific file sub-operation")
+    
+    # Text and binary data handling
+    content: Optional[Union[str, bytes]] = Field(None, description="Raw text or binary bytes to write")
+    encoding: str = Field(default="utf-8", description="File text encoding style (e.g., utf-8, ascii, latin1)")
+    
+    # Fine-grained file system positioning
+    offset: Optional[int] = Field(None, description="Byte position to seek to before reading or writing")
+    length: Optional[int] = Field(None, description="Number of bytes to read if performing a partial block read")
+    
+    # Query operations
+    search_query: Optional[str] = Field(None, description="Regex or text token to look up inside the file")
+    replace_query: Optional[str] = Field(None, description="The content used to substitute the search match")
+    
+    # OS Level Flags
+    permissions: Optional[str] = Field(None, description="Linux octal permission string (e.g., '0o755' or '0o644')")
+    
 class Prompt(BaseModel):
     id: UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the user prompt")
     user_id: UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the user")
