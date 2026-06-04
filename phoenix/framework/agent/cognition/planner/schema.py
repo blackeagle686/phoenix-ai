@@ -145,7 +145,7 @@ class Task(BaseModel):
     repeat_count: int = Field(1, description="Number of times the task should be repeated") # based on the task complixity agent specify this value 
 
     # Strongly Typed Meta Elements
-    task_type: TaskType = Field(..., description="The specific systemic I/O operation archetype") # 
+    task_type: TaskType = Field(..., description="The specific systemic I/O operation archetype") # type of the task agent agent specify this value
     priority: TaskPriority = Field(default=TaskPriority.MEDIUM, description="The execution urgency tier")
     status: TaskStatus = Field(default=TaskStatus.PENDING, description="Current workflow state machine status")
     
