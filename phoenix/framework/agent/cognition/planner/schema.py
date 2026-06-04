@@ -137,7 +137,7 @@ class Problem(BaseModel):
 
 class Task(BaseModel):
     # Identifiers & Relationships
-    prompt_id: UUID = Field(default_factory=uuid4, description="Unique identifier for the parent session/prompt request")
+    prompt_id: UUID = Field(default_factory=uuid4, description="Unique identifier for the parent session/prompt request") # prompt id
     task_id: str = Field(..., description="Unique deterministic identifier for this specific task") # task id
     dependencies: List[str] = Field(default_factory=list, description="List of task_ids that must complete successfully first") # list of task ids that must complete successfully first
     complexity: ProblemComplixity = Field(..., description="complixity") # complixity of the task agent specify this value
@@ -145,7 +145,7 @@ class Task(BaseModel):
     repeat_count: int = Field(1, description="Number of times the task should be repeated") # based on the task complixity agent specify this value 
 
     # Strongly Typed Meta Elements
-    task_type: TaskType = Field(..., description="The specific systemic I/O operation archetype")
+    task_type: TaskType = Field(..., description="The specific systemic I/O operation archetype") # 
     priority: TaskPriority = Field(default=TaskPriority.MEDIUM, description="The execution urgency tier")
     status: TaskStatus = Field(default=TaskStatus.PENDING, description="Current workflow state machine status")
     
