@@ -7,7 +7,7 @@ class BasePlanner(ABC):
         self.llm = llm 
         self.memory = memory 
 
-    def user_input(self): 
+    def user_input(self, ): 
         pass
 
     def actor_input(self): 
