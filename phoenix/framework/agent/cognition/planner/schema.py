@@ -93,16 +93,37 @@ class Prompt(BaseModel):
     tokens_length: int = Field(..., description="Tokens length")
 
 class Task(BaseModel):
-    prompt_id: UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the prompt")
-    task_id: str = Field(..., description="Unique identifier for the task")
-    task_type: str = Field(..., description="Type of the task")
-    task_title: str = Field(..., description="Title of the task")
-    description: str = Field(..., description="Description of the task")
-    dependencies: List[str] = Field(default_factory=list, description="List of task IDs that must be completed before this task")
-    priority: str = Field(default="medium", description="Priority level of the task")
-    status: TaskStatus = Field(default=TaskStatus.PENDING, description="Current status of the task")
-    task_summary: str = Field(None, description="Summary of the task")
+    # --- Identifiers & Relationships ---
+    prompt_id: UUID = Field(default_factory=uuid4, description="Unique identifier for the parent session/prompt request")
+    task_id: str = Field(..., description="Unique deterministic identifier for this specific task")
+    dependencies: List[str] = Field(default_factory=list, description="List of task_ids that must complete successfully first")
+    
+    # --- Strongly Typed Meta Elements ---
+    task_type: TaskType = Field(..., description="The specific systemic I/O operation archetype")
+    priority: TaskPriority = Field(default=TaskPriority.MEDIUM, description="The execution urgency tier")
+    status: TaskStatus = Field(default=TaskStatus.PENDING, description="Current workflow state machine status")
+    
+    # --- Descriptive Data (For Humans & LLM Reasoning) ---
+    task_title: str = Field(..., description="Short title of the task")
+    description: str = Field(..., description="Verbose description detailing task goals")
+    task_summary: Optional[str] = Field(None, description="Post-execution summary populated after completion")
+    
+    # --- Execution Data (The Machine-Readable Payload) ---
+    payload: Dict[str, Any] = Field(default_factory=dict, description="Input parameters required by the driver (e.g., {'ip': '127.0.0.1', 'bytes': b'...'})")
+    result: Optional[Dict[str, Any]] = Field(None, description="Output returned by the executing module/driver")
+    error: Optional[str] = Field(None, description="Error tracking message if status shifts to FAILED")
 
+    # --- Routing & Governance ---
+    created_by: str = Field(..., description="The identifier of the agent/orchestrator that generated this task")
+    assigned_to: Optional[str] = Field(None, description="The targeted agent, execution worker pool, or hardware driver")
+    
+    # --- Time Guarantees (SLA / Deadlines) ---
+    timeout: float = Field(default=30.0, description="Max execution time window in seconds before the task is forcefully killed")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Timestamp when the task was initially queued")
+    executed_at: Optional[datetime] = Field(None, description="Timestamp when the execution worker actually started processing")
+
+    class Config:
+        use_enum_values = True  # Allows smooth JSON serialization when saving to DBs or sending over APIs
 
 
 class FileContent(BaseModel):
