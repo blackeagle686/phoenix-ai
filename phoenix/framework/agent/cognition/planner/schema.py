@@ -213,4 +213,3 @@ class Prompt(BaseModel):
     system_message: str = Field(..., description="System message")
     tokens_length: int = Field(..., description="Tokens length")
 
-class Task()
