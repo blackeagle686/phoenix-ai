@@ -333,7 +333,7 @@ class BaseFileMeta(BaseModel):
     last_modified_time: int = Field(..., description="Last modified time of the file in seconds since epoch")
 
 class FileUpdateMeta(BaseFileMeta):
-    )
+    file_config: Base
 
 class BaseTaskInputSchema(BaseModel):
     task_id: str = Field(..., description="Task ID")
