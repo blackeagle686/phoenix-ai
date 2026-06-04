@@ -107,7 +107,8 @@ class SolutionType(str, Enum):
     CODE = "code"
     TERMINAL = "terminal"
     NETWORK = "network"
-    Mission = "mission"
+    MISSION = "mission"
+    FASTANSWER = "fastanswer"
     
 
 class Solution(BaseModel):
