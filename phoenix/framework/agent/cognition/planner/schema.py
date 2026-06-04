@@ -118,14 +118,12 @@ class ProblemComplixity(str, Enum):
     HIGH = "high"
     EXTREME = "extreme"
     
-
 class Solution(BaseModel):
     id: UUID = Field(default_factory=uuid4, description="ID")
     description: str = Field(..., description="solution description")
     solution_type: SolutionType = Field(..., description="Type of solution")
     content: str = Field(..., description="solution content")
     reflector_result: BaseReflectorMeta = Field(..., description="reflector result")
-
 
 class Problem(BaseModel): 
     id: UUID = Field(default_factory=uuid4, description="ID") 
