@@ -324,7 +324,10 @@ class CodeCompileResult(BaseModel):
     error: Optional[str] = Field(None, description="Compilation or syntax error details if failed")
 
 
-class BaseFileC
+class BaseFileMeta(BaseModel):
+    file_path: str = Field(..., description="Path of the file")
+    file_name: str = Field(..., description="Name of the file")
+    line
 
 class BaseTaskInputSchema(BaseModel):
     task_id: str = Field(..., description="Task ID")
