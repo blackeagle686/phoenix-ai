@@ -193,24 +193,14 @@ class Agent:
             self.loop_cls = loop_cls
         self.loop = self._construct_loop()
 
-    def register_brain(self, name: str, handler: Callable[..., Any]):
-        """
-        Register a custom cognition brain handler in loop pipeline runtime.
-        """
-        if not hasattr(self.loop, "register_brain"):
-            raise ValueError("Current loop does not support custom brain registration.")
-        self.loop.register_brain(name, handler)
-
-    def set_cognition_pipeline(self, bootstrap_pipeline_path: Optional[str] = None, iteration_pipeline_path: Optional[str] = None):
+    def set_cognition_pipeline(self, bootstrap_pipeline_path: Optional[str] = None):
         """
         Replace default cognition JSON pipelines with custom specs.
+        Only the bootstrap pipeline is supported in the parallel async architecture.
         """
         if not hasattr(self.loop, "set_pipeline_specs"):
             raise ValueError("Current loop does not support pipeline specs.")
-        self.loop.set_pipeline_specs(
-            bootstrap_pipeline_path=bootstrap_pipeline_path,
-            iteration_pipeline_path=iteration_pipeline_path
-        )
+        self.loop.set_pipeline_specs(bootstrap_pipeline_path=bootstrap_pipeline_path)
 
     async def run(self, prompt: str, session_id: str = None, max_iterations: int = 15, mode: str = "auto") -> str:
         """
