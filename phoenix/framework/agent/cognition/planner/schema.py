@@ -9,12 +9,58 @@ class TaskStatus(str, Enum):
     DONE = "done"
     SKIPPED = "skipped"
 
-class TaskType(str, Enum): 
-    READ = "read"
-    WRITE = "write"
-    SEARCH = "search"
-    UPDATE = "update"
-    DELETE = "delete"
+from enum import Enum
+
+class TaskType(str, Enum):
+    # =========================================================================
+    # 1. STANDARD CRUD & FILE SYSTEM I/O (OS / Storage)
+    # =========================================================================
+    READ = "read"              # Generic file/stream reading (disk, RAM)
+    WRITE = "write"            # Generic file/stream writing (disk, RAM)
+    SEARCH = "search"          # File system directory traversal / text regex search
+    UPDATE = "update"          # Modifying existing blocks, records, or file segments
+    DELETE = "delete"          # Removing file descriptors, blocks, or database entries
+    BLOCK_READ = "block_read"  # Low-level direct disk sector read (NVMe/SSD)
+    BLOCK_WRITE = "block_write" # Low-level direct disk sector write (NVMe/SSD)
+    MMAP_IO = "mmap_io"        # Mapping file descriptors directly into virtual memory
+    
+    # =========================================================================
+    # 2. NETWORK & COMMUNICATIONS I/O (OS / Cloud / IPC)
+    # =========================================================================
+    NET_SEND = "net_send"      # Outbound network packet transfer (TCP, UDP, WebSockets)
+    NET_RECV = "net_recv"      # Inbound network packet capture
+    IPC_PIPE = "ipc_pipe"      # Moving data between processes (Pipes, Unix Domain Sockets)
+    IPC_SHARE = "ipc_share"    # Allocating/accessing Inter-Process Shared Memory
+    RPC_CALL = "rpc_call"      # Remote Procedure Call invocation (gRPC, REST API)
+
+    # =========================================================================
+    # 3. AI, EMBEDDINGS & MACHINE LEARNING I/O
+    # =========================================================================
+    BATCH_LOAD = "batch_load"       # High-throughput data ingestion from storage to RAM
+    TENSOR_STREAM = "tensor_stream" # Streaming multi-dimensional arrays through NN layers
+    VECTOR_SEARCH = "vector_search" # K-Nearest Neighbor (KNN/ANN) queries on vector DBs
+    VRAM_SHUTTLE = "vram_shuttle"   # Moving data across PCIe lanes between system RAM & VRAM
+    TOKEN_STREAM = "token_stream"   # Sequential token-by-token real-time LLM text generation
+
+    # =========================================================================
+    # 4. HARDWARE-LEVEL & LOW-LEVEL BUS I/O (Embedded / OS Kernels)
+    # =========================================================================
+    DMA_TRANSFER = "dma_transfer"   # Offloading block moves to a Direct Memory Access controller
+    INTERRUPT_REQ = "interrupt_req" # Handling hardware signal events via ISRs
+    PORT_IN = "port_in"             # Reading from dedicated isolated hardware I/O ports
+    PORT_OUT = "port_out"           # Writing to dedicated isolated hardware I/O ports
+    MEM_MAPPED_IN = "mem_mapped_in" # Reading hardware states from mapped physical RAM space
+
+    # =========================================================================
+    # 5. MISSION-CRITICAL & VEHICLE SYSTEMS I/O (Planes, Ships, Aircraft)
+    # =========================================================================
+    BUS_BROADCAST = "bus_broadcast" # Sending telemetry over avionics/maritime buses (ARINC 429, CAN)
+    BUS_LISTEN = "bus_listen"       # Continuous interception of bus datagrams
+    ADC_SAMPLE = "adc_sample"       # Sampling physical realities via Analog-to-Digital converters
+    DAC_ACTUATE = "dac_actuate"     # Sending voltage commands via Digital-to-Analog converters
+    PWM_OUTPUT = "pwm_output"       # Generating high-frequency square waves for motor controls
+    SENSOR_POLL = "sensor_poll"     # Aggregating data across high-frequency IMUs, Radar, and Sonar
+    WATCHDOG_PING = "watchdog_ping" # Periodic heartbeat signal to clear safety timer circuits
 
 
 
