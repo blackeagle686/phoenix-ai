@@ -147,11 +147,11 @@ class FileContent(BaseModel):
     from_line: int = Field(..., description="1-indexed line number where this block starts")
     to_line: int = Field(..., description="1-indexed line number where this block ends (inclusive)")
     
-    # حرج جداً لأنظمة الـ AI والـ RAG
+    #  Token count and overlap
     token_count: Optional[int] = Field(None, description="Calculated LLM token count for this specific block")
     overlap_lines: int = Field(default=0, description="Number of lines duplicated from the previous block for context preservation")
     
-    # المعرفة الدلالية (Semantic Metadata)
+    # Semantic Metadata
     block_summary: Optional[str] = Field(None, description="AI-generated summary of this content block")
     vector_id: Optional[str] = Field(None, description="Reference ID if this block is embedded in a Vector Database")
 
@@ -160,23 +160,23 @@ class File(BaseModel):
     file_path: str = Field(..., description="Absolute or relative path to the file")
     file_type: str = Field(..., description="File extension or MIME type (e.g., 'py', 'json', 'txt')")
     
-    # الهيكل والتقسيم
+    # structure 
     content: List[FileContent] = Field(default_factory=list, description="Ordered list of segmented content blocks")
     total_lines: int = Field(..., description="Total line count of the source file")
     total_blocks: int = Field(..., description="Total number of split blocks")
     total_tokens: Optional[int] = Field(None, description="Aggregate token count of the entire file")
     
-    # سلامة البيانات والتحكم في النسخ (Data Integrity & Versioning)
+    # Data Integrity & Versioning
     file_hash: Optional[str] = Field(None, description="MD5/SHA256 checksum to detect external modifications")
     encoding: str = Field(default="utf-8", description="File text encoding (e.g., utf-8, ascii, utf-16)")
     
-    # الملخصات والسياق العام
+    # summary
     file_summary: Optional[str] = Field(None, description="High-level systemic summary of the overall file purpose")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Custom extensions like OS permissions, owner, or git branch")
 
     class Config:
         populate_by_name = True
-        
+
 #  Reading Schemas
 
 class FileReadTask(BaseModel):
