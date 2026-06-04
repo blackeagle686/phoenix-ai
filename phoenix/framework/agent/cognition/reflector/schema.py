@@ -19,4 +19,5 @@ class BaseReflectorMeta(BaseModel):
     reasoning: str = Field(..., description="reasoning of solution")
     
 
-class Re
+class ReflectorOutputSchema(BaseReflectorMeta):
+    pass
