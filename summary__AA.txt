@@ -1,0 +1,1 @@
+This file is a unit test suite for custom user-defined LLM models. It tests three scenarios: fast mode inference, plan mode with a custom agent loop, and streaming response handling. It uses Python's unittest framework with mocking to validate that custom models integrate correctly with the agent system.
