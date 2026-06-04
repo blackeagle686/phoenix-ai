@@ -245,10 +245,10 @@ class FileSearchTool(BaseTool):
     name = "file_search"
     description = "Searches for a query string or regex pattern in a file and returns FileSearchResult."
 
-    async def execute(self, file_path: str = None, search_query: str = None, is_regex: bool = False, case_sensitive: bool = False, path: str = None, pattern: str = None, **kwargs) -> ToolResult:
+    async def execute(self, file_path: str = None, search_query: str = None, is_regex: bool = False, case_sensitive: bool = False, path: str = None, pattern: str = None, query: str = None, **kwargs) -> ToolResult:
         try:
             target_path = file_path or path
-            query = search_query or pattern
+            final_query = search_query or pattern or query
             
             if not target_path:
                 return ToolResult(success=False, output=None, error="No file path provided to search.")
