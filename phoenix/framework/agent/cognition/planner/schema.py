@@ -125,8 +125,8 @@ class Problems(BaseModel):
     description: str = Field(..., description="problem description")
     solution: List[Solution] = Field(..., description="solution")
     best_solution: Solution = Field(..., description="best solution")
-    rateing: int = Field(..., description="rateing of solution")
-    feedback: str = Field(..., description="feedback")
+    rateing: int = Field(..., description="rateing of solution") # came from Reflector
+    feedback: str = Field(..., description="feedback") # came from Reflector
 
 
 class Task(BaseModel):
