@@ -102,9 +102,11 @@ class Prompt(BaseModel):
     system_message: str = Field(..., description="System message")
     tokens_length: int = Field(..., description="Tokens length")
 
+class SolutionType()
 
 class Solution(BaseModel):
-    id: UUI
+    id: UUID = Field(default_factory=uuid4, description="ID")
+    description: str = Field(..., description="solution description")
 
 class Problems(BaseModel): 
     id: UUID = Field(default_factory=uuid4, description="ID")
