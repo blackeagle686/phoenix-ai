@@ -25,69 +25,37 @@ class BasePlanner(ABC):
         self.task_store = task_store
         self.profile = profile
 
-    # ==========================================
-    # User Flow
-    # ==========================================
+    def build_planning_context(self, objective: str, previous_results: str, existing_tasks: Dict[str, Any]) -> str:
+        """Helper to build standard planning context string."""
+        context_parts = [f"OBJECTIVE: {objective}"]
+        if existing_tasks:
+            context_parts.append(f"EXISTING TASKS:\n{existing_tasks}")
+        if previous_results:
+            context_parts.append(f"PREVIOUS ACTION RESULTS:\n{previous_results}")
+        return "\n\n".join(context_parts)
+
+    async def load_task_file(self, task_file_id: str) -> Dict[str, Any]:
+        """Loads tasks from Redis task store."""
+        if self.task_store and hasattr(self.task_store, "get"):
+            return await self.task_store.get(f"task_file[{task_file_id}]") or {}
+        return {}
+
+    async def update_task_file(self, task_file_id: str, tasks: Dict[str, Any]):
+        """Saves tasks to Redis task store."""
+        if self.task_store and hasattr(self.task_store, "set"):
+            await self.task_store.set(f"task_file[{task_file_id}]", tasks)
+
     @abstractmethod
-    def user_input(self, prompt: Prompt) -> PlannerInputSchema: 
-        """Transforms a raw user Prompt into structured Planner input context."""
+    async def plan(self, objective: str, task_file_id: Optional[str] = None, previous_results: str = "") -> Dict[str, Any]:
+        """Core planning method to generate next actions."""
         pass
 
     @abstractmethod
-    def user_output(self, output: PlannerOutputSchema) -> str:
-        """Transforms the Planner's final state into a user-facing string response."""
-        pass
-
-    # ==========================================
-    # Actor Flow
-    # ==========================================
-    @abstractmethod
-    def actor_input(self, task: Task) -> BaseTaskInputSchema: 
-        """Prepares a strict execution schema to send to an Actor."""
+    async def create_task(self, objective: str, user_prompt: str) -> Task:
+        """Creates a structured task based on objective and prompt."""
         pass
 
     @abstractmethod
-    def actor_output(self, result: BaseTaskOutputSchema) -> Task:
-        """Processes the Actor's result and updates the internal Task state."""
+    def stream_thinking(self, objective: str, task_file_id: Optional[str] = None, previous_results: str = "") -> Any:
+        """Streams planner reasoning/thoughts before acting."""
         pass
-    
-    # ==========================================
-    # Reflector Flow
-    # ==========================================
-    @abstractmethod
-    def reflector_input(self, item: Union[Task, Problem, Solution]) -> Dict[str, Any]:
-        """Prepares data to send to the Reflector to evaluate a task, problem, or solution."""
-        pass 
-
-    @abstractmethod
-    def reflector_output(self, evaluation: BaseReflectorMeta) -> Union[Task, Problem, Solution]:
-        """Integrates Reflector feedback and ratings back into the original item."""
-        pass
-    
-    # ==========================================
-    # Analysis Flow
-    # ==========================================
-    @abstractmethod
-    def analysis_input(self, task: BaseFileTaskInputSchema) -> BaseFileTaskInputSchema:
-        """Prepares strict schema to read and understand files."""
-        pass 
-
-    @abstractmethod
-    def analysis_output(self, result: BaseFileTaskOutputSchema) -> BaseFileTaskOutputSchema:
-        """Processes the structured file analysis result."""
-        pass 
-
-    # ==========================================
-    # Builders
-    # ==========================================
-    @abstractmethod
-    def _task_builder(self, task_type: TaskType, **kwargs) -> Task: 
-        pass 
-
-    @abstractmethod
-    def _problem_builder(self, **kwargs) -> Problem: 
-        pass 
-
-    @abstractmethod
-    def _solution_builder(self, **kwargs) -> Solution: 
-        pass 
