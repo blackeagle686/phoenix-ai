@@ -324,6 +324,7 @@ class CodeCompileResult(BaseModel):
     error: Optional[str] = Field(None, description="Compilation or syntax error details if failed")
 
 
+
 class BaseFileMeta(BaseModel):
     file_path: str = Field(..., description="Path of the file")
     file_name: str = Field(..., description="Name of the file")
@@ -332,11 +333,17 @@ class BaseFileMeta(BaseModel):
     file_type: str = Field(..., description="Type of the file")
     last_modified_time: int = Field(..., description="Last modified time of the file in seconds since epoch")
 
+class FileUpdateStatus(str, Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+
 class FileUpdateMeta(BaseFileMeta):
     file_config: BaseFileConfig = Field(..., description="Configuration of the file")
     from_line: int = Field(..., description="Start line number of the file")
     to_line: int = Field(..., description="End line number of the file")
-    status:
+    status: str = Field(..., description="Status of the file")
+    
 
 class BaseTaskInputSchema(BaseModel):
     task_id: str = Field(..., description="Task ID")
