@@ -62,7 +62,11 @@ class TaskType(str, Enum):
     SENSOR_POLL = "sensor_poll"     # Aggregating data across high-frequency IMUs, Radar, and Sonar
     WATCHDOG_PING = "watchdog_ping" # Periodic heartbeat signal to clear safety timer circuits
 
-
+class TaskPriority(str, Enum):
+    CRITICAL = "critical"  # Real-time systems / Watchdogs
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
 
 class FileOperation(str, Enum):
     CREATE = "create"
