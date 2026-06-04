@@ -327,4 +327,5 @@ class CodeCompileResult(BaseModel):
 
 
 
-class Generator
+class GeneratorTask(BaseModel):
+    lang
