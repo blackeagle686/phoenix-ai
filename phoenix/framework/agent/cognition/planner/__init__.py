@@ -41,7 +41,6 @@ __all__ = [
     "Planner",
     "TaskStatus",
     "FileOperation",
-    "FileTask",
     "Task",
     "FileContent",
     "File",
