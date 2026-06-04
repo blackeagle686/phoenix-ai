@@ -207,8 +207,6 @@ class File(BaseModel):
     class Config:
         populate_by_name = True
 
-
-
 class BaseFileMeta(BaseModel):
     file_path: str = Field(..., description="Path of the file")
     file_name: str = Field(..., description="Name of the file")
