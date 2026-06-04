@@ -10,7 +10,7 @@ class TaskStatus(str, Enum):
     SKIPPED = "skipped"
 
 class TaskType(str, Enum): 
-    
+    File
 
 class FileOperation(str, Enum):
     CREATE = "create"
