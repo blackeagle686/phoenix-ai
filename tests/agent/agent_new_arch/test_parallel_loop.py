@@ -45,7 +45,7 @@ async def test_parallel_arch():
         os.remove(test_file)
         
     prompt = (
-        f"plz createa code of fibonacci function and run it to calc the 10th fibonacci number, code in python, run it using python3 command don't use any packd"
+        f"plz createa code of fibonacci function and run it to calc the 10th fibonacci number, code in python, run it using python3 command don't use any packdges"
         f"and write the exact result into a new file called {test_file} in the current directory."
     )
     
