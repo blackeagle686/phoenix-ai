@@ -170,7 +170,7 @@ class Task(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Timestamp when the task was initially queued")
     executed_at: Optional[datetime] = Field(None, description="Timestamp when the execution worker actually started processing")
 
-    
+    reflector_result: BaseReflectorMeta = Field(..., description="reflector result")
 
     class Config:
         use_enum_values = True  # Allows smooth JSON serialization when saving to DBs or sending over APIs
