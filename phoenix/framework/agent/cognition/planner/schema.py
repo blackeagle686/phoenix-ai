@@ -328,4 +328,5 @@ class CodeCompileResult(BaseModel):
 
 
 class GeneratorTask(BaseModel):
-    lang
+    language: str = Field(..., description="Programming language of the file to be generated")
+    description
