@@ -3,7 +3,6 @@ from .planner import Planner
 from .schema import (
     TaskStatus,
     FileOperation,
-    FileTask,
     Task,
     FileContent,
     File,
