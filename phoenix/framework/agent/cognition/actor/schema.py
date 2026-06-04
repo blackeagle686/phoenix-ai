@@ -16,14 +16,10 @@ from phoenix.framework.agent.cognition.reflector.schema import ReflectorInputSch
 # =========================================================================
 
 class BaseTaskInputSchema(BaseModel):
-    task_id: str = Field(..., description="Task ID")
-    task_description: str = Field(..., description="Task description")
-    task_type: TaskType = Field(..., description="Task type")
+    pass
 
 class BaseTaskOutputSchema(BaseModel):
-    task_id: str = Field(..., description="Task ID")
-    success: bool = Field(..., description="Whether the task execution was successful")
-    error: Optional[str] = Field(None, description="Error message if the task failed")
+    pass
 
 class BaseFileTaskInputSchema(BaseTaskInputSchema):
     file_meta: BaseFileMeta = Field(..., description="Meta information of the file")
