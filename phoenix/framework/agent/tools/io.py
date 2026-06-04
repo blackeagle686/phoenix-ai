@@ -2,7 +2,8 @@ from phoenix.framework.agent.tools.base import BaseTool, ToolResult
 import os
 import re
 from typing import List, Dict, Union, Optional, Any
-from phoenix.framework.agent.cognition.planner.schema import *
+from phoenix.framework.agent.cognition.planner.schema import FileContent
+from phoenix.framework.agent.cognition.actor.schema import *
 
 def get_file_content_blocks(file_path: str, block_size: int = 100) -> tuple[List[FileContent], int]:
     if not os.path.exists(file_path):

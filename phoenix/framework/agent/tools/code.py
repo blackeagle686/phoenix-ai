@@ -7,7 +7,7 @@ import sys
 import asyncio
 import py_compile
 from typing import Optional
-from phoenix.framework.agent.cognition.planner.schema import (
+from phoenix.framework.agent.cognition.actor.schema import (
     CodeExecutionResult,
     PythonAnalysisResult,
     PythonClassInfo,

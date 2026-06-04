@@ -1,7 +1,7 @@
 from phoenix.framework.agent.tools.base import BaseTool, ToolResult
 import os
 from typing import List, Dict, Union
-from phoenix.framework.agent.cognition.planner.schema import MultiBlockUpdateEdit, MultiBlockUpdateResult
+from phoenix.framework.agent.cognition.actor.schema import MultiBlockUpdateEdit, MultiBlockUpdateResult
 
 class MultiBlockUpdateTool(BaseTool):
     """
