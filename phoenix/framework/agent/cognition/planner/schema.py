@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Union
 from enum import Enum
-from uuid import UUID
+from uuid import UUID, uuid4
 
 class TaskStatus(str, Enum):
     PENDING = "pending"
@@ -104,6 +104,7 @@ class Prompt(BaseModel):
 
 class Problems(BaseModel): 
     id: UUID = Field(default_factory=uuid4, description="ID")
+    description: 
     
 
 class Task(BaseModel):
