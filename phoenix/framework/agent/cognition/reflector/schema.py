@@ -3,7 +3,14 @@ from typing import Dict, List, Optional, Union
 from enum import Enum
 from uuid import UUID, uuid4
 
-class Refle
+class ReflectorType(str, Enum):
+    TASK = "task"
+    PROBLEM = "problem"
+    SOLUTION = "solution"
+
+class ReflectorInputSchema(BaseModel):
+    reflector_type: ReflectorType = Field(..., description="type of reflector")
+    
 
 class BaseReflectorMeta(BaseModel):
     rateing: int = Field(..., description="rateing of solution")
