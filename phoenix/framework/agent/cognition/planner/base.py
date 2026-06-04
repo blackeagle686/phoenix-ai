@@ -10,6 +10,7 @@ class BasePlanner(ABC):
     def user_input(self): 
         pass
 
+
     def actor_input(self): 
         pass
 
