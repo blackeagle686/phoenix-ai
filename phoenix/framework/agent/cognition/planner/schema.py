@@ -200,3 +200,12 @@ class CodeCompileResult(BaseModel):
     file_path: str = Field(..., description="Path of checked file")
     success: bool = Field(..., description="Whether file compiles/checks with no errors")
     error: Optional[str] = Field(None, description="Compilation or syntax error details if failed")
+
+
+
+
+class UserPrompt(BaseModel):
+    user_objective: str = Field(..., description="User objective")
+    user_input: str = Field(..., description="User input")
+
+    
