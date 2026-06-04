@@ -151,7 +151,7 @@ class Task(BaseModel):
     description: str = Field(..., description="Verbose description detailing task goals") # description of the task
     task_summary: Optional[str] = Field(None, description="Post-execution summary populated after completion") # summary of the task
 
-    # handewith     
+    # handel with task   
     complexity: ProblemComplixity = Field(..., description="complixity") # complixity of the task agent specify this value
     problems: List[Problem] = Field(..., description="problems") # problems related to the task
     repeat_count: int = Field(1, description="Number of times the task should be repeated") # based on the task complixity agent specify this value 
