@@ -122,7 +122,8 @@ class Solution(BaseModel):
 class Problems(BaseModel): 
     id: UUID = Field(default_factory=uuid4, description="ID")
     description: str = Field(..., description="problem description")
-    solution: Solution = Field(..., description="solution")
+    solution: List[Solution] = Field(..., description="solution")
+    best_solution: Solution = Field(..., description="best solution")
     
 
 class Task(BaseModel):
