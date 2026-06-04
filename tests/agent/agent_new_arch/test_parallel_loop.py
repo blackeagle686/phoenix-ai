@@ -2,8 +2,8 @@ import asyncio
 import os
 import sys
 
-# Add the project root to sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
+# Add the project root to sys.path (insert at index 0 to override installed packages)
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
 
 from phoenix.framework.agent.core.agent import Agent
 from phoenix.services.llm.openai import OpenAILLM
