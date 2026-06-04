@@ -48,7 +48,9 @@ async def test_file_read():
         
     prompt = (
         f"Please read the file 'tests/agent/test_custom_user_model.py' and "
-        f"write a very brief summary of what the file does into a new file called '{test_file}'."
+        f"write a very brief summary of what the file does into a new file called '{test_file}'. "
+        f"Crucially, make sure you output strictly valid JSON when generating the plan, "
+        f"and use the 'file_write' tool (not file_edit) to create the new file."
     )
     
     print("\n" + "-"*40)
