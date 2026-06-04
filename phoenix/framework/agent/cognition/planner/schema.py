@@ -132,8 +132,8 @@ class Problem(BaseModel):
     description: str = Field(..., description="problem description") # agent describe the user problem in this field based on the task
     solution: List[Solution] = Field(..., description="solution") # all solutions proposed by the planner
     best_solution: Solution = Field(..., description="best solution") # based one solutions rateing 
+    complixity: ProblemComplixity = Field(..., description="complixity")
     reflector_result: BaseReflectorMeta = Field(..., description="reflector result")
-    
 
 class Task(BaseModel):
     # Identifiers & Relationships
