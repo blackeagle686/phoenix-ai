@@ -337,6 +337,7 @@ class BaseTaskInputSchema(BaseModel):
     task_id: str = Field(..., description="Task ID")
     task_description: str = Field(..., description="Task description")
     task_type: str = Field(..., description="Task type")
+    file_meta: BaseFileMeta = Field(..., description="Meta information of the file")
 
 
 class BaseTaskOutputSchema(BaseModel): 
