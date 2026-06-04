@@ -117,6 +117,7 @@ class Solution(BaseModel):
     description: str = Field(..., description="solution description")
     solution_type: SolutionType = Field(..., description="Type of solution")
     content: str = Field(..., description="solution content")
+    
 
 class Problems(BaseModel): 
     id: UUID = Field(default_factory=uuid4, description="ID")
