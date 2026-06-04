@@ -2,7 +2,8 @@ from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Union
 from enum import Enum
 from uuid import UUID, uuid4
-from reflector import 
+from reflector import BaseReflectorSchema
+
 class TaskStatus(str, Enum):
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
