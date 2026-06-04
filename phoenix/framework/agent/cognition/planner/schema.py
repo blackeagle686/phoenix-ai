@@ -36,6 +36,7 @@ class Prompt(BaseModel):
 class Task(BaseModel):
     prompt_id: UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the prompt")
     task_id: str = Field(..., description="Unique identifier for the task")
+    task_title
     task_summary: Optional[str] = Field(None, description="Summary of the task")
     description: str = Field(..., description="Description of the task")
     dependencies: List[str] = Field(default_factory=list, description="List of task IDs that must be completed before this task")
