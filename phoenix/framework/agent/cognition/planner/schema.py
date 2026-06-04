@@ -206,5 +206,5 @@ class CodeCompileResult(BaseModel):
 
 
 class UserPrompt(BaseModel):
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the user prompt")
+    id: UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the user prompt")
     
