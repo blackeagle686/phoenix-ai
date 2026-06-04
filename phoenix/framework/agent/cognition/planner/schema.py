@@ -102,7 +102,8 @@ class Prompt(BaseModel):
     system_message: str = Field(..., description="System message")
     tokens_length: int = Field(..., description="Tokens length")
 
-class Pro
+class Problems(BaseModel): 
+    id: UUID 
 
 class Task(BaseModel):
     # Identifiers & Relationships
