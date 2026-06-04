@@ -327,3 +327,4 @@ class CodeCompileResult(BaseModel):
 
 
 
+class Generator
