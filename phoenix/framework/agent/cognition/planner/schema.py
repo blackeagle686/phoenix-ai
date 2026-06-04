@@ -124,7 +124,7 @@ class Problems(BaseModel):
     id: UUID = Field(default_factory=uuid4, description="ID")
     description: str = Field(..., description="problem description")
     solution: List[Solution] = Field(..., description="solution")
-    best_solution: Solution = Field(..., description="best solution")
+    best_solution: Solution = Field(..., description="best solution") # based one solutions rateing 
     rateing: int = Field(..., description="rateing of solution") # came from Reflector
     feedback: str = Field(..., description="feedback") # came from Reflector
 
