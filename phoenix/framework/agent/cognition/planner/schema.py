@@ -324,13 +324,13 @@ class CodeCompileResult(BaseModel):
     error: Optional[str] = Field(None, description="Compilation or syntax error details if failed")
 
 
+class BaseFileC
 
 class BaseTaskInputSchema(BaseModel):
     task_id: str = Field(..., description="Task ID")
     task_description: str = Field(..., description="Task description")
     task_type: str = Field(..., description="Task type")
 
-    file
 
 class BaseTaskOutputSchema(BaseModel): 
 
