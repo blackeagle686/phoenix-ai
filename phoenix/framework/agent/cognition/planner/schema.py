@@ -25,6 +25,14 @@ class FileTask(BaseModel):
     search_query: Optional[str] = Field(None, description="Search query for search operation")
     replace_query: Optional[str] = Field(None, description="Replacement query for search operation")
 
+class Prompt(BaseModel):
+    id: UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the user prompt")
+    user_id: UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the user")
+    project_id: UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the project")
+    user_message: str = Field(..., description="User message")
+    system_message: str = Field(..., description="System message")
+    tokens_length: int = Field(..., description="Tokens length")
+
 class Task(BaseModel):
     task_id: str = Field(..., description="Unique identifier for the task")
     task_summary: Optional[str] = Field(None, description="Summary of the task")
@@ -205,11 +213,4 @@ class CodeCompileResult(BaseModel):
 
 
 
-class Prompt(BaseModel):
-    id: UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the user prompt")
-    user_id: UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the user")
-    project_id: UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the project")
-    user_message: str = Field(..., description="User message")
-    system_message: str = Field(..., description="System message")
-    tokens_length: int = Field(..., description="Tokens length")
 
