@@ -282,11 +282,11 @@ class FileSearchTool(BaseTool):
                     
                     if is_regex:
                         flags = 0 if case_sensitive else re.IGNORECASE
-                        if re.search(query, line_content, flags):
+                        if re.search(final_query, line_content, flags):
                             match_found = True
                     else:
                         if case_sensitive:
-                            if query in line_content:
+                            if final_query in line_content:
                                 match_found = True
                         else:
                             if query.lower() in line_content.lower():
