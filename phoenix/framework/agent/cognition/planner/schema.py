@@ -105,7 +105,10 @@ class Prompt(BaseModel):
 class SolutionType(str, Enum): 
     PLAN = "plan"
     CODE = "code"
-    TERM
+    TERMINAL = "terminal"
+    NETWORK = "network"
+    Mission = "mission"
+    
 
 class Solution(BaseModel):
     id: UUID = Field(default_factory=uuid4, description="ID")
