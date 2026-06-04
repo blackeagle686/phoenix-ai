@@ -342,11 +342,17 @@ class FileUpdateStatus(str, Enum):
 
 
 class FileUpdateMeta(BaseFileMeta):
-    file_config: BaseFileConfig = Field(..., description="Configuration of the file")
+    file_meta: BaseFileMeta = Field(..., description="Configuration of the file")
     from_line: int = Field(..., description="Start line number of the file")
     to_line: int = Field(..., description="End line number of the file")
     status: FileUpdateStatus = Field(..., description="Status of the file update")
-    confide
+
+class FileSearchMeta(BaseModel): 
+    file_meta: BaseFileMeta = Field(..., description="Configuration of the file")
+    search_query: str = Field(..., description="Search query")
+    search_results: List[str] = Field(..., description="Search results")
+    search_summary: str = Field(..., description="Summary of search results")
+
 
 
 class BaseTaskInputSchema(BaseModel):
