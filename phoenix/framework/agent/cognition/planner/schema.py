@@ -118,12 +118,12 @@ class Solution(BaseModel):
     solution_type: SolutionType = Field(..., description="Type of solution")
     content: str = Field(..., description="solution content")
     rateing: int = Field(..., description="rateing of solution")
-    feedback: str = Field(..., description="feedback of solution")
+    feedback: str = Field(..., description="feedback of solution") # from refe
 
 class Problems(BaseModel): 
-    id: UUID = Field(default_factory=uuid4, description="ID")
-    description: str = Field(..., description="problem description")
-    solution: List[Solution] = Field(..., description="solution")
+    id: UUID = Field(default_factory=uuid4, description="ID") 
+    description: str = Field(..., description="problem description") # agent describe the user problem in this field based on the task
+    solution: List[Solution] = Field(..., description="solution") # all solutions proposed by the planner
     best_solution: Solution = Field(..., description="best solution") # based one solutions rateing 
     rateing: int = Field(..., description="rateing of solution") # came from Reflector
     feedback: str = Field(..., description="feedback") # came from Reflector
