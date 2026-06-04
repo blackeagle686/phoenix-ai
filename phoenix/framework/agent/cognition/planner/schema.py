@@ -337,12 +337,15 @@ class FileUpdateStatus(str, Enum):
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     DONE = "done"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
 
 class FileUpdateMeta(BaseFileMeta):
     file_config: BaseFileConfig = Field(..., description="Configuration of the file")
     from_line: int = Field(..., description="Start line number of the file")
     to_line: int = Field(..., description="End line number of the file")
-    status: str = Field(..., description="Status of the file")
+    status: FileUpdateStatus = Field(..., description="Status of the file")
     
 
 class BaseTaskInputSchema(BaseModel):
