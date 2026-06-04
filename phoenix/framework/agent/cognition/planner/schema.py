@@ -103,7 +103,7 @@ class Prompt(BaseModel):
     tokens_length: int = Field(..., description="Tokens length")
 
 class Problems(BaseModel): 
-    id: UUID = Field(default_factory=UUID, description="ID")
+    id: UUID = Field(default_factory=uuid4, description="ID")
     
 
 class Task(BaseModel):
