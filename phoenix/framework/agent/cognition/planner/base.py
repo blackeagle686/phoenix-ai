@@ -14,14 +14,14 @@ class BasePlanner(ABC):
     def __init__(
         self, 
         llm: Any, 
-        memory: Any, 
         tools: Optional[Any] = None, 
+        memory: Optional[Any] = None,
         task_store: Optional[Any] = None, 
         profile: Optional[Any] = None
     ):
         self.llm = llm 
-        self.memory = memory 
         self.tools = tools
+        self.memory = memory 
         self.task_store = task_store
         self.profile = profile
 
