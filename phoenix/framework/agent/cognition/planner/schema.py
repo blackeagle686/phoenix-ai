@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Union
 from enum import Enum
+from uuid import UUID
 
 class TaskStatus(str, Enum):
     PENDING = "pending"
@@ -205,5 +206,5 @@ class CodeCompileResult(BaseModel):
 
 
 class UserPrompt(BaseModel):
-    id
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, description="Unique identifier for the user prompt")
     
