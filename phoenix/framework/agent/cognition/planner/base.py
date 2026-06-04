@@ -1,156 +1,91 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, AsyncGenerator, List, Optional
-from .schema import * 
+from typing import Dict, Any, List, Optional, Union
+from phoenix.framework.agent.cognition.planner.schema import (
+    Prompt, PlannerInputSchema, PlannerOutputSchema,
+    Task, TaskType, Problem, Solution,
+    BaseTaskInputSchema, BaseTaskOutputSchema,
+    BaseFileTaskInputSchema, BaseFileTaskOutputSchema
+)
+from phoenix.framework.agent.cognition.reflector.schema import BaseReflectorMeta
 
 class BasePlanner(ABC): 
-    def __init__(self, llm, memory):
+    def __init__(
+        self, 
+        llm: Any, 
+        memory: Any, 
+        tools: Optional[Any] = None, 
+        task_store: Optional[Any] = None, 
+        profile: Optional[Any] = None
+    ):
         self.llm = llm 
         self.memory = memory 
-
-    def user_input(self, prompt:Prompt): 
-        pass
-
-    def actor_input(self, ): 
-        pass
-
-    def reflector_input(self):
-        pass 
-
-    def user_output(self):
-        pass
-
-    def actor_output(self):
-        pass
-    
-    def reflector_output(self):
-        pass
-    
-    def analysis_input(self): 
-        pass 
-
-    def analysis_output(self): 
-        pass 
-
-    def __task_builder(self, task_type): 
-        pass 
-
-    def __problem_builder(self): 
-        pass 
-
-    def __solution_builder(self): 
-        pass 
-
-    
-
-class BasePlanner(ABC):
-    def __init__(self, llm, tools, task_store=None, profile: Any = None):
-        self.llm = llm
         self.tools = tools
-        self.task_store = task_store  # 👈 NEW (memory/task system)
+        self.task_store = task_store
         self.profile = profile
 
-    # =========================
-    # Core Planning
-    # =========================
-
+    # ==========================================
+    # User Flow
+    # ==========================================
     @abstractmethod
-    async def plan(
-        self,
-        objective: str,
-        task_file_id: Optional[str] = None,
-        previous_results: str = ""
-    ) -> Dict[str, Any]:
-        """
-        Generate or update plan based on:
-        - objective
-        - existing task file (stateful planning)
-        """
+    def user_input(self, prompt: Prompt) -> PlannerInputSchema: 
+        """Transforms a raw user Prompt into structured Planner input context."""
         pass
 
-    # =========================
-    # Streaming Thinking
-    # =========================
-
     @abstractmethod
-    async def stream_thinking(
-        self,
-        objective: str,
-        task_file_id: Optional[str] = None,
-        previous_results: str = ""
-    ) -> AsyncGenerator[str, None]:
+    def user_output(self, output: PlannerOutputSchema) -> str:
+        """Transforms the Planner's final state into a user-facing string response."""
         pass
 
-    # =========================
-    # Task File Integration Layer
-    # =========================
+    # ==========================================
+    # Actor Flow
+    # ==========================================
+    @abstractmethod
+    def actor_input(self, task: Task) -> BaseTaskInputSchema: 
+        """Prepares a strict execution schema to send to an Actor."""
+        pass
 
-    async def load_task_file(self, task_file_id: str) -> Dict[str, Any]:
-        """
-        Load existing task state from memory/store
-        """
-        if not self.task_store:
-            return {}
+    @abstractmethod
+    def actor_output(self, result: BaseTaskOutputSchema) -> Task:
+        """Processes the Actor's result and updates the internal Task state."""
+        pass
+    
+    # ==========================================
+    # Reflector Flow
+    # ==========================================
+    @abstractmethod
+    def reflector_input(self, item: Union[Task, Problem, Solution]) -> Dict[str, Any]:
+        """Prepares data to send to the Reflector to evaluate a task, problem, or solution."""
+        pass 
 
-        return await self.task_store.get(task_file_id)
+    @abstractmethod
+    def reflector_output(self, evaluation: BaseReflectorMeta) -> Union[Task, Problem, Solution]:
+        """Integrates Reflector feedback and ratings back into the original item."""
+        pass
+    
+    # ==========================================
+    # Analysis Flow
+    # ==========================================
+    @abstractmethod
+    def analysis_input(self, task: BaseFileTaskInputSchema) -> BaseFileTaskInputSchema:
+        """Prepares strict schema to read and understand files."""
+        pass 
 
-    async def update_task_file(
-        self,
-        task_file_id: str,
-        tasks: Dict[str, Any]
-    ) -> None:
-        """
-        Persist updated task state
-        """
-        if not self.task_store:
-            return
+    @abstractmethod
+    def analysis_output(self, result: BaseFileTaskOutputSchema) -> BaseFileTaskOutputSchema:
+        """Processes the structured file analysis result."""
+        pass 
 
-        await self.task_store.update(task_file_id, tasks)
+    # ==========================================
+    # Builders
+    # ==========================================
+    @abstractmethod
+    def _task_builder(self, task_type: TaskType, **kwargs) -> Task: 
+        pass 
 
-    # =========================
-    # Task State Helpers
-    # =========================
+    @abstractmethod
+    def _problem_builder(self, **kwargs) -> Problem: 
+        pass 
 
-    def filter_pending_tasks(self, tasks: Dict[str, Any]) -> Dict[str, Any]:
-        return {
-            k: v for k, v in tasks.items()
-            if v.get("status") == "pending"
-        }
-
-    def get_in_progress_tasks(self, tasks: Dict[str, Any]) -> Dict[str, Any]:
-        return {
-            k: v for k, v in tasks.items()
-            if v.get("status") == "in_progress"
-        }
-
-    def mark_task_done(self, tasks: Dict[str, Any], task_id: str):
-        if task_id in tasks:
-            tasks[task_id]["status"] = "done"
-
-    # =========================
-    # Context Builder
-    # =========================
-
-    def build_planning_context(
-        self,
-        objective: str,
-        previous_results: str,
-        existing_tasks: Dict[str, Any]
-    ) -> str:
-
-        return f"""
-OBJECTIVE:
-{objective}
-
-PREVIOUS RESULTS:
-{previous_results}
-
-EXISTING TASK STATE:
-{existing_tasks}
-
-INSTRUCTIONS:
-- Continue from existing tasks if available
-- Do NOT recreate completed tasks
-- Update only necessary tasks
-- Add new tasks only if required
-"""
-
+    @abstractmethod
+    def _solution_builder(self, **kwargs) -> Solution: 
+        pass 
