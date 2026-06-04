@@ -341,7 +341,7 @@ class FileUpdateStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-class FileUpdateMeta(BaseFileMeta):
+class FileIOMeta(BaseFileMeta):
     file_meta: BaseFileMeta = Field(..., description="Configuration of the file")
     from_line: int = Field(..., description="Start line number of the file")
     to_line: int = Field(..., description="End line number of the file")
