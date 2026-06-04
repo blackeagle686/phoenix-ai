@@ -102,6 +102,8 @@ class Prompt(BaseModel):
     system_message: str = Field(..., description="System message")
     tokens_length: int = Field(..., description="Tokens length")
 
+class Pro
+
 class Task(BaseModel):
     # Identifiers & Relationships
     prompt_id: UUID = Field(default_factory=uuid4, description="Unique identifier for the parent session/prompt request")
