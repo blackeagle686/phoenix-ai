@@ -1,0 +1,1 @@
+This file contains unit tests for a custom user model integration with an agent framework. It includes a custom LLM class (UserCustomLLM) and a custom loop class (CustomLoop), along with three test methods that validate the custom model in fast mode, plan mode with custom loop, and streaming path.
