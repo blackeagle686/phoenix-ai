@@ -105,31 +105,31 @@ class Prompt(BaseModel):
     tokens_length: int = Field(..., description="Tokens length")
 
 class Task(BaseModel):
-    # --- Identifiers & Relationships ---
+    # Identifiers & Relationships
     prompt_id: UUID = Field(default_factory=uuid4, description="Unique identifier for the parent session/prompt request")
     task_id: str = Field(..., description="Unique deterministic identifier for this specific task")
     dependencies: List[str] = Field(default_factory=list, description="List of task_ids that must complete successfully first")
     
-    # --- Strongly Typed Meta Elements ---
+    # Strongly Typed Meta Elements
     task_type: TaskType = Field(..., description="The specific systemic I/O operation archetype")
     priority: TaskPriority = Field(default=TaskPriority.MEDIUM, description="The execution urgency tier")
     status: TaskStatus = Field(default=TaskStatus.PENDING, description="Current workflow state machine status")
     
-    # --- Descriptive Data (For Humans & LLM Reasoning) ---
+    # Descriptive Data (For Humans & LLM Reasoning)
     task_title: str = Field(..., description="Short title of the task")
     description: str = Field(..., description="Verbose description detailing task goals")
     task_summary: Optional[str] = Field(None, description="Post-execution summary populated after completion")
     
-    # --- Execution Data (The Machine-Readable Payload) ---
+    # Execution Data (The Machine-Readable Payload)
     payload: Dict[str, Any] = Field(default_factory=dict, description="Input parameters required by the driver (e.g., {'ip': '127.0.0.1', 'bytes': b'...'})")
     result: Optional[Dict[str, Any]] = Field(None, description="Output returned by the executing module/driver")
     error: Optional[str] = Field(None, description="Error tracking message if status shifts to FAILED")
 
-    # --- Routing & Governance ---
+    # Routing & Governance
     created_by: str = Field(..., description="The identifier of the agent/orchestrator that generated this task")
     assigned_to: Optional[str] = Field(None, description="The targeted agent, execution worker pool, or hardware driver")
     
-    # --- Time Guarantees (SLA / Deadlines) ---
+    # Time Guarantees (SLA / Deadlines)
     timeout: float = Field(default=30.0, description="Max execution time window in seconds before the task is forcefully killed")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Timestamp when the task was initially queued")
     executed_at: Optional[datetime] = Field(None, description="Timestamp when the execution worker actually started processing")
