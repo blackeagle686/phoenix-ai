@@ -104,7 +104,7 @@ class Prompt(BaseModel):
 
 class Problems(BaseModel): 
     id: UUID = Field(default_factory=uuid4, description="ID")
-    description: str = Feiled()
+    description: str = Field(..., )
     
 
 class Task(BaseModel):
