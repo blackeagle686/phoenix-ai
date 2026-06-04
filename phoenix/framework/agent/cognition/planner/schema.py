@@ -327,7 +327,11 @@ class CodeCompileResult(BaseModel):
 class BaseFileMeta(BaseModel):
     file_path: str = Field(..., description="Path of the file")
     file_name: str = Field(..., description="Name of the file")
-    line
+    lines_count: int = Field(..., description="Number of lines in the file")
+    file_size: int = Field(..., description="Size of the file in bytes")
+    file_type: str = Field(..., description="Type of the file")
+    last_modified_time: int = Field(..., description="Last modified time of the file in seconds since epoch")
+
 
 class BaseTaskInputSchema(BaseModel):
     task_id: str = Field(..., description="Task ID")
