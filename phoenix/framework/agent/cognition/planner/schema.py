@@ -45,6 +45,7 @@ class Task(BaseModel):
     task_summary: str = Field(None, description="Summary of the task")
 
 
+
 class FileContent(BaseModel):
     file_path: str = Field(..., description="Path to the file")
     content_block: str = Field(..., description="Content of this specific block")
