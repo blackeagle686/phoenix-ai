@@ -43,12 +43,12 @@ class TaskCreator:
 
         Respond ONLY in valid JSON matching this exact structure (no comments):
         {{
-            "description": "Clear description of the core problem to solve",
+            "description": "A very brief, 1-sentence description of the core problem",
             "complexity": "low",
             "best_solution_index": 0
         }}
         """
-        response = await self.llm.generate(prompt, max_tokens=8000)
+        response = await self.llm.generate(prompt, max_tokens=300)
         data = parse_llm_json(response) or {}
         
         desc = data.get("description", f"Problem for objective: {objective}")
@@ -81,8 +81,8 @@ class TaskCreator:
 
     async def create_solution(self, problem: Problem, variant_index: int = 1) -> Solution:
         prompt = f"""
-        Given the following problem, generate a detailed and highly effective solution.
-        This is solution variant #{variant_index}. Please provide a unique approach.
+        Given the following problem, generate a concise strategy to solve it. DO NOT WRITE CODE. 
+        This is solution variant #{variant_index}. Provide a unique, high-level approach.
         
         Problem Description: {problem.description}
         Complexity: {problem.complexity.value}
@@ -91,12 +91,12 @@ class TaskCreator:
         
         Respond ONLY in valid JSON matching this exact structure (no comments):
         {{
-            "description": "Short description of the solution",
+            "description": "A very short, 1-sentence description of the solution",
             "solution_type": "plan",
-            "content": "Detailed steps or code to solve the problem"
+            "content": "A high-level outline of the approach (max 3 bullet points, NO CODE)."
         }}
         """
-        response = await self.llm.generate(prompt, max_tokens=8000)
+        response = await self.llm.generate(prompt, max_tokens=500)
         data = parse_llm_json(response) or {}
         
         print(f"DEBUG - LLM Raw Response for create_solution (Variant {variant_index}):\n{response}\n")
@@ -156,15 +156,15 @@ class TaskCreator:
 
         Respond ONLY in valid JSON matching this exact structure (no comments):
         {{
-            "task_title": "Short descriptive title",
-            "description": "Detailed description of what needs to be done",
+            "task_title": "Short descriptive title (max 5 words)",
+            "description": "Brief, actionable description of the task (1-2 sentences)",
             "task_type": "other",
             "priority": "medium",
             "dependencies": [],
             "tools_required": ["tool_name1", "tool_name2"]
         }}
         """
-        response = await self.llm.generate(prompt, max_tokens=8000)
+        response = await self.llm.generate(prompt, max_tokens=500)
         data = parse_llm_json(response) or {}
 
         ttype_str = data.get("task_type", "other").lower()
