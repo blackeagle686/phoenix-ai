@@ -232,8 +232,8 @@ if __name__ == "__main__":
         print("\n" + "="*60)
         print("🎯 GENERATED TASK (Readable Format)")
         print("="*60)
-        # Pydantic's .json() automatically handles UUIDs and Enums
-        print(task.json(indent=4))
+        # Pydantic V2 .model_dump_json() handles UUIDs and Enums
+        print(task.model_dump_json(indent=4))
         print("="*60 + "\n")
 
     asyncio.run(run_test())
