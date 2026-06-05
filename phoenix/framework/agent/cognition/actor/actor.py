@@ -168,6 +168,7 @@ if __name__ == "__main__":
         actor = Actor(tool_manager=tool_manager, llm=llm)
         
         # Create a mock Task
+        from phoenix.framework.agent.cognition.reflector.schema import BaseReflectorMeta
         mock_task = Task(
             prompt_id=uuid4(),
             task_id=str(uuid4()),
@@ -183,7 +184,8 @@ if __name__ == "__main__":
             priority="medium",
             complexity="medium",
             created_by="Test",
-            problems=[]
+            problems=[],
+            reflector_result=BaseReflectorMeta(rating=5, feedback="Mock", confidence=1.0, reasoning="Test")
         )
         
         print("Starting Actor.generate_and_execute test...")
