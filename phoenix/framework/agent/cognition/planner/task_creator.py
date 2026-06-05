@@ -241,7 +241,7 @@ if __name__ == "__main__":
         mock_tools = MockTools()
         test_task = TaskCreator(llm=llm, tools=mock_tools)
         
-        objective = "Hello my name is TK Create a python code that create an express server"
+        objective = "create a modular "
         prompt = "hello"
         task = await test_task.create_task(objective, prompt)
         
