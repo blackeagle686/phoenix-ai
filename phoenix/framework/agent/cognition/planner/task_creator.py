@@ -57,20 +57,6 @@ class TaskCreator:
             complexity = ProblemComplexity.MEDIUM
 
         solutions = []
-        for s in sols_data:
-            stype_str = s.get("solution_type", "other").lower()
-            try:
-                stype = SolutionType(stype_str)
-            except ValueError:
-                stype = SolutionType.OTHER
-                
-            solutions.append(Solution(
-                id=uuid4(),
-                description=s.get("description", "A potential solution"),
-                solution_type=stype,
-                content=s.get("content", "Solution details"),
-                reflector_result=self._get_default_reflector()
-            ))
 
         if not solutions:
             solutions.append(Solution(
