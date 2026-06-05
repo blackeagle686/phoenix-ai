@@ -58,9 +58,6 @@ class TaskCreator:
 
         solutions = []
 
-        best_idx = data.get("best_solution_index", 0)
-        if not isinstance(best_idx, int) or best_idx < 0 or best_idx >= len(solutions):
-            best_idx = 0
             
         best_solution = solutions[best_idx]
 
