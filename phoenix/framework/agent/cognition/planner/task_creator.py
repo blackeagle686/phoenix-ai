@@ -12,6 +12,8 @@ from phoenix.framework.agent.cognition.planner.schema import (
     Problem, Solution, Task, TaskType, TaskPriority, TaskStatus, 
     SolutionType, ProblemComplexity
 )
+from phoenix.framework.agent.cognition.planner.schema import * 
+
 from phoenix.framework.agent.cognition.reflector.schema import BaseReflectorMeta
 from phoenix.framework.agent.cognition.utils import parse_llm_json
 
