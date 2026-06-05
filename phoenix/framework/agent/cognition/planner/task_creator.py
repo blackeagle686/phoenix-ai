@@ -60,11 +60,19 @@ class TaskCreator:
 
         solutions = []
 
+        dummy_solution = Solution(
+            id=uuid4(),
+            description="Pending solution generation",
+            solution_type=SolutionType.PLAN,
+            content="Pending content",
+            reflector_result=self._get_default_reflector()
+        )
+
         problem = Problem(
             id=uuid4(),
             description=desc,
             solution=solutions,
-            best_solution=None,
+            best_solution=dummy_solution,
             complexity=complexity,
             reflector_result=self._get_default_reflector()
         )
