@@ -45,7 +45,7 @@ async def test_parallel_arch():
         os.remove(test_file)
         
     prompt = (
-        f"plz createa a simple wallet web app frontend using modular folder and files archticture, just use html, "
+        f"plz createa a simple wallet web app frontend using modular folder and files archticture, just use html, css, boostatrap for edain and for static logic use js , add some mock data for the pages of the wallet"
         
     )
     
