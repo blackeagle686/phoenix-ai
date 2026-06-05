@@ -228,6 +228,12 @@ if __name__ == "__main__":
         objective = "Hello my name is TK"
         prompt = "Hi create a simple python code that prints my name"
         task = await test_task.create_task(objective, prompt)
-        print(task)
+        
+        print("\n" + "="*60)
+        print("🎯 GENERATED TASK (Readable Format)")
+        print("="*60)
+        # Pydantic's .json() automatically handles UUIDs and Enums
+        print(task.json(indent=4))
+        print("="*60 + "\n")
 
     asyncio.run(run_test())
