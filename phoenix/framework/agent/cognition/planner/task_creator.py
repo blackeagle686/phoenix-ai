@@ -5,10 +5,10 @@
 """
 
 class TaskCreator:
-    def __init__(self, llm: Any, tools: Optional[Any] = None, ):
+    def __init__(self, llm: Any, tools: Optional[Any] = None, cache ):
         self.llm = llm
         self.tools = tools
-        
+
 
     async def create_problem(self, objective: str) -> Problem:
         pass
