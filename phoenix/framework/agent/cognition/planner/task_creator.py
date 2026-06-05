@@ -6,7 +6,26 @@
 
 
 class TaskMemory: 
-    def __init__(self )
+    def __init__(self, memory:Optional[Any] = None):
+        self.memory = memory
+
+    def get(self, key: str) -> Optional[Any]:
+        pass
+
+    def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
+        pass
+
+    def delete(self, key: str) -> None:
+        pass
+
+    def keys(self, pattern: str = "*") -> List[str]:
+        pass
+
+    def get_all(self, pattern: str = "*") -> Dict[str, Any]:
+        pass
+
+    def update(self, key: str, value: Dict[str, Any]) -> None:
+        pass
 
 class TaskCreator:
     def __init__(self, llm: Any, tools: Optional[Any] = None, cache: Optional[Any] = None ):
