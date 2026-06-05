@@ -102,6 +102,7 @@ class TaskCreator:
     async def solve_all_porblems(self, solutions_count_for_each_porblem=3): 
         solutions = []
         for problem in self.problems:
+            for 
             solution = await self.create_solution(problem)
             solutions.append(solution)
 
