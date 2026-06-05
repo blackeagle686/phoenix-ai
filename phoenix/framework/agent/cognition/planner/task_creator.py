@@ -207,6 +207,13 @@ class TaskCreator:
         return task
 
 if __name__ == "__main__":
+    import sys
+    import os
+    import asyncio
+    
+    # Add the project root to sys.path so 'phoenix' can be imported
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../../")))
+    
     from phoenix.services.llm.openai import OpenAILLM
 
     llm = OpenAILLM(
@@ -215,11 +222,11 @@ if __name__ == "__main__":
         base_url="https://api.longcat.chat/openai"
     )
 
-    test_task = TaskCreator(llm=llm)
-    objective = "Hello my name is TK"
-    prompt = "Hi create a simple python code that prints my name"
-    task = test_task.create_task(objective, prompt)
-    print(task)
+    async def run_test():
+        test_task = TaskCreator(llm=llm)
+        objective = "Hello my name is TK"
+        prompt = "Hi create a simple python code that prints my name"
+        task = await test_task.create_task(objective, prompt)
+        print(task)
 
-    # 
-    
+    asyncio.run(run_test())
