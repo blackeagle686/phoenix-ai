@@ -21,7 +21,7 @@ class TaskCreator:
         self.llm = llm
         self.tools = tools
         self.cache = cache
-        self.problems = {}
+        self.problems = []
         if not cache: 
             self.memory = {}
 
@@ -39,10 +39,12 @@ class TaskCreator:
         Given the following objective, identify the core problem and propose potential solutions.
         Objective: {objective}
 
-        Respond ONLY in valid JSON matching this structure:
+        Valid complexity values: "low", "medium", "high", "extreme"
+
+        Respond ONLY in valid JSON matching this exact structure (no comments):
         {{
             "description": "Clear description of the core problem to solve",
-            "complexity": "low", // one of: low, medium, high, extreme
+            "complexity": "low",
             "best_solution_index": 0
         }}
         """
@@ -75,10 +77,12 @@ class TaskCreator:
         Problem Description: {problem.description}
         Complexity: {problem.complexity.value}
         
-        Respond ONLY in valid JSON matching this structure:
+        Valid solution_type values: "plan", "code", "terminal", "network", "mission", "fastanswer", "other"
+        
+        Respond ONLY in valid JSON matching this exact structure (no comments):
         {{
             "description": "Short description of the solution",
-            "solution_type": "plan", // one of: plan, code, terminal, network, mission, fastanswer, other
+            "solution_type": "plan",
             "content": "Detailed steps or code to solve the problem"
         }}
         """
@@ -99,18 +103,21 @@ class TaskCreator:
             reflector_result=self._get_default_reflector()
         )
 
-    async def solve_all_porblems(self, solutions_count_for_each_porblem=3): 
+    async def solve_all_problems(self, solutions_count_for_each_problem=3): 
+        import asyncio
         for problem in self.problems:
-            solutions = []
-            for sol_len in range(solutions_count_for_each_porblem):
-                solution = await self.create_solution(problem)
-                solutions.append(solution)
-            problem.solutions = solutions
-      
+            tasks = [self.create_solution(problem) for _ in range(solutions_count_for_each_problem)]
+            solutions = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            valid_solutions = [s for s in solutions if isinstance(s, Solution)]
+            problem.solution = valid_solutions
+            if valid_solutions:
+                problem.best_solution = valid_solutions[0]
 
     async def create_task(self, objective: str, user_prompt: str) -> Task:
         """Creates a structured task based on objective and prompt."""
         problem = await self.create_problem(objective)
+        await self.solve_all_problems()
         
         registered_tools = []
         if self.tools:
@@ -131,12 +138,15 @@ class TaskCreator:
 
         Available Tools: {json.dumps(registered_tools)}
 
-        Respond ONLY in valid JSON matching this structure:
+        Valid task_type values: "read", "write", "search", "update", "delete", "block_read", "block_write", "mmap_io", "net_send", "net_recv", "ipc_pipe", "ipc_share", "rpc_call", "batch_load", "tensor_stream", "vector_search", "vram_shuttle", "token_stream", "dma_transfer", "interrupt_req", "port_in", "port_out", "mem_mapped_in", "bus_broadcast", "bus_listen", "adc_sample", "dac_actuate", "pwm_output", "sensor_poll", "watchdog_ping", "other"
+        Valid priority values: "critical", "high", "medium", "low"
+
+        Respond ONLY in valid JSON matching this exact structure (no comments):
         {{
             "task_title": "Short descriptive title",
             "description": "Detailed description of what needs to be done",
-            "task_type": "other", // one of: read, write, search, update, delete, block_read, block_write, mmap_io, net_send, net_recv, ipc_pipe, ipc_share, rpc_call, batch_load, tensor_stream, vector_search, vram_shuttle, token_stream, dma_transfer, interrupt_req, port_in, port_out, mem_mapped_in, bus_broadcast, bus_listen, adc_sample, dac_actuate, pwm_output, sensor_poll, watchdog_ping, other
-            "priority": "medium", // one of: critical, high, medium, low
+            "task_type": "other",
+            "priority": "medium",
             "dependencies": [],
             "tools_required": ["tool_name1", "tool_name2"]
         }}
