@@ -99,7 +99,7 @@ class TaskCreator:
             reflector_result=self._get_default_reflector()
         )
 
-    async def solve_all_porblems(self, sol): 
+    async def solve_all_porblems(self, solutions_count_for_each_porblem=3): 
         solutions = []
         for problem in self.problems:
             solution = await self.create_solution(problem)
