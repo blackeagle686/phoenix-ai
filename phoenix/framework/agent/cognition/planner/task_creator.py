@@ -5,7 +5,7 @@
 """
 
 class TaskCreator:
-    def __init__(self, llm: Any, tools: Optional[Any] = None, memory: Optional[Any] = None, profile: Optional[Any] = None):
+    def __init__(self, llm: Any, tools: Optional[Any] = None, ):
         self.llm = llm
         self.tools = tools
         self.memory = memory
