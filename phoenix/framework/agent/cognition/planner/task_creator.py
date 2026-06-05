@@ -103,6 +103,7 @@ class TaskCreator:
             complexity=complexity,
             reflector_result=self._get_default_reflector()
         )
+        self.problems.append(problem)
         return problem
 
     async def create_solution(self, problem: Problem) -> Solution:
