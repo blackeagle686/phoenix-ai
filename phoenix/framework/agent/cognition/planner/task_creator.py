@@ -106,7 +106,7 @@ class TaskCreator:
                 solution = await self.create_solution(problem)
                 solutions.append(solution)
             problem.solutions = solutions
-                
+      
 
     async def create_task(self, objective: str, user_prompt: str) -> Task:
         """Creates a structured task based on objective and prompt."""
