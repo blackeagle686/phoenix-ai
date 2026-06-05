@@ -5,7 +5,7 @@
 """
 
 class Problem: 
-    def __init__(self, )
+    def __init__(self, description:str, )
 
 class TaskCreator:
     def __init__(self, llm: Any, tools: Optional[Any] = None, ):
