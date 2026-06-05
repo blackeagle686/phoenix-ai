@@ -223,6 +223,7 @@ if __name__ == "__main__":
     )
 
     async def run_test():
+        await llm.init()
         test_task = TaskCreator(llm=llm)
         objective = "Hello my name is TK"
         prompt = "Hi create a simple python code that prints my name"
