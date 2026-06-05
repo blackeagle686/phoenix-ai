@@ -1,5 +1,5 @@
 /* Main Application Entry Point */
-/* Initializes all modules on DOMContentLoaded */
+/* Initializes all modules when the DOM is fully loaded */
 
 (function() {
   'use strict';
@@ -31,9 +31,5 @@
     });
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  document.addEventListener('DOMContentLoaded', init);
 })();
