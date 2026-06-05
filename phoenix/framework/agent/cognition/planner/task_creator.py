@@ -48,7 +48,7 @@ class TaskCreator:
             "best_solution_index": 0
         }}
         """
-        response = await self.llm.generate(prompt)
+        response = await self.llm.generate(prompt, max_tokens=8000)
         data = parse_llm_json(response) or {}
         
         desc = data.get("description", f"Problem for objective: {objective}")
@@ -96,7 +96,7 @@ class TaskCreator:
             "content": "Detailed steps or code to solve the problem"
         }}
         """
-        response = await self.llm.generate(prompt)
+        response = await self.llm.generate(prompt, max_tokens=8000)
         data = parse_llm_json(response) or {}
         
         print(f"DEBUG - LLM Raw Response for create_solution (Variant {variant_index}):\n{response}\n")
