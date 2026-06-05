@@ -22,6 +22,7 @@ class TaskCreator:
         self.tools = tools
         self.cache = cache
         self.problems = []
+        self.
         if not cache: 
             self.memory = {}
 
