@@ -99,8 +99,8 @@ class TaskCreator:
         response = await self.llm.generate(prompt)
         data = parse_llm_json(response) or {}
         
-        if not data:
-            print(f"DEBUG - LLM Raw Response for create_solution (Variant {variant_index}):\n{response}\n")
+        print(f"DEBUG - LLM Raw Response for create_solution (Variant {variant_index}):\n{response}\n")
+        print(f"DEBUG - Parsed Data:\n{data}\n")
 
         stype_str = data.get("solution_type", "other").lower()
         try:
