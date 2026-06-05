@@ -86,7 +86,7 @@ class AgentLoop:
         
         return objective, task_file_id
 
-    async def run(self, prompt: str, memory, session_id: str, max_iterations: int = 5) -> str:
+    async def run(self, prompt: str, memory, session_id: str, max_iterations: int = 15) -> str:
         objective, task_file_id = await self._bootstrap(prompt, memory, session_id)
         
         planner_queue = asyncio.Queue()
@@ -97,14 +97,15 @@ class AgentLoop:
         shared_state = {
             "final_answer": "",
             "previous_results": "",
-            "iterations": 0
+            "iterations": 0,
+            "current_task": None
         }
 
         # --- Worker 1: Planner ---
         async def _planner_worker():
             try:
                 while not completion_event.is_set():
-                    await planner_queue.get()
+                    msg = await planner_queue.get()
                     
                     if shared_state["iterations"] >= max_iterations:
                         shared_state["final_answer"] = "Maximum iterations reached. Forcing completion."
@@ -112,42 +113,14 @@ class AgentLoop:
                         planner_queue.task_done()
                         break
 
-                    plan_output = await self.planner.plan(
-                        objective,
-                        task_file_id=task_file_id,
-                        previous_results=shared_state["previous_results"]
-                    )
-                    
-                    shared_state["iterations"] += 1
-                    actions = plan_output.get("actions", [])
-                    if not actions and "tool" in plan_output:
-                        actions = [{"tool": plan_output["tool"], "kwargs": plan_output.get("kwargs", {})}]
-                        
-                    has_finish = any(a.get("tool") == "finish" for a in actions)
-                    
-                    if has_finish:
-                        shared_state["final_answer"] = shared_state["previous_results"] or "Task completed by Planner."
-                        completion_event.set()
-                        planner_queue.task_done()
-                        break
-                        
-                    if not actions:
-                        # Planner stalled, trigger it again or abort
-                        await asyncio.sleep(1)
-                        await planner_queue.put("retry")
+                    if shared_state.get("current_task") is None:
+                        task = await self.planner.create_task(objective, prompt)
+                        shared_state["current_task"] = task
+                        await actor_queue.put("trigger_actor")
                     else:
-                        for action in actions:
-                            tool_name = action.get("tool")
-                            if tool_name == "finish":
-                                continue
-                            task_input = ActorInputSchema(
-                                task_id=generate_unique_id(),
-                                task_type=TaskType.OTHER,
-                                tool_name=tool_name,
-                                payload=action.get("kwargs", {})
-                            )
-                            await actor_queue.put(task_input)
-                            
+                        shared_state["final_answer"] = shared_state["previous_results"] or "Task completed."
+                        completion_event.set()
+                        
                     planner_queue.task_done()
             except asyncio.CancelledError:
                 pass
@@ -159,10 +132,19 @@ class AgentLoop:
         async def _actor_worker():
             try:
                 while not completion_event.is_set():
-                    task_input = await actor_queue.get()
-                    # Execute purely on input. Reflection is deferred to the Reflector Queue
-                    actor_output = await self.actor.execute(task_input, task_context=None)
-                    await reflector_queue.put((task_input, actor_output))
+                    msg = await actor_queue.get()
+                    
+                    task = shared_state.get("current_task")
+                    if task is None:
+                        actor_queue.task_done()
+                        continue
+                        
+                    actor_output = await self.actor.generate_and_execute(
+                        task, 
+                        previous_results=shared_state["previous_results"]
+                    )
+                    
+                    await reflector_queue.put((task, actor_output))
                     actor_queue.task_done()
             except asyncio.CancelledError:
                 pass
@@ -171,32 +153,36 @@ class AgentLoop:
         async def _reflector_worker():
             try:
                 while not completion_event.is_set():
-                    task_input, actor_output = await reflector_queue.get()
+                    task, actor_output = await reflector_queue.get()
+                    
+                    if actor_output.result and isinstance(actor_output.result, dict) and actor_output.result.get("status") == "finished":
+                        await planner_queue.put("trigger_planner")
+                        reflector_queue.task_done()
+                        continue
                     
                     ref_input = ReflectorInputSchema(
                         reflector_type=ReflectorType.TASK,
-                        target_id=task_input.task_id,
-                        target_content={"action": task_input.dict(), "result": actor_output.dict()},
+                        target_id=actor_output.task_id,
+                        target_content={"action_result": actor_output.dict()},
                         context=objective
                     )
                     
                     reflection = await self.reflector.reflect(ref_input)
                     
-                    result_summary = f"\nAction: `{task_input.tool_name}`\nResult Status: {actor_output.success}\nFeedback: {reflection.feedback}\nRating: {reflection.rating}/10\n"
+                    result_summary = f"\nAction Result: {actor_output.success}\nDetails: {actor_output.result}\nFeedback: {reflection.feedback}\nRating: {reflection.rating}/10\n"
                     shared_state["previous_results"] += result_summary
+                    shared_state["iterations"] += 1
                     
                     self._schedule_background(memory.add_interaction(session_id, "system", f"Tool Output: {actor_output.success}"))
                     self._schedule_background(memory.long_term.add(session_id, reflection.feedback))
                     
-                    # Trigger the next planning cycle now that results are appended
-                    await planner_queue.put("trigger_planning")
+                    await actor_queue.put("trigger_actor")
                     reflector_queue.task_done()
             except asyncio.CancelledError:
                 pass
 
         # Spin up parallel tasks
         planner_task = asyncio.create_task(_planner_worker())
-        # We can spin up multiple actor workers for high concurrency!
         actor_tasks = [asyncio.create_task(_actor_worker()) for _ in range(3)]
         reflector_task = asyncio.create_task(_reflector_worker())
         
@@ -215,11 +201,7 @@ class AgentLoop:
         await memory.add_interaction(session_id, "assistant", shared_state["final_answer"])
         return shared_state["final_answer"]
 
-    async def run_stream(self, prompt: str, memory, session_id: str, max_iterations: int = 5):
-        """
-        Streaming version leveraging the same Parallel Queue architecture.
-        Yields UI updates into a stream_queue.
-        """
+    async def run_stream(self, prompt: str, memory, session_id: str, max_iterations: int = 15):
         stream_queue = asyncio.Queue()
         
         await stream_queue.put({"type": "status", "content": "🤔 Initializing context..."})
@@ -233,13 +215,14 @@ class AgentLoop:
         shared_state = {
             "final_answer": "",
             "previous_results": "",
-            "iterations": 0
+            "iterations": 0,
+            "current_task": None
         }
 
         async def _planner_worker():
             try:
                 while not completion_event.is_set():
-                    await planner_queue.get()
+                    msg = await planner_queue.get()
                     
                     if shared_state["iterations"] >= max_iterations:
                         shared_state["final_answer"] = "Maximum iterations reached."
@@ -247,46 +230,16 @@ class AgentLoop:
                         planner_queue.task_done()
                         break
 
-                    await stream_queue.put({"type": "status", "content": f"🤔 Planner thinking (Iteration {shared_state['iterations'] + 1})..."})
-                    
-                    # Stream Planner thoughts directly to UI
-                    async for thought in self.planner.stream_thinking(objective, task_file_id=task_file_id, previous_results=shared_state["previous_results"]):
-                        await stream_queue.put({"type": "chunk", "content": thought})
-
-                    plan_output = await self.planner.plan(
-                        objective,
-                        task_file_id=task_file_id,
-                        previous_results=shared_state["previous_results"]
-                    )
-                    
-                    shared_state["iterations"] += 1
-                    actions = plan_output.get("actions", [])
-                    if not actions and "tool" in plan_output:
-                        actions = [{"tool": plan_output["tool"], "kwargs": plan_output.get("kwargs", {})}]
-                        
-                    has_finish = any(a.get("tool") == "finish" for a in actions)
-                    
-                    if has_finish:
+                    if shared_state.get("current_task") is None:
+                        await stream_queue.put({"type": "status", "content": f"🤔 Planner constructing architecture..."})
+                        task = await self.planner.create_task(objective, prompt)
+                        shared_state["current_task"] = task
+                        await stream_queue.put({"type": "status", "content": "🛠️ Dispatching task to Actor Engine..."})
+                        await actor_queue.put("trigger_actor")
+                    else:
                         shared_state["final_answer"] = shared_state["previous_results"] or "Done."
                         completion_event.set()
-                        planner_queue.task_done()
-                        break
                         
-                    if actions:
-                        await stream_queue.put({"type": "status", "content": "🛠️ Dispatching actions to Actor Pool..."})
-                        for action in actions:
-                            tool_name = action.get("tool")
-                            if tool_name != "finish":
-                                await actor_queue.put(ActorInputSchema(
-                                    task_id=generate_unique_id(),
-                                    task_type=TaskType.OTHER,
-                                    tool_name=tool_name,
-                                    payload=action.get("kwargs", {})
-                                ))
-                    else:
-                        await asyncio.sleep(1)
-                        await planner_queue.put("retry")
-                    
                     planner_queue.task_done()
             except asyncio.CancelledError:
                 pass
@@ -297,10 +250,22 @@ class AgentLoop:
         async def _actor_worker():
             try:
                 while not completion_event.is_set():
-                    task_input = await actor_queue.get()
-                    actor_output = await self.actor.execute(task_input, task_context=None)
-                    await stream_queue.put({"type": "status", "content": f"⚙️ Executed: {task_input.tool_name}"})
-                    await reflector_queue.put((task_input, actor_output))
+                    msg = await actor_queue.get()
+                    
+                    task = shared_state.get("current_task")
+                    if task is None:
+                        actor_queue.task_done()
+                        continue
+                        
+                    actor_output = await self.actor.generate_and_execute(
+                        task, 
+                        previous_results=shared_state["previous_results"]
+                    )
+                    
+                    if actor_output.result and isinstance(actor_output.result, dict) and actor_output.result.get("status") != "finished":
+                        await stream_queue.put({"type": "status", "content": f"⚙️ Executed tool step. Success: {actor_output.success}"})
+                        
+                    await reflector_queue.put((task, actor_output))
                     actor_queue.task_done()
             except asyncio.CancelledError:
                 pass
@@ -308,23 +273,30 @@ class AgentLoop:
         async def _reflector_worker():
             try:
                 while not completion_event.is_set():
-                    task_input, actor_output = await reflector_queue.get()
-                    await stream_queue.put({"type": "status", "content": f"🧐 Reflecting on: {task_input.tool_name}..."})
+                    task, actor_output = await reflector_queue.get()
+                    
+                    if actor_output.result and isinstance(actor_output.result, dict) and actor_output.result.get("status") == "finished":
+                        await planner_queue.put("trigger_planner")
+                        reflector_queue.task_done()
+                        continue
+                        
+                    await stream_queue.put({"type": "status", "content": f"🧐 Reflecting on execution..."})
                     
                     ref_input = ReflectorInputSchema(
                         reflector_type=ReflectorType.TASK,
-                        target_id=task_input.task_id,
-                        target_content={"action": task_input.dict(), "result": actor_output.dict()},
+                        target_id=actor_output.task_id,
+                        target_content={"action_result": actor_output.dict()},
                         context=objective
                     )
                     
                     reflection = await self.reflector.reflect(ref_input)
-                    shared_state["previous_results"] += f"\nAction: `{task_input.tool_name}`\nStatus: {actor_output.success}\nFeedback: {reflection.feedback}\n"
+                    shared_state["previous_results"] += f"\nAction Result: {actor_output.success}\nDetails: {actor_output.result}\nFeedback: {reflection.feedback}\nRating: {reflection.rating}/10\n"
+                    shared_state["iterations"] += 1
                     
                     self._schedule_background(memory.add_interaction(session_id, "system", f"Output: {actor_output.success}"))
                     self._schedule_background(memory.long_term.add(session_id, reflection.feedback))
                     
-                    await planner_queue.put("trigger")
+                    await actor_queue.put("trigger_actor")
                     reflector_queue.task_done()
             except asyncio.CancelledError:
                 pass
@@ -332,7 +304,7 @@ class AgentLoop:
         workers = [
             asyncio.create_task(_planner_worker()),
             asyncio.create_task(_actor_worker()),
-            asyncio.create_task(_actor_worker()), # Parallel execution concurrency
+            asyncio.create_task(_actor_worker()),
             asyncio.create_task(_reflector_worker())
         ]
         
