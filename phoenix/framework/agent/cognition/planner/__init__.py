@@ -22,6 +22,7 @@ from .schema import (
 )
 from . import schema 
 __all__ = [
+    "schema",
     "BasePlanner",
     "Planner",
     "TaskStatus",
