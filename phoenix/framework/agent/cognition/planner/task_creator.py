@@ -79,9 +79,11 @@ class TaskCreator:
         self.problems.append(problem)
         return problem
 
-    async def create_solution(self, problem: Problem) -> Solution:
+    async def create_solution(self, problem: Problem, variant_index: int = 1) -> Solution:
         prompt = f"""
         Given the following problem, generate a detailed and highly effective solution.
+        This is solution variant #{variant_index}. Please provide a unique approach.
+        
         Problem Description: {problem.description}
         Complexity: {problem.complexity.value}
         
@@ -98,7 +100,7 @@ class TaskCreator:
         data = parse_llm_json(response) or {}
         
         if not data:
-            print(f"DEBUG - LLM Raw Response for create_solution:\n{response}\n")
+            print(f"DEBUG - LLM Raw Response for create_solution (Variant {variant_index}):\n{response}\n")
 
         stype_str = data.get("solution_type", "other").lower()
         try:
@@ -117,7 +119,7 @@ class TaskCreator:
     async def solve_all_problems(self, solutions_count_for_each_problem=3): 
         import asyncio
         for problem in self.problems:
-            tasks = [self.create_solution(problem) for _ in range(solutions_count_for_each_problem)]
+            tasks = [self.create_solution(problem, variant_index=i+1) for i in range(solutions_count_for_each_problem)]
             solutions = await asyncio.gather(*tasks, return_exceptions=True)
             
             valid_solutions = [s for s in solutions if isinstance(s, Solution)]
