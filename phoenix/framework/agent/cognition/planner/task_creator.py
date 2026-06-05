@@ -9,7 +9,10 @@ class TaskCreator:
         self.llm = llm
         self.tools = tools
         self.cache = cache
-    
+        self.memory = memory
+        if not cache: 
+            
+            
 
     async def create_problem(self, objective: str) -> Problem:
         pass
