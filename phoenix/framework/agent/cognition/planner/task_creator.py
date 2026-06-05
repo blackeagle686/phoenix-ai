@@ -22,7 +22,8 @@ class TaskCreator:
         self.tools = tools
         self.cache = cache
         self.problems = []
-        self.problem_block
+        self.problem_max_tokens = 300
+        
         if not cache: 
             self.memory = {}
 
