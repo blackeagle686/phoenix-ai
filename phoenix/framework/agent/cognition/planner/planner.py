@@ -55,7 +55,7 @@ class Planner(BasePlanner):
         2. Verify Completion: use 'finish' only after at least one concrete tool action, except for pure conversational asks.
         3. Precision Editing: prefer file_read -> file_edit loops for existing files. Use line-based chunks for edits.
         4. Continue from existing tasks if available.
-        
+        5. Directory Operations: DO NOT use file_read on directories. To create files in new directories, simply use file_write with the desired path. To explore, use execute_command (e.g. 'ls').
         You must respond with a JSON object strictly following this format:
         {{
             "actions": [
