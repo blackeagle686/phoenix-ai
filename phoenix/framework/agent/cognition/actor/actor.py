@@ -136,65 +136,65 @@ class Actor(BaseActor):
                 
         return actor_output
 
-if __name__ == "__main__":
-    import asyncio
-    from phoenix.services.llm.openai import OpenAILLM
-    from phoenix.framework.agent.execution.tool_manager import ToolManager
-    from phoenix.framework.agent.tools.registry import ToolRegistry
+# if __name__ == "__main__":
+#     import asyncio
+#     from phoenix.services.llm.openai import OpenAILLM
+#     from phoenix.framework.agent.execution.tool_manager import ToolManager
+#     from phoenix.framework.agent.tools.registry import ToolRegistry
     
-    llm = OpenAILLM(
-        api_key="ak_2yp3Xw1Ny7ky2pF7er9x93ZO9jj6G",
-        model="LongCat-2.0-Preview",
-        base_url="https://api.longcat.chat/openai"
-    )
+#     llm = OpenAILLM(
+#         api_key="ak_2yp3Xw1Ny7ky2pF7er9x93ZO9jj6G",
+#         model="LongCat-2.0-Preview",
+#         base_url="https://api.longcat.chat/openai"
+#     )
 
-    class MockTool:
-        def __init__(self, name):
-            self.name = name
+#     class MockTool:
+#         def __init__(self, name):
+#             self.name = name
             
-        async def execute(self, **kwargs):
-            return ToolResult(success=True, output=f"Executed {self.name} with payload: {kwargs}", error=None)
+#         async def execute(self, **kwargs):
+#             return ToolResult(success=True, output=f"Executed {self.name} with payload: {kwargs}", error=None)
 
-    async def run_test():
-        print("Initializing LLM...", flush=True)
-        await llm.init()
-        print("LLM Initialized.", flush=True)
+#     async def run_test():
+#         print("Initializing LLM...", flush=True)
+#         await llm.init()
+#         print("LLM Initialized.", flush=True)
         
-        registry = ToolRegistry()
-        registry.register(MockTool("file_write"))
-        registry.register(MockTool("folder_create"))
+#         registry = ToolRegistry()
+#         registry.register(MockTool("file_write"))
+#         registry.register(MockTool("folder_create"))
         
-        tool_manager = ToolManager(registry)
-        actor = Actor(tool_manager=tool_manager, llm=llm)
+#         tool_manager = ToolManager(registry)
+#         actor = Actor(tool_manager=tool_manager, llm=llm)
         
-        # Create a mock Task
-        from phoenix.framework.agent.cognition.reflector.schema import BaseReflectorMeta
-        mock_task = Task(
-            prompt_id=uuid4(),
-            task_id=str(uuid4()),
-            dependencies=[],
-            task_type=TaskType.WRITE,
-            task_title="Test Code Gen",
-            description="Create the JWT middleware module for the Actix API.",
-            payload={
-                "tools_required": ["file_write", "folder_create"],
-                "solution_context": "- Implement JWT-based middleware using jsonwebtoken crate."
-            },
-            status="pending",
-            priority="medium",
-            complexity="medium",
-            created_by="Test",
-            problems=[],
-            reflector_result=BaseReflectorMeta(rating=5, feedback="Mock", confidence=1.0, reasoning="Test")
-        )
+#         # Create a mock Task
+#         from phoenix.framework.agent.cognition.reflector.schema import BaseReflectorMeta
+#         mock_task = Task(
+#             prompt_id=uuid4(),
+#             task_id=str(uuid4()),
+#             dependencies=[],
+#             task_type=TaskType.WRITE,
+#             task_title="Test Code Gen",
+#             description="Create the JWT middleware module for the Actix API.",
+#             payload={
+#                 "tools_required": ["file_write", "folder_create"],
+#                 "solution_context": "- Implement JWT-based middleware using jsonwebtoken crate."
+#             },
+#             status="pending",
+#             priority="medium",
+#             complexity="medium",
+#             created_by="Test",
+#             problems=[],
+#             reflector_result=BaseReflectorMeta(rating=5, feedback="Mock", confidence=1.0, reasoning="Test")
+#         )
         
-        print("Starting Actor.generate_and_execute test...")
-        output = await actor.generate_and_execute(mock_task)
+#         print("Starting Actor.generate_and_execute test...")
+#         output = await actor.generate_and_execute(mock_task)
         
-        print("\n" + "="*60)
-        print("ACTOR EXECUTION RESULT")
-        print("="*60)
-        print(output.model_dump_json(indent=5))
-        print("="*60 + "\n")
+#         print("\n" + "="*60)
+#         print("ACTOR EXECUTION RESULT")
+#         print("="*60)
+#         print(output.model_dump_json(indent=5))
+#         print("="*60 + "\n")
 
-    asyncio.run(run_test())
+#     asyncio.run(run_test())
