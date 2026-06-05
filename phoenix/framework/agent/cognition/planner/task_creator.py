@@ -5,8 +5,13 @@
 """
 
 import json
+import sys
+import os
 from typing import Any, Optional, List, Dict
 from uuid import uuid4
+
+# Add the project root to sys.path so 'phoenix' can be imported when running directly
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../../")))
 
 from phoenix.framework.agent.cognition.planner.schema import (
     Problem, Solution, Task, TaskType, TaskPriority, TaskStatus, 
