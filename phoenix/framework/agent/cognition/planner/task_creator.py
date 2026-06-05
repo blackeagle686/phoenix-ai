@@ -33,23 +33,22 @@ class TaskCreator:
         )
 
     async def create_problem(self, objective: str) -> Problem:
-        import asyncio
-
-        # Step 1: Identify the problem and propose high-level approaches
         prompt = f"""
-        Given the following objective, identify the core problem and propose 3 distinct solution approaches.
+        Given the following objective, identify the core problem and propose potential solutions.
         Objective: {objective}
 
         Respond ONLY in valid JSON matching this structure:
         {{
             "description": "Clear description of the core problem to solve",
             "complexity": "low", // one of: low, medium, high, extreme
-            "approaches": [
-                "Approach 1 description...",
-                "Approach 2 description...",
-                "Approach 3 description..."
+            "solutions": [
+                {{
+                    "description": "What this solution entails",
+                    "solution_type": "plan", // one of: plan, code, terminal, network, mission, fastanswer, other
+                    "content": "Detailed steps or explanation of the solution"
+                }}
             ],
-            "best_approach_index": 0
+            "best_solution_index": 0
         }}
         """
         response = await self.llm.generate(prompt)
@@ -62,55 +61,25 @@ class TaskCreator:
         except ValueError:
             complexity = ProblemComplexity.MEDIUM
 
-        approaches = data.get("approaches", ["Default approach"])
-        if not approaches:
-            approaches = ["Default approach"]
-
-        best_idx = data.get("best_approach_index", 0)
-        if not isinstance(best_idx, int) or best_idx < 0 or best_idx >= len(approaches):
-            best_idx = 0
-
-        # Step 2: Generate detailed solutions for each approach in parallel
-        async def generate_solution_from_approach(approach_text: str) -> Solution:
-            sol_prompt = f"""
-            Given the problem and a specific approach, generate a detailed and highly effective solution.
-            Problem: {desc}
-            Approach: {approach_text}
-            
-            Respond ONLY in valid JSON matching this structure:
-            {{
-                "description": "Short description of the solution",
-                "solution_type": "plan", // one of: plan, code, terminal, network, mission, fastanswer, other
-                "content": "Detailed steps or code to solve the problem"
-            }}
-            """
-            sol_resp = await self.llm.generate(sol_prompt)
-            sol_data = parse_llm_json(sol_resp) or {}
-
-            stype_str = sol_data.get("solution_type", "other").lower()
+        sols_data = data.get("solutions", [])
+        solutions = []
+        for s in sols_data:
+            stype_str = s.get("solution_type", "other").lower()
             try:
                 stype = SolutionType(stype_str)
             except ValueError:
                 stype = SolutionType.OTHER
-
-            return Solution(
+                
+            solutions.append(Solution(
                 id=uuid4(),
-                description=sol_data.get("description", approach_text),
+                description=s.get("description", "A potential solution"),
                 solution_type=stype,
-                content=sol_data.get("content", "Detailed solution steps"),
+                content=s.get("content", "Solution details"),
                 reflector_result=self._get_default_reflector()
-            )
+            ))
 
-        tasks = [generate_solution_from_approach(app) for app in approaches]
-        solutions = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        valid_solutions = []
-        for s in solutions:
-            if isinstance(s, Solution):
-                valid_solutions.append(s)
-
-        if not valid_solutions:
-            valid_solutions.append(Solution(
+        if not solutions:
+            solutions.append(Solution(
                 id=uuid4(),
                 description="Default solution",
                 solution_type=SolutionType.PLAN,
@@ -118,15 +87,16 @@ class TaskCreator:
                 reflector_result=self._get_default_reflector()
             ))
 
-        if best_idx >= len(valid_solutions):
+        best_idx = data.get("best_solution_index", 0)
+        if not isinstance(best_idx, int) or best_idx < 0 or best_idx >= len(solutions):
             best_idx = 0
             
-        best_solution = valid_solutions[best_idx]
+        best_solution = solutions[best_idx]
 
         problem = Problem(
             id=uuid4(),
             description=desc,
-            solution=valid_solutions,
+            solution=solutions,
             best_solution=best_solution,
             complexity=complexity,
             reflector_result=self._get_default_reflector()
