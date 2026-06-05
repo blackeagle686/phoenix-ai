@@ -45,7 +45,7 @@ async def test_parallel_arch():
         os.remove(test_file)
         
     prompt = (
-        f" the js pages not appear create the project in this folder tests/agent/agent_new_arch/front_test"
+        f" the js pages not appear in the index.html fix it,  tests/agent/agent_new_arch/front_test"
     )
     
     print("\n" + "-"*40)
