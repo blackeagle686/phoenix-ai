@@ -212,7 +212,6 @@ if __name__ == "__main__":
     import asyncio
     
     # Add the project root to sys.path so 'phoenix' can be imported
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../../")))
     
     from phoenix.services.llm.openai import OpenAILLM
 
