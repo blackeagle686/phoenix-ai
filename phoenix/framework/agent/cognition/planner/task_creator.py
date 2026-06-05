@@ -104,6 +104,8 @@ class TaskCreator:
         for problem in self.problems:
             solution = await self.create_solution(problem)
             solutions.append(solution)
+
+        
         return solutions
 
     async def create_task(self, objective: str, user_prompt: str) -> Task:
