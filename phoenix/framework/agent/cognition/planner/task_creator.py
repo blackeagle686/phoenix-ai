@@ -99,7 +99,8 @@ class TaskCreator:
             reflector_result=self._get_default_reflector()
         )
 
-    async def 
+    async def solve_all_porblems(self): 
+        
 
     async def create_task(self, objective: str, user_prompt: str) -> Task:
         """Creates a structured task based on objective and prompt."""
