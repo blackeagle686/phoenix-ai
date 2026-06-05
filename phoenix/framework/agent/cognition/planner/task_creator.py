@@ -58,14 +58,11 @@ class TaskCreator:
 
         solutions = []
 
-            
-        best_solution = solutions[best_idx]
-
         problem = Problem(
             id=uuid4(),
             description=desc,
             solution=solutions,
-            best_solution=best_solution,
+            best_solution=None,
             complexity=complexity,
             reflector_result=self._get_default_reflector()
         )
