@@ -4,8 +4,9 @@ from phoenix.framework.agent.cognition.actor.schema import ActorInputSchema, Act
 from phoenix.framework.agent.cognition.planner.schema import Task
 
 class BaseActor(ABC):
-    def __init__(self, tool_manager: Any, reflector: Optional[Any] = None):
+    def __init__(self, tool_manager: Any, llm: Optional[Any] = None, reflector: Optional[Any] = None):
         self.tool_manager = tool_manager
+        self.llm = llm
         self.reflector = reflector
 
     @abstractmethod
