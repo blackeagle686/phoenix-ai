@@ -43,13 +43,6 @@ class TaskCreator:
         {{
             "description": "Clear description of the core problem to solve",
             "complexity": "low", // one of: low, medium, high, extreme
-            "solutions": [
-                {{
-                    "description": "What this solution entails",
-                    "solution_type": "plan", // one of: plan, code, terminal, network, mission, fastanswer, other
-                    "content": "Detailed steps or explanation of the solution"
-                }}
-            ],
             "best_solution_index": 0
         }}
         """
