@@ -232,7 +232,9 @@ if __name__ == "__main__":
                 "file_write": "Write code or text to a specific file path",
                 "file_read": "Read content from a specific file path",
                 "execute_terminal": "Run terminal commands like npm install or python execution",
-                "web_search": "Search the web for up to date information"
+                "web_search": "Search the web for up to date information", 
+                "folder_create": "Create a new folder",
+                
             }
 
     async def run_test():
@@ -241,7 +243,7 @@ if __name__ == "__main__":
         mock_tools = MockTools()
         test_task = TaskCreator(llm=llm, tools=mock_tools)
         
-        objective = "create a modular "
+        objective = "create a modular frontend project with modular folders structure and modular plugins"
         prompt = "hello"
         task = await test_task.create_task(objective, prompt)
         
