@@ -1,0 +1,246 @@
+/* Global Styles */
+body {
+    background-color: #f4f6f9;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    display: flex;
+    min-height: 100vh;
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    flex: 1;
+}
+
+/* Header */
+#main-header {
+    background-color: #1a1a2e !important;
+    border-bottom: 3px solid #0f3460;
+}
+
+#main-header h2 {
+    margin: 0;
+    font-weight: 600;
+}
+
+/* Balance Summary Cards */
+.balance-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    transition: transform 0.2s;
+}
+
+.balance-card:hover {
+    transform: translateY(-2px);
+}
+
+.balance-card .card-title {
+    font-size: 0.85rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.balance-card .card-text {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #1a1a2e;
+}
+
+.balance-card.total {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.balance-card.total .card-title,
+.balance-card.total .card-text {
+    color: white;
+}
+
+.balance-card.income {
+    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    color: white;
+}
+
+.balance-card.income .card-title,
+.balance-card.income .card-text {
+    color: white;
+}
+
+.balance-card.expenses {
+    background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+    color: white;
+}
+
+.balance-card.expenses .card-title,
+.balance-card.expenses .card-text {
+    color: white;
+}
+
+/* Transaction List */
+.transaction-item {
+    border: none;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    transition: background-color 0.15s;
+}
+
+.transaction-item:hover {
+    background-color: #f8f9fa;
+}
+
+.transaction-item .tx-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+}
+
+.transaction-item .tx-icon.income {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.transaction-item .tx-icon.expense {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.transaction-item .tx-amount {
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+.transaction-item .tx-amount.income {
+    color: #28a745;
+}
+
+.transaction-item .tx-amount.expense {
+    color: #dc3545;
+}
+
+/* Cards Section */
+.credit-card {
+    border: none;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    transition: transform 0.2s;
+}
+
+.credit-card:hover {
+    transform: translateY(-3px);
+}
+
+.credit-card .card-body {
+    background: linear-gradient(135deg, #232526 0%, #414345 100%);
+    color: white;
+    padding: 25px;
+}
+
+.credit-card.premium .card-body {
+    background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
+    color: #1a1a2e;
+}
+
+.credit-card.platinum .card-body {
+    background: linear-gradient(135deg, #485563 0%, #29323c 100%);
+    color: white;
+}
+
+/* Action Buttons */
+.action-btn {
+    border-radius: 12px;
+    padding: 20px;
+    border: none;
+    transition: all 0.2s;
+}
+
+.action-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.action-btn i {
+    font-size: 1.5rem;
+    display: block;
+    margin-bottom: 8px;
+}
+
+/* Profile Section */
+.profile-section {
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+}
+
+.profile-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0 auto 15px;
+}
+
+/* Badge Pill */
+.badge-status {
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: 0.8rem;
+}
+
+/* Footer */
+#main-footer {
+    border-top: 1px solid #dee2e6;
+}
+
+/* Nav tabs customization */
+.nav-tabs .nav-link {
+    color: #6c757d;
+    font-weight: 500;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+}
+
+.nav-tabs .nav-link.active {
+    color: #667eea;
+    font-weight: 600;
+    border-bottom: 2px solid #667eea;
+    background: transparent;
+}
+
+/* Search bar */
+.search-bar {
+    border-radius: 10px;
+    border: 1px solid #e0e0e0;
+    padding: 10px 16px;
+}
+
+.search-bar:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+/* Responsive */
+@media (max-width: 576px) {
+    .balance-card .card-text {
+        font-size: 1.2rem;
+    }
+    .action-btn {
+        padding: 15px;
+    }
+}
