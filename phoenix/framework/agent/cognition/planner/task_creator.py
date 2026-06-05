@@ -18,7 +18,7 @@ from phoenix.framework.agent.cognition.planner.schema import (
     SolutionType, ProblemComplexity
 )
 from phoenix.framework.agent.cognition.reflector.schema import BaseReflectorMeta
-from ..utils import parse_llm_json
+from phoenix.framework.agent.cognition.utils import parse_llm_json
 
 class TaskCreator:
     def __init__(self, llm: Any, tools: Optional[Any] = None, cache: Optional[Any] = None ):
