@@ -11,6 +11,8 @@ class TaskCreator:
         self.memory = memory
         self.profile = profile
 
+    async
+
     async def create_task(self, objective: str, user_prompt: str) -> Task:
         """Creates a structured task based on objective and prompt."""
         pass
