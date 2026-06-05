@@ -209,8 +209,9 @@ class TaskCreator:
 if __name__ == "__main__":
     test_task = TaskCreator()
     objective = "Hello my name is TK"
-    prompt = "Hi create a "
+    prompt = "Hi create a simple python code that prints my name"
     task = test_task.create_task(objective, prompt)
     print(task)
+    
     # 
     
