@@ -12,15 +12,14 @@ class TaskCreator:
         self.tools = tools
         self.cache = cache
         if not cache: 
-            self.memory = {memory}
-            
-            
+            self.memory = {}
 
     async def create_problem(self, objective: str) -> Problem:
         pass
 
     async def create_solution(slef, problem):
         pass
+    
     async def create_task(self, objective: str, user_prompt: str) -> Task:
         """Creates a structured task based on objective and prompt."""
         pass
