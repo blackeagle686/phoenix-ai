@@ -208,6 +208,12 @@ class TaskCreator:
 
 if __name__ == "__main__":
     
+    llm = OpenAILLM(
+        api_key="ak_2yp3Xw1Ny7ky2pF7er9x93ZO9jj6G",
+        model="LongCat-2.0-Preview",
+        base_url="https://api.longcat.chat/openai"
+    )
+
     test_task = TaskCreator()
     objective = "Hello my name is TK"
     prompt = "Hi create a simple python code that prints my name"
