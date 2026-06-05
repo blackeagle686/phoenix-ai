@@ -156,7 +156,9 @@ if __name__ == "__main__":
             return ToolResult(success=True, output=f"Executed {self.name} with payload: {kwargs}", error=None)
 
     async def run_test():
+        print("Initializing LLM...", flush=True)
         await llm.init()
+        print("LLM Initialized.", flush=True)
         
         registry = ToolRegistry()
         registry.register(MockTool("file_write"))
