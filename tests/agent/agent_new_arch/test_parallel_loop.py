@@ -46,7 +46,7 @@ async def test_parallel_arch():
         
     prompt = (
         f"plz createa a simple wallet web app frontend using modular folder and files archticture, just use html, css, boostatrap for edain and for static logic use js , add some mock data for the pages of the wallet", 
-        f"create the project in this folder ./"
+        f"create the project in this folder ./front_test/"
     )
     
     print("\n" + "-"*40)
