@@ -45,7 +45,7 @@ async def test_parallel_arch():
         os.remove(test_file)
         
     prompt = (
-        f"plz createa a simple wallet web "
+        f"plz createa a simple wallet web app frontend using modular folder and files archticture"
         f"and write the exact result into a new file called {test_file} in the current directory."
     )
     
