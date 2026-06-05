@@ -103,7 +103,6 @@ class TaskCreator:
         solutions = []
         for problem in self.problems:
             solution = await self.create_solution(problem)
-            
             solutions.append(solution)
 
         
