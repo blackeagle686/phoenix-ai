@@ -109,11 +109,15 @@ class TaskCreator:
         except ValueError:
             stype = SolutionType.OTHER
 
+        content_val = data.get("content", "Detailed solution steps")
+        if isinstance(content_val, list):
+            content_val = "\n".join(f"- {str(item)}" for item in content_val)
+
         return Solution(
             id=uuid4(),
             description=data.get("description", "Generated solution for the problem"),
             solution_type=stype,
-            content=data.get("content", "Detailed solution steps"),
+            content=content_val,
             reflector_result=self._get_default_reflector()
         )
 
@@ -123,7 +127,13 @@ class TaskCreator:
             tasks = [self.create_solution(problem, variant_index=i+1) for i in range(solutions_count_for_each_problem)]
             solutions = await asyncio.gather(*tasks, return_exceptions=True)
             
-            valid_solutions = [s for s in solutions if isinstance(s, Solution)]
+            valid_solutions = []
+            for s in solutions:
+                if isinstance(s, Solution):
+                    valid_solutions.append(s)
+                else:
+                    print(f"DEBUG - Error generating solution: {s}")
+                    
             problem.solution = valid_solutions
             if valid_solutions:
                 problem.best_solution = valid_solutions[0]
