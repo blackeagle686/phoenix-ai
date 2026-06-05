@@ -207,14 +207,15 @@ class TaskCreator:
         return task
 
 if __name__ == "__main__":
-    
+    from phoenix.services.llm.openai import OpenAILLM
+
     llm = OpenAILLM(
         api_key="ak_2yp3Xw1Ny7ky2pF7er9x93ZO9jj6G",
         model="LongCat-2.0-Preview",
         base_url="https://api.longcat.chat/openai"
     )
 
-    test_task = TaskCreator()
+    test_task = TaskCreator(llm=llm)
     objective = "Hello my name is TK"
     prompt = "Hi create a simple python code that prints my name"
     task = test_task.create_task(objective, prompt)
