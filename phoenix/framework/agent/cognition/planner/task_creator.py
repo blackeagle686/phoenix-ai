@@ -11,8 +11,11 @@ class TaskCreator:
         self.memory = memory
         self.profile = profile
 
-    async
 
+    async def create_problem(self, objective: str) -> Problem:
+        pass
+
+    async def create_solution(slef)
     async def create_task(self, objective: str, user_prompt: str) -> Task:
         """Creates a structured task based on objective and prompt."""
         pass
