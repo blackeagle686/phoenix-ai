@@ -4,6 +4,10 @@
 
 """
 
+
+class TaskMemory: 
+    def __init__(self )
+
 class TaskCreator:
     def __init__(self, llm: Any, tools: Optional[Any] = None, cache: Optional[Any] = None ):
         self.llm = llm
