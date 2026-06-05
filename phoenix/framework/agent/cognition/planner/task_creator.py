@@ -225,9 +225,22 @@ if __name__ == "__main__":
         base_url="https://api.longcat.chat/openai"
     )
 
+    class MockTools:
+        def __init__(self):
+            # Simulating a tool registry
+            self.tools = {
+                "file_write": "Write code or text to a specific file path",
+                "file_read": "Read content from a specific file path",
+                "execute_terminal": "Run terminal commands like npm install or python execution",
+                "web_search": "Search the web for up to date information"
+            }
+
     async def run_test():
         await llm.init()
-        test_task = TaskCreator(llm=llm)
+        
+        mock_tools = MockTools()
+        test_task = TaskCreator(llm=llm, tools=mock_tools)
+        
         objective = "Hello my name is TK Create a python code that create an express server"
         prompt = "hello"
         task = await test_task.create_task(objective, prompt)
