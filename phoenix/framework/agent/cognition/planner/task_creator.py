@@ -58,15 +58,6 @@ class TaskCreator:
 
         solutions = []
 
-        if not solutions:
-            solutions.append(Solution(
-                id=uuid4(),
-                description="Default solution",
-                solution_type=SolutionType.PLAN,
-                content="Proceed with default planning.",
-                reflector_result=self._get_default_reflector()
-            ))
-
         best_idx = data.get("best_solution_index", 0)
         if not isinstance(best_idx, int) or best_idx < 0 or best_idx >= len(solutions):
             best_idx = 0
