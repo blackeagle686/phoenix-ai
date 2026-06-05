@@ -242,7 +242,7 @@ if __name__ == "__main__":
         mock_tools = MockTools()
         test_task = TaskCreator(llm=llm, tools=mock_tools)
         
-        objective = "create a modular frontend project with modular folders structure and modular plugins"
+        objective = "create a modular django code project with modular folders structure and modular plugins"
         prompt = "hello"
         task = await test_task.create_task(objective, prompt)
         
