@@ -164,7 +164,7 @@ class TaskCreator:
             "tools_required": ["tool_name1", "tool_name2"]
         }}
         """
-        response = await self.llm.generate(prompt)
+        response = await self.llm.generate(prompt, max_tokens=8000)
         data = parse_llm_json(response) or {}
 
         ttype_str = data.get("task_type", "other").lower()
