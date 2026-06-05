@@ -143,10 +143,12 @@ class TaskCreator:
         Problem Description: {problem.description}
         Complexity: {problem.complexity.value}
         
-        Respond ONLY in valid JSON matching this structure:
+        Valid solution_type values: "plan", "code", "terminal", "network", "mission", "fastanswer", "other"
+        
+        Respond ONLY in valid JSON matching this exact structure (no comments):
         {{
             "description": "Short description of the solution",
-            "solution_type": "plan", // one of: plan, code, terminal, network, mission, fastanswer, other
+            "solution_type": "plan",
             "content": "Detailed steps or code to solve the problem"
         }}
         """
@@ -190,12 +192,15 @@ class TaskCreator:
 
         Available Tools: {json.dumps(registered_tools)}
 
-        Respond ONLY in valid JSON matching this structure:
+        Valid task_type values: "read", "write", "search", "update", "delete", "block_read", "block_write", "mmap_io", "net_send", "net_recv", "ipc_pipe", "ipc_share", "rpc_call", "batch_load", "tensor_stream", "vector_search", "vram_shuttle", "token_stream", "dma_transfer", "interrupt_req", "port_in", "port_out", "mem_mapped_in", "bus_broadcast", "bus_listen", "adc_sample", "dac_actuate", "pwm_output", "sensor_poll", "watchdog_ping", "other"
+        Valid priority values: "critical", "high", "medium", "low"
+
+        Respond ONLY in valid JSON matching this exact structure (no comments):
         {{
             "task_title": "Short descriptive title",
             "description": "Detailed description of what needs to be done",
-            "task_type": "other", // one of: read, write, search, update, delete, block_read, block_write, mmap_io, net_send, net_recv, ipc_pipe, ipc_share, rpc_call, batch_load, tensor_stream, vector_search, vram_shuttle, token_stream, dma_transfer, interrupt_req, port_in, port_out, mem_mapped_in, bus_broadcast, bus_listen, adc_sample, dac_actuate, pwm_output, sensor_poll, watchdog_ping, other
-            "priority": "medium", // one of: critical, high, medium, low
+            "task_type": "other",
+            "priority": "medium",
             "dependencies": [],
             "tools_required": ["tool_name1", "tool_name2"]
         }}
