@@ -239,49 +239,49 @@ Respond with a JSON list only containing the dependency task IDs. Format:
             
         return data
 
-if __name__ == "__main__":
-    import asyncio
-    from phoenix.services.llm.openai import OpenAILLM
+# if __name__ == "__main__":
+#     import asyncio
+#     from phoenix.services.llm.openai import OpenAILLM
 
-    llm = OpenAILLM(
-        api_key="ak_2yp3Xw1Ny7ky2pF7er9x93ZO9jj6G",
-        model="LongCat-2.0-Preview",
-        base_url="https://api.longcat.chat/openai"
-    )
+#     llm = OpenAILLM(
+#         api_key="ak_2yp3Xw1Ny7ky2pF7er9x93ZO9jj6G",
+#         model="LongCat-2.0-Preview",
+#         base_url="https://api.longcat.chat/openai"
+#     )
 
-    class MockTools:
-        def __init__(self):
-            self.tools = {
-                "file_write": "Write code or text to a specific file path",
-                "file_read": "Read content from a specific file path",
-                "execute_terminal": "Run terminal commands",
-                "folder_create": "Create a new folder"
-            }
-        def get_all_tools_info(self):
-            return [{"name": k, "description": v} for k, v in self.tools.items()]
+#     class MockTools:
+#         def __init__(self):
+#             self.tools = {
+#                 "file_write": "Write code or text to a specific file path",
+#                 "file_read": "Read content from a specific file path",
+#                 "execute_terminal": "Run terminal commands",
+#                 "folder_create": "Create a new folder"
+#             }
+#         def get_all_tools_info(self):
+#             return [{"name": k, "description": v} for k, v in self.tools.items()]
 
-    async def run_test():
-        await llm.init()
+#     async def run_test():
+#         await llm.init()
         
-        mock_tools = MockTools()
+#         mock_tools = MockTools()
         
-        # Initialize an empty cache for task store simulation
-        from phoenix.services.cache import RedisCache
-        task_store = RedisCache()
-        await task_store.init()
+#         # Initialize an empty cache for task store simulation
+#         from phoenix.services.cache import RedisCache
+#         task_store = RedisCache()
+#         await task_store.init()
         
-        planner = Planner(llm=llm, tools=mock_tools, task_store=task_store)
+#         planner = Planner(llm=llm, tools=mock_tools, task_store=task_store)
         
-        objective = "build a secure rust actix-web API for a blogging engine"
-        prompt = "create the initial architecture tasks"
+#         objective = "build a secure rust actix-web API for a blogging engine"
+#         prompt = "create the initial architecture tasks"
         
-        print("Starting Planner create_task test using TaskCreator...")
-        task = await planner.create_task(objective, prompt)
+#         print("Starting Planner create_task test using TaskCreator...")
+#         task = await planner.create_task(objective, prompt)
         
-        print("\n" + "="*60)
-        print("PLANNER GENERATED TASK (Readable Format)")
-        print("="*60)
-        print(task.model_dump_json(indent=5))
-        print("="*60 + "\n")
+#         print("\n" + "="*60)
+#         print("PLANNER GENERATED TASK (Readable Format)")
+#         print("="*60)
+#         print(task.model_dump_json(indent=5))
+#         print("="*60 + "\n")
 
-    asyncio.run(run_test())
+#     asyncio.run(run_test())
