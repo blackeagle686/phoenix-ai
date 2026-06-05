@@ -4,8 +4,6 @@
 
 """
 
-
-
 class TaskCreator:
     def __init__(self, llm: Any, tools: Optional[Any] = None, cache: Optional[Any] = None ):
         self.llm = llm
@@ -19,7 +17,7 @@ class TaskCreator:
 
     async def create_solution(slef, problem):
         pass
-    
+
     async def create_task(self, objective: str, user_prompt: str) -> Task:
         """Creates a structured task based on objective and prompt."""
         pass
