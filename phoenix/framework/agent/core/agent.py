@@ -66,7 +66,7 @@ class Agent:
 
         self.actor = actor or self._build_component("actor")
         if self.actor is None:
-            self.actor = Actor(self.tool_manager)
+            self.actor = Actor(self.tool_manager, llm=self.llm)
 
         self.reflector = reflector or self._build_component("reflector")
         if self.reflector is None:
