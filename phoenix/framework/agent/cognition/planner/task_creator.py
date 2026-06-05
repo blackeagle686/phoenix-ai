@@ -56,7 +56,6 @@ class TaskCreator:
         except ValueError:
             complexity = ProblemComplexity.MEDIUM
 
-        sols_data = data.get("solutions", [])
         solutions = []
         for s in sols_data:
             stype_str = s.get("solution_type", "other").lower()
