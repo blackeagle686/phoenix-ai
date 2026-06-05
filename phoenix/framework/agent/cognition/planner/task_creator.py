@@ -40,10 +40,12 @@ class TaskCreator:
         Given the following objective, identify the core problem and propose 3 distinct solution approaches.
         Objective: {objective}
 
-        Respond ONLY in valid JSON matching this structure:
+        Valid complexity values: "low", "medium", "high", "extreme"
+
+        Respond ONLY in valid JSON matching this exact structure (no comments):
         {{
             "description": "Clear description of the core problem to solve",
-            "complexity": "low", // one of: low, medium, high, extreme
+            "complexity": "low",
             "approaches": [
                 "Approach 1 description...",
                 "Approach 2 description...",
@@ -77,10 +79,12 @@ class TaskCreator:
             Problem: {desc}
             Approach: {approach_text}
             
-            Respond ONLY in valid JSON matching this structure:
+            Valid solution_type values: "plan", "code", "terminal", "network", "mission", "fastanswer", "other"
+            
+            Respond ONLY in valid JSON matching this exact structure (no comments):
             {{
                 "description": "Short description of the solution",
-                "solution_type": "plan", // one of: plan, code, terminal, network, mission, fastanswer, other
+                "solution_type": "plan",
                 "content": "Detailed steps or code to solve the problem"
             }}
             """
