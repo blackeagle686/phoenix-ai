@@ -225,8 +225,8 @@ if __name__ == "__main__":
     async def run_test():
         await llm.init()
         test_task = TaskCreator(llm=llm)
-        objective = "Hello my name is TK"
-        prompt = "Create a python code that create an express server"
+        objective = "Hello my name is TK Create a python code that create an express server"
+        prompt = ""
         task = await test_task.create_task(objective, prompt)
         
         print("\n" + "="*60)
