@@ -51,7 +51,7 @@ class TaskCreator:
             "best_solution_index": 0
         }}
         """
-        response = await self.llm.generate(prompt, max_tokens=)
+        response = await self.llm.generate(prompt)
         data = parse_llm_json(response) or {}
         
         desc = data.get("description", f"Problem for objective: {objective}")
