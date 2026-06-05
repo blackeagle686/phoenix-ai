@@ -247,7 +247,7 @@ if __name__ == "__main__":
         task = await test_task.create_task(objective, prompt)
         
         print("\n" + "="*60)
-        print(" GENERATED TASK (Readable Format)")
+        print("GENERATED TASK (Readable Format)")
         print("="*60)
         # Pydantic V2 .model_dump_json() handles UUIDs and Enums
         print(task.model_dump_json(indent=5))
