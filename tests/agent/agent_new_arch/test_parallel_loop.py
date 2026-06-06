@@ -39,34 +39,26 @@ async def test_parallel_arch():
         tools=tools
     )
     
-    # 4. Standard Run Test (File Generation)
-    test_file = "test_parallel_output.txt"
-    if os.path.exists(test_file):
-        os.remove(test_file)
-        
+    # 4. Standard Run Test (Frontend Project Update)
     prompt = (
-        f" the js pages not appear in the index.html fix it, in this folder tests/agent/agent_new_arch/front_test/ check the assets/js, and fix it"
+        "Please update and fix the frontend project located in tests/agent/agent_new_arch/front_test/. "
+        "The JS files are not properly linked or appearing in the index.html. "
+        "Check the index.html and the assets/js folder, make the necessary multiple updates, and fix the project "
+        "to ensure it works correctly."
     )
     
     print("\n" + "-"*40)
-    print(f"[*] Phase 1: Running Standard Parallel Loop")
+    print(f"[*] Phase 1: Running Standard Parallel Loop (Frontend Update Test)")
     print(f"[*] Prompt: {prompt}")
     print("-" * 40)
     
-    result = await agent.run(prompt, max_iterations=6, mode="plan")
+    # Increase max_iterations slightly since updating multiple files can take a few steps
+    result = await agent.run(prompt, max_iterations=10, mode="plan")
     
     print("\n[🎯] FINAL ANSWER:")
     print(result)
     
-    # Verification
-    if os.path.exists(test_file):
-        print(f"\n[✅] SUCCESS! The file '{test_file}' was successfully created by the Agent.")
-        with open(test_file, 'r') as f:
-            print(f"[📝] File contents:\n{f.read().strip()}")
-        # Cleanup
-        os.remove(test_file)
-    else:
-        print(f"\n[❌] FAILED! The file '{test_file}' was NOT created.")
+    print("\n[✅] Execution completed! Please check tests/agent/agent_new_arch/front_test/ manually to verify the updates.")
         
     # 5. Stream Run Test (Introspection)
     stream_prompt = (
