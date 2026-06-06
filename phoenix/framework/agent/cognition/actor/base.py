@@ -16,3 +16,11 @@ class BaseActor(ABC):
         Optionally takes a full Task context to generate reflections via the Reflector.
         """
         pass
+
+    @abstractmethod
+    async def generate_and_execute(self, task: Task, previous_results: str = "") -> ActorOutputSchema:
+        """
+        Dynamically generates the required code and tool payload based on the Task's high-level strategy,
+        then executes the tool immediately.
+        """
+        pass
