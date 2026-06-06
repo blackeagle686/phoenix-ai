@@ -40,7 +40,7 @@ class Reflector(BaseReflector):
             system_prompt += f"\n\nAgent Profile Context:\n{self.profile.to_prompt_string()}"
             
         full_prompt = f"{system_prompt}\n\nReflection (JSON only):"
-        response = await self.llm.generate(full_prompt, session_id=None)
+        response = await self.llm.generate(full_prompt, session_id=None, max_tokens=1000)
         
         data = parse_llm_json(response)
         
