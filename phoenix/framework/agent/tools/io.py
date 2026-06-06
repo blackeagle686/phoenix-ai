@@ -191,6 +191,13 @@ class FileEditTool(BaseTool):
                         lines.extend(["\n"] * (start_idx - len(lines)))
                         
                     new_lines = chunk.replacement_content.splitlines(keepends=True)
+                    # Add back trailing newline if missing, to prevent merging with next line
+                    if chunk.replacement_content and not chunk.replacement_content.endswith('\n'):
+                        if new_lines:
+                            new_lines[-1] += '\n'
+                        else:
+                            new_lines.append('\n')
+                            
                     lines[start_idx:end_idx] = new_lines
                     
                 with open(file_path, 'w', encoding='utf-8') as f:
