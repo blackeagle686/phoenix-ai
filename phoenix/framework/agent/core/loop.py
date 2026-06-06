@@ -176,7 +176,10 @@ class AgentLoop:
                     self._schedule_background(memory.add_interaction(session_id, "system", f"Tool Output: {actor_output.success}"))
                     self._schedule_background(memory.long_term.add(session_id, reflection.feedback))
                     
-                    await actor_queue.put("trigger_actor")
+                    if shared_state["iterations"] >= max_iterations:
+                        await planner_queue.put("trigger_planner")
+                    else:
+                        await actor_queue.put("trigger_actor")
                     reflector_queue.task_done()
             except asyncio.CancelledError:
                 pass
@@ -296,7 +299,10 @@ class AgentLoop:
                     self._schedule_background(memory.add_interaction(session_id, "system", f"Output: {actor_output.success}"))
                     self._schedule_background(memory.long_term.add(session_id, reflection.feedback))
                     
-                    await actor_queue.put("trigger_actor")
+                    if shared_state["iterations"] >= max_iterations:
+                        await planner_queue.put("trigger_planner")
+                    else:
+                        await actor_queue.put("trigger_actor")
                     reflector_queue.task_done()
             except asyncio.CancelledError:
                 pass
