@@ -4,6 +4,8 @@ from phoenix.framework.agent.cognition.actor.schema import ActorInputSchema, Act
 from phoenix.framework.agent.cognition.planner.schema import Task
 from enum import Enum
 from phoenix.framework.agent.runtime.base import BaseRuntime
+
+class Execution_type(str, Enum):
     COMPILE = "compile"
     RUN = "run"
         
