@@ -75,7 +75,10 @@ class Thinker(BaseThinker):
             "You are the Thinker. Given the following solutions, define the exact strict actions to take.\n"
             "Include the precise tools to call with arguments, and strict file I/O operations (file paths and contents) to enact the solution."
             f"{tools_list}\n\n"
-            "IMPORTANT: When specifying tools_to_call, ONLY use the tool names provided in the Available Tools list. Do NOT invent new tool names."
+            "IMPORTANT:\n"
+            "1. ALWAYS use ABSOLUTE file paths for any file_path or directory, based on the directories mentioned in the context or user request.\n"
+            "2. When specifying tools_to_call, ONLY use the tool names provided in the Available Tools list.\n"
+            "3. Use `io_operations` natively for creating, reading, editing, or deleting files. Do NOT use tool calls for file writing/editing if you use io_operations."
         )
         solution_json = solution.json()
         full_prompt = f"{system_prompt}\n\nSolutions:\n{solution_json}"
