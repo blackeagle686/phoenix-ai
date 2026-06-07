@@ -43,7 +43,7 @@ async def test_parallel_arch():
     
     # 4. Standard Run Test (Frontend Project Update)
     prompt = (
-        "create a modular frontend project tests/agent/agent_new_arch/front_test "
+        "create a modular frontend wallet system project tests/agent/agent_new_arch/front_test "
         "The JS components don't appear in the index.html. Please fix it. "
         "Check the index.html and the assets/js folder, and make all necessary updates."
     )
