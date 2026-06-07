@@ -128,7 +128,11 @@ class RestrictedPythonRuntime(BaseRuntime):
         abs_path = os.path.abspath(file_path)
         
         try:
-            if operation in ["create", "edit", "append"]:
+            if operation == "create_dir":
+                os.makedirs(abs_path, exist_ok=True)
+                return ExecutionResult(success=True, output=f"Successfully created directory {file_path}")
+
+            elif operation in ["create", "edit", "append"]:
                 if not content:
                     content = ""
                 # Ensure directory exists
