@@ -1,54 +1,78 @@
-from typing import Any, List, Dict
+import json
+from typing import Any
 from .base import BaseThinker
-from ..utils import safe_parse_thinker_output
+from ..schemas.brain import PlanSchema, ProblemSchema, SolutionSchema, ActionSchema, ReflectionSchema
 
 class Thinker(BaseThinker):
     """
-    Analyzes user prompts, breaks them down, and understands core objectives.
-    Inherits from BaseThinker to ensure consistent interface.
+    The Central Brain. This is the only module that makes LLM generation calls.
+    It takes requests from the Planner, Actor, and Reflector and returns strict schemas.
     """
     
-    def __init__(self, llm, profile=None):
-        super().__init__(llm, profile=profile)
+    def __init__(self, llm, profile=None, tool_manager=None):
+        super().__init__(llm, profile=profile, tool_manager=tool_manager)
 
-    async def analyze(self, prompt: str, memory: Any, session_id: str) -> str:
-        """
-        Coordinates the thinking process.
-        """
+    async def _execute_search_tools(self, prompt: str) -> str:
+        """Helper to run search/read tools directly to gather context if needed."""
+        context = ""
+        if self.tool_manager:
+            # Simple heuristic: if we have tool manager, we could call specific read tools.
+            # For now, we will rely on the agent's memory or explicit file contents passed.
+            pass
+        return context
+
+    async def generate_plan(self, prompt: str, memory: Any, session_id: str) -> PlanSchema:
         context = await memory.get_full_context(session_id, query=prompt)
-        
-        system_prompt = f"""
-        You are the 'Thinker' module, the lead architect of an autonomous agent.
-        Your job is to deconstruct complex user prompts into a refined, actionable objective.
-        
-        Guidelines:
-        1. Identify the 'Core Intent' - what does the user actually want?
-        2. Identify 'Implicit Requirements' - what else needs to happen for this to be correct?
-        3. Define 'Success Criteria' - how will we know the task is done?
-        
-        Context from Memory:
-        {context}
-        """
-
+        system_prompt = (
+            "You are the master Thinker and Planner. Analyze the user request and project context.\n"
+            "Create a strict plan containing a main objective and a list of step-by-step tasks to accomplish it."
+        )
         if self.profile:
             system_prompt += f"\n\n{self.profile.to_prompt_string()}"
             
-        full_prompt = (
-            f"{system_prompt}\n\n"
-            f"User Request: {prompt}\n\n"
-            "Respond with a comprehensive Objective Analysis (Core Intent + Requirements + Success Criteria):"
+        full_prompt = f"{system_prompt}\n\nContext:\n{context}\n\nUser Request: {prompt}"
+        
+        # We assume the LLM implementation has `generate_structured`
+        return await self.llm.generate_structured(full_prompt, PlanSchema, session_id=session_id)
+
+    async def define_problems(self, task: Any) -> ProblemSchema:
+        task_desc = getattr(task, "description", str(task))
+        task_id = getattr(task, "task_id", "unknown")
+        
+        system_prompt = (
+            "You are the Thinker. Given the following task, define the explicit problems "
+            "that need to be solved. Break down the task into distinct technical problems."
         )
-        return await self.llm.generate(full_prompt, session_id=None, max_tokens=200)
+        full_prompt = f"{system_prompt}\n\nTask ID: {task_id}\nTask Description: {task_desc}"
+        
+        return await self.llm.generate_structured(full_prompt, ProblemSchema)
 
-    async def generate_main_objective(self, prompt: str) -> str:
-        # Implementation logic can be added here
-        return "Refined main objective"
+    async def create_solutions(self, problems: ProblemSchema) -> SolutionSchema:
+        system_prompt = (
+            "You are the Thinker. Given the following defined problems, generate an algorithmic "
+            "or architectural solution for each problem, including the tools required."
+        )
+        problems_json = problems.json()
+        full_prompt = f"{system_prompt}\n\nProblems:\n{problems_json}"
+        
+        return await self.llm.generate_structured(full_prompt, SolutionSchema)
 
-    async def generate_sub_objectives(self, main_objective: str) -> List[str]:
-        return []
+    async def generate_action_payload(self, solution: SolutionSchema) -> ActionSchema:
+        system_prompt = (
+            "You are the Thinker. Given the following solutions, define the exact strict actions to take.\n"
+            "Include the precise tools to call with arguments, and strict file I/O operations (file paths and contents) to enact the solution."
+        )
+        solution_json = solution.json()
+        full_prompt = f"{system_prompt}\n\nSolutions:\n{solution_json}"
+        
+        return await self.llm.generate_structured(full_prompt, ActionSchema)
 
-    async def retrieve_context_memory(self, main_objective: str) -> List[str]:
-        return []
-
-    async def summarize(self, prompt: str) -> str:
-        return "Summary"
+    async def generate_reflection(self, runtime_output: Any, context: str) -> ReflectionSchema:
+        system_prompt = (
+            "You are the Thinker reflecting on the output of the isolated runtime execution.\n"
+            "Analyze the success, stdout, and stderr. Judge if the current task is complete.\n"
+            "Provide detailed feedback and a rating."
+        )
+        full_prompt = f"{system_prompt}\n\nContext/Objective: {context}\n\nRuntime Output:\n{runtime_output}"
+        
+        return await self.llm.generate_structured(full_prompt, ReflectionSchema)
