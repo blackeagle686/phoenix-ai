@@ -72,7 +72,7 @@ class Agent:
         # But we need to import RestrictedPythonRuntime or BaseRuntime. For now, Actor accepts runtime=None.
         self.actor = actor or self._build_component("actor")
         if self.actor is None:
-            self.actor = Actor(self.tool_manager, thinker=self.thinker, runtime=None, reflector=self.reflector)
+            self.actor = Actor(self.tool_manager, thinker=self.thinker, runtime=runtime, reflector=self.reflector)
 
         self.analyzer = analyzer or self._build_component("analyzer")
         if self.analyzer is None:
