@@ -4,7 +4,9 @@ from phoenix.framework.agent.cognition.actor.schema import ActorInputSchema, Act
 from phoenix.framework.agent.cognition.planner.schema import Task
 
 
-
+class Execution_type(str, Enum):
+    
+    pass
 
 
 class BaseActor(ABC):
