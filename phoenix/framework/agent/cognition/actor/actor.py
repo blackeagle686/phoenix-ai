@@ -63,10 +63,10 @@ class Actor(BaseActor):
                     res = await self.runtime.execute_command(cmd, cwd=cwd)
                     results.append({"tool": tool_name, "success": res.success, "output": res.output, "error": getattr(res, "error", None)})
                     if not res.success: success = False
-                elif tool_name in ["read_file", "write_file", "edit_file", "append_file", "delete_file"] and self.runtime and hasattr(self.runtime, "execute_io"):
+                elif tool_name in ["file_read", "file_write", "file_edit", "file_append", "file_delete"] and self.runtime and hasattr(self.runtime, "execute_io"):
                     op_map = {
-                        "read_file": "read", "write_file": "create", 
-                        "edit_file": "edit", "append_file": "append", "delete_file": "delete"
+                        "file_read": "read", "file_write": "create", 
+                        "file_edit": "edit", "file_append": "append", "file_delete": "delete"
                     }
                     op = op_map.get(tool_name)
                     path = payload.get("file_path", payload.get("path", ""))
