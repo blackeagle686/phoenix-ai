@@ -81,89 +81,58 @@ async def test_centralized_brain_step_by_step():
         print("[!] No tasks generated. Exiting.")
         return
         
-    # Take the first task
-    current_task = plan.tasks[0]
-    
-    # --- Brain Step 2: Defining Problems ---
-    print(f"\n>>> BRAIN STEP 2: Thinker defining ProblemSchema for Task '{current_task.task_id}'...")
-    problems = await planner.define_task_problems(current_task)
-    
-    print("\n[🔍 PROBLEMS DEFINED]")
-    print(json.dumps(problems.dict(), indent=2))
-    
-    # --- Brain Step 3: Actor Solutions & Execution ---
-    print(f"\n>>> BRAIN STEP 3: Thinker creating SolutionSchema & ActionSchema, Actor executing...")
-    
-    # We will step into actor.generate_and_execute manually to print the schemas
-    print("  -> Thinker generating SolutionSchema...")
-    solution = await thinker.create_solutions(problems)
-    print("\n[💡 SOLUTIONS CREATED]")
-    print(json.dumps(solution.dict(), indent=2))
-    
-    print("\n  -> Thinker generating ActionSchema...")
-    action_payload = await thinker.generate_action_payload(solution)
-    print("\n[⚙️ ACTIONS TO TAKE]")
-    print(json.dumps(action_payload.dict(), indent=2))
-    
-    # Execute tools
-    print("\n[🚀 EXECUTING ACTIONS]")
-    results = []
-    success = True
-    
-    # IO Operations
-    for io_op in action_payload.io_operations:
-        print(f"  -> Executing IO Op: {io_op.operation} on {io_op.file_path}")
-        if io_op.operation in ["create", "edit"]:
-            try:
-                with open(io_op.file_path, "w") as f:
-                    f.write(io_op.content)
-                res_dict = {"io_op": io_op.operation, "path": io_op.file_path, "success": True}
-                print(f"     ✅ Written to disk successfully.")
-            except Exception as e:
-                res_dict = {"io_op": io_op.operation, "path": io_op.file_path, "success": False, "error": str(e)}
-                print(f"     ❌ Failed: {e}")
-                success = False
-            results.append(res_dict)
+    for task_idx, current_task in enumerate(plan.tasks):
+        if task_idx > 1: # Limit to 2 tasks for testing to prevent infinite loops
+            print("\n[!] Stopping after 2 tasks for safety.")
+            break
             
-    # Tools
-    for tool_call in action_payload.tools_to_call:
-        print(f"  -> Executing Tool: {tool_call.tool_name} with args: {tool_call.arguments}")
-        try:
-            res_str = await tool_manager.execute_tool(tool_call.tool_name, tool_call.arguments)
-            res_success = "error" not in str(res_str).lower()
-            results.append({"tool": tool_call.tool_name, "success": res_success, "output": str(res_str)})
-            print(f"     ✅ Tool returned: {str(res_str)[:100]}...")
-        except Exception as e:
-            results.append({"tool": tool_call.tool_name, "success": False, "error": str(e)})
-            print(f"     ❌ Tool error: {e}")
-            success = False
-            
-    actor_output = {
-        "task_id": current_task.task_id,
-        "success": success,
-        "execution_results": results,
-        "action_plan": action_payload.action_plan
-    }
-    
-    # --- Brain Step 4: Reflection ---
-    print(f"\n>>> BRAIN STEP 4: Thinker generating ReflectionSchema to judge execution...")
-    ref_input = ReflectorInputSchema(
-        reflector_type=ReflectorType.TASK,
-        target_id=current_task.task_id,
-        target_content=actor_output,
-        context=plan.objective
-    )
-    
-    reflection = await reflector.reflect(ref_input)
-    print("\n[🧐 REFLECTION CREATED]")
-    print(json.dumps(reflection.dict(), indent=2))
-    
-    print("\n" + "="*80)
-    if reflection.is_task_complete:
-        print("✅ WORKFLOW COMPLETE: Task was judged as successfully finished!")
-    else:
-        print("🔄 WORKFLOW INCOMPLETE: Task requires more iterations.")
-    print("="*80)
+        print(f"\n{'='*40}")
+        print(f">>> BRAIN STEP 2: Thinker defining ProblemSchema for Task '{current_task.task_id}'...")
+        print(f"{'='*40}")
+        problems = await planner.define_task_problems(current_task)
+        
+        print("\n[🔍 PROBLEMS DEFINED]")
+        print(json.dumps(problems.model_dump(), indent=2))
+        
+        # --- Brain Step 3: Actor Solutions & Execution ---
+        print(f"\n>>> BRAIN STEP 3: Thinker creating SolutionSchema & ActionSchema, Actor executing...")
+        
+        print("  -> Thinker generating SolutionSchema...")
+        solution = await thinker.create_solutions(problems)
+        print("\n[💡 SOLUTIONS CREATED]")
+        print(json.dumps(solution.model_dump(), indent=2))
+        
+        print("\n  -> Thinker generating ActionSchema...")
+        action_payload = await thinker.generate_action_payload(solution)
+        print("\n[⚙️ ACTIONS TO TAKE]")
+        print(json.dumps(action_payload.model_dump(), indent=2))
+        
+        # Execute tools via strict Runtime using Actor
+        print("\n[🚀 EXECUTING ACTIONS VIA STRICT RUNTIME]")
+        actor_output = await actor.generate_and_execute(problems)
+        
+        print("\n[✅ ACTOR EXECUTION RESULTS]")
+        print(json.dumps(actor_output.model_dump(), indent=2))
+        
+        # --- Brain Step 4: Reflection ---
+        print(f"\n>>> BRAIN STEP 4: Thinker generating ReflectionSchema to judge execution...")
+        ref_input = ReflectorInputSchema(
+            reflector_type=ReflectorType.TASK,
+            target_id=current_task.task_id,
+            target_content=actor_output.model_dump(),
+            context=plan.objective
+        )
+        
+        reflection = await reflector.reflect(ref_input)
+        print("\n[🧐 REFLECTION CREATED]")
+        print(json.dumps(reflection.model_dump(), indent=2))
+        
+        print("\n" + "="*80)
+        if reflection.is_task_complete:
+            print(f"✅ WORKFLOW COMPLETE: Task {current_task.task_id} was judged as successfully finished!")
+        else:
+            print(f"🔄 WORKFLOW INCOMPLETE: Task {current_task.task_id} requires more iterations.")
+        print("="*80)
 
 if __name__ == "__main__":
     asyncio.run(test_centralized_brain_step_by_step())
