@@ -10,9 +10,8 @@ class Actor(BaseActor):
     via the Runtime. Does not perform LLM calls itself.
     """
     
-    def __init__(self, tool_manager, thinker, runtime, reflector: Optional[Any] = None):
-        super().__init__(tool_manager=tool_manager, llm=None, reflector=reflector, runtime=runtime)
-        self.thinker = thinker
+    def __init__(self, tool_manager, thinker, runtime=None, reflector: Optional[Any] = None):
+        super().__init__(tool_manager=tool_manager, thinker=thinker, reflector=reflector, runtime=runtime)
         
     async def generate_and_execute(self, task: Any, previous_results: str = "") -> ActorOutputSchema:
         """
