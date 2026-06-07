@@ -43,8 +43,8 @@ async def test_parallel_arch():
     
     # 4. Standard Run Test (Frontend Project Update)
     prompt = (
-        "create a modular frontend wallet system project tests/agentagent_new_arch/front_test ",
-        "The system should have the following features:",
+        "create a modular frontend wallet system project tests/agent/agent_new_arch/front_test "
+        "The system should have the following features:"
         "- Wallet Creation (generate mnemonic phrase, generate private key)"
         "- Wallet Recovery (recover from mnemonic phrase)"
         "- Transaction Creation (send transaction to another wallet)"
