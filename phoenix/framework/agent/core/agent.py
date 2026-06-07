@@ -58,19 +58,21 @@ class Agent:
 
         self.thinker = thinker or self._build_component("thinker")
         if self.thinker is None:
-            self.thinker = Thinker(self.llm, profile=self.profile)
+            self.thinker = Thinker(self.llm, profile=self.profile, tool_manager=self.tool_manager)
 
         self.planner = planner or self._build_component("planner")
         if self.planner is None:
-            self.planner = Planner(self.llm, self.tools, profile=self.profile)
-
-        self.actor = actor or self._build_component("actor")
-        if self.actor is None:
-            self.actor = Actor(self.tool_manager, llm=self.llm)
+            self.planner = Planner(self.thinker, self.tools, profile=self.profile)
 
         self.reflector = reflector or self._build_component("reflector")
         if self.reflector is None:
-            self.reflector = Reflector(self.llm, profile=self.profile)
+            self.reflector = Reflector(self.thinker, profile=self.profile)
+
+        # We assume a default runtime if none provided, or we initialize without one and set later.
+        # But we need to import RestrictedPythonRuntime or BaseRuntime. For now, Actor accepts runtime=None.
+        self.actor = actor or self._build_component("actor")
+        if self.actor is None:
+            self.actor = Actor(self.tool_manager, thinker=self.thinker, runtime=None, reflector=self.reflector)
 
         self.analyzer = analyzer or self._build_component("analyzer")
         if self.analyzer is None:
