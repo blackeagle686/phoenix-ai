@@ -5,8 +5,7 @@ from phoenix.framework.agent.cognition.planner.schema import Task
 
 
 class Execution_type(str, Enum):
-    CODE = "code"
-    
+    COMP    
 
 class BaseActor(ABC):
     def __init__(self, tool_manager: Any, llm: Optional[Any] = None, reflector: Optional[Any] = None):
