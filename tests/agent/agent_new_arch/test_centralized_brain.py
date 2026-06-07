@@ -61,7 +61,7 @@ async def test_centralized_brain_step_by_step():
         f"create a midum wallet frontend web pages in /home/tlk/Documents/Projects/my_AItools/IRYM_sdk/tests/agent/agent_new_arch/front_test "
         "using just html, css, js  "
         "no backend"
-        ""
+        "use modular file and folder architecture"
     )
     
     print("\n" + "-"*60)
