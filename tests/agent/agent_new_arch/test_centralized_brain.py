@@ -31,12 +31,8 @@ async def test_centralized_brain_step_by_step():
     )
     await llm.init()
     
-    # 2. Register core Tools and Runtime
+    # 2. Register core Tools and Runtime (Removed basic IO tools because ActionSchema io_operations handles them natively)
     tools = [
-        FileReadTool(),
-        FileWriteTool(),
-        FileEditTool(),
-        FileAppendTool(),
         FileSearchTool(),
         PythonAnalyzerTool(),
         CommandExecutionTool()
