@@ -10,6 +10,7 @@ class Execution_type(str, Enum):
     RUN = "run"
         
 
+class BaseActor(ABC):
     def __init__(self, tool_manager: Any, thinker: Any, runtime: Optional[BaseRuntime] = None, reflector: Optional[Any] = None):
         self.tool_manager = tool_manager
         self.thinker = thinker
