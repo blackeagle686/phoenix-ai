@@ -58,9 +58,17 @@ class Thinker(BaseThinker):
         return await self.llm.generate_structured(full_prompt, SolutionSchema)
 
     async def generate_action_payload(self, solution: SolutionSchema) -> ActionSchema:
+        tools_list = ""
+        if self.tool_manager and hasattr(self.tool_manager, "registry"):
+            import json
+            tools_info = self.tool_manager.registry.get_all_tools_info()
+            tools_list = "\n\nAvailable Tools:\n" + json.dumps(tools_info, indent=2)
+
         system_prompt = (
             "You are the Thinker. Given the following solutions, define the exact strict actions to take.\n"
             "Include the precise tools to call with arguments, and strict file I/O operations (file paths and contents) to enact the solution."
+            f"{tools_list}\n\n"
+            "IMPORTANT: When specifying tools_to_call, ONLY use the tool names provided in the Available Tools list. Do NOT invent new tool names."
         )
         solution_json = solution.json()
         full_prompt = f"{system_prompt}\n\nSolutions:\n{solution_json}"
