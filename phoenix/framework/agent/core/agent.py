@@ -28,6 +28,7 @@ class Agent:
         actor=None,
         reflector=None,
         tool_manager=None,
+        runtime=None,
         loop=None,
         profile: Optional[Union[AgentProfile, str, dict]] = None,
         loop_cls: Optional[Type[AgentLoop]] = None,
