@@ -12,6 +12,7 @@ from phoenix.framework.agent.cognition.actor.schema import (
     PythonAnalysisResult,
     PythonClassInfo,
     PythonMethodInfo,
+    CommandExecutionResult,
     CodeCompileResult
 )
 from phoenix.framework.agent.runtime.restricted_python import RestrictedPythonRuntime
