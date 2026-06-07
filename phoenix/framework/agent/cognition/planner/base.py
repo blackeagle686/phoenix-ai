@@ -13,13 +13,13 @@ from phoenix.framework.agent.cognition.reflector.schema import BaseReflectorMeta
 class BasePlanner(ABC): 
     def __init__(
         self, 
-        llm: Any, 
+        thinker: Any, 
         tools: Optional[Any] = None, 
         memory: Optional[Any] = None,
         task_store: Optional[Any] = None, 
         profile: Optional[Any] = None
     ):
-        self.llm = llm 
+        self.thinker = thinker 
         self.tools = tools
         self.memory = memory 
         self.task_store = task_store
