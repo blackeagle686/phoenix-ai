@@ -4,7 +4,7 @@ from openai import AsyncOpenAI
 from phoenix.services.observability.tracing import tracer
 from phoenix.services.observability.logger import get_logger
 from phoenix.core.container import container
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 import asyncio
 import re
 import ast
