@@ -82,8 +82,9 @@ class Thinker(BaseThinker):
             "IMPORTANT:\n"
             "1. ALWAYS use ABSOLUTE file paths for any file_path or directory, based on the directories mentioned in the context or user request.\n"
             "2. When specifying tools_to_call, ONLY use the tool names provided in the Available Tools list.\n"
-            "3. Use `io_operations` natively for creating, reading, editing, or deleting files. Do NOT use tool calls for file writing/editing if you use io_operations.\n"
-            "4. Do NOT use bash brace expansion like `{css,js,assets}` in file paths. You MUST specify each absolute path explicitly as a separate operation."
+            "3. Use `io_operations` natively for creating, reading, editing, or deleting files.\n"
+            "4. NEVER use the execute_command tool for file or directory operations (no mkdir, touch, rm, etc.). ALWAYS use io_operations instead.\n"
+            "5. Do NOT use bash brace expansion like `{css,js,assets}` in file paths or commands. You MUST specify each absolute path explicitly as a separate operation."
         )
         solution_json = solution.json()
         full_prompt = f"{system_prompt}\n\nContext:\n{context}\n\nSolutions:\n{solution_json}"
