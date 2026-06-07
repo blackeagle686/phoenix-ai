@@ -70,7 +70,7 @@ class Actor(BaseActor):
                     }
                     op = op_map.get(tool_name)
                     path = payload.get("file_path", payload.get("path", ""))
-                    content = payload.get("content", "")
+                    content = payload.get("content", payload.get("write_content", payload.get("edit_content", "")))
                     res = await self.runtime.execute_io(op, path, content)
                     results.append({"tool": tool_name, "success": res.success, "output": res.output, "error": getattr(res, "error", None)})
                     if not res.success: success = False
