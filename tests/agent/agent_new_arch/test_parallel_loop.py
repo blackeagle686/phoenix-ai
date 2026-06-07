@@ -51,6 +51,7 @@ async def test_parallel_arch():
         "- Transaction Broadcasting (broadcast transaction to blockchain)"
         "- Transaction History (list of transactions)"
         "- Balance Checking (check balance of wallet)"
+        ""
     )
     
     print("\n" + "-"*40)
