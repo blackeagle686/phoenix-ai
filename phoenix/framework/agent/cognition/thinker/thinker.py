@@ -47,7 +47,7 @@ class Thinker(BaseThinker):
         
         return await self.llm.generate_structured(full_prompt, ProblemSchema)
 
-    async def create_solutions(self, problems: ProblemSchema) -> SolutionSchema:
+    async def create_solutions(self, problems: ProblemSchema, context: str = "") -> SolutionSchema:
         tools_list = ""
         if self.tool_manager and hasattr(self.tool_manager, "registry"):
             import json
@@ -60,11 +60,11 @@ class Thinker(BaseThinker):
             f"{tools_list}"
         )
         problems_json = problems.json()
-        full_prompt = f"{system_prompt}\n\nProblems:\n{problems_json}"
+        full_prompt = f"{system_prompt}\n\nContext:\n{context}\n\nProblems:\n{problems_json}"
         
         return await self.llm.generate_structured(full_prompt, SolutionSchema, max_tokens=8192)
 
-    async def generate_action_payload(self, solution: SolutionSchema) -> ActionSchema:
+    async def generate_action_payload(self, solution: SolutionSchema, context: str = "") -> ActionSchema:
         tools_list = ""
         if self.tool_manager and hasattr(self.tool_manager, "registry"):
             import json
@@ -81,7 +81,7 @@ class Thinker(BaseThinker):
             "3. Use `io_operations` natively for creating, reading, editing, or deleting files. Do NOT use tool calls for file writing/editing if you use io_operations."
         )
         solution_json = solution.json()
-        full_prompt = f"{system_prompt}\n\nSolutions:\n{solution_json}"
+        full_prompt = f"{system_prompt}\n\nContext:\n{context}\n\nSolutions:\n{solution_json}"
         
         return await self.llm.generate_structured(full_prompt, ActionSchema, max_tokens=8192)
 
