@@ -6,6 +6,7 @@ from phoenix.framework.agent.cognition.planner.schema import Task
 
 class Execution_type(str, Enum):
     COMPILE = "compile"
+    RUN = "run"
         
 
 class BaseActor(ABC):
