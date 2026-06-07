@@ -1,69 +1,45 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional
-from ..schemas import FileTask, Task, ThinkerOutput
+from ..schemas.brain import PlanSchema, ProblemSchema, SolutionSchema, ActionSchema, ReflectionSchema
 
 class BaseThinker(ABC):
-    def __init__(self, llm, profile: Any = None):
+    def __init__(self, llm, profile: Any = None, tool_manager: Any = None):
         self.llm = llm
         self.profile = profile
+        self.tool_manager = tool_manager
 
     @abstractmethod
-    async def analyze(self, prompt: str, memory: Any, session_id: str) -> str:
+    async def generate_plan(self, prompt: str, memory: Any, session_id: str) -> PlanSchema:
         """
-        Full thinking pipeline (orchestrated)
+        Brain Step 1: Takes the user prompt, utilizes tools to analyze the project,
+        and generates a high-level plan with tasks.
         """
         pass
 
     @abstractmethod
-    async def generate_main_objective(self, prompt: str) -> str:
+    async def define_problems(self, task: Any) -> ProblemSchema:
+        """
+        Brain Step 2: Given a task, defines the specific problems to solve.
+        """
         pass
 
     @abstractmethod
-    async def generate_sub_objectives(self, main_objective: str) -> List[str]:
+    async def create_solutions(self, problems: ProblemSchema) -> SolutionSchema:
+        """
+        Brain Step 3: Given defined problems, generates algorithmic/architectural solutions.
+        """
         pass
 
     @abstractmethod
-    async def retrieve_context_memory(self, main_objective: str) -> List[str]:
+    async def generate_action_payload(self, solution: SolutionSchema) -> ActionSchema:
+        """
+        Brain Step 4: Given solutions, generates the explicit tools and file I/O operations.
+        """
         pass
 
     @abstractmethod
-    async def summarize(self, prompt: str) -> str:
+    async def generate_reflection(self, runtime_output: Any, context: str) -> ReflectionSchema:
+        """
+        Brain Step 5: Analyzes runtime output to judge completion and provide feedback.
+        """
         pass
-
-    def _build_output(
-        self,
-        main_objective: str,
-        sub_objectives: List[str],
-        context_memory: List[str],
-        summary: str
-    ) -> ThinkerOutput:
-
-        return ThinkerOutput(
-            main_objective=main_objective,
-            sub_objectives=sub_objectives,
-            context_memory=context_memory,
-            summary_answer=summary,
-            files={},
-            tasks={}
-        )
-
-    def generate_file_task(self, file_path: str, operation: str) -> FileTask:
-        return FileTask(file_path=file_path, operation=operation)
-
-    def generate_task(
-        self,
-        task_id: str,
-        description: str,
-        dependencies: Optional[List[str]] = None,
-        tools_required: Optional[List[str]] = None,
-        priority: str = "medium"
-    ) -> Task:
-
-        return Task(
-            task_id=task_id,
-            description=description,
-            dependencies=dependencies or [],
-            tools_required=tools_required or [],
-            priority=priority,
-            status="pending"
-        )
