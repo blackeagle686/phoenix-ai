@@ -6,120 +6,89 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
 
 from phoenix.framework.agent.core.agent import Agent
-from phoenix.framework.agent.cognition.schemas.brain import (
-    PlanSchema, ProblemSchema, SolutionSchema, ActionSchema, ReflectionSchema,
-    TaskSchema, ProblemDefinition, SolutionDefinition, ToolCall, IOOperation
-)
-from phoenix.framework.agent.tools.registry import ToolRegistry
-from phoenix.framework.agent.execution.tool_manager import ToolManager
-from phoenix.framework.agent.tools.base import ToolResult
-
-class MockTool:
-    def __init__(self, name):
-        self.name = name
-        self.description = f"Mock tool {name}"
-        
-    async def execute(self, **kwargs):
-        print(f"    [Tool Executed] {self.name} with {kwargs}")
-        return ToolResult(success=True, output=f"Executed {self.name}", error=None)
-
-class MockLLM:
-    """Mocks the LLM calls to return exact Pydantic schemas for the centralized Thinker tests."""
-    def __init__(self):
-        self.client = "mock"
-        
-    async def init(self):
-        pass
-
-    async def generate(self, prompt, **kwargs):
-        if "PLAN or FAST" in prompt:
-            return "PLAN"
-        return "Generic response"
-        
-    async def generate_structured(self, prompt, schema, **kwargs):
-        if schema == PlanSchema:
-            print("[MockLLM] Generating PlanSchema...")
-            return PlanSchema(
-                objective="Test Objective",
-                tasks=[
-                    TaskSchema(task_id="t1", description="Test Task 1"),
-                    TaskSchema(task_id="t2", description="Test Task 2")
-                ]
-            )
-        elif schema == ProblemSchema:
-            print("[MockLLM] Generating ProblemSchema...")
-            return ProblemSchema(
-                task_id="mock_id",
-                problems=[
-                    ProblemDefinition(
-                        problem_id="p1", 
-                        description="Test Problem", 
-                        related_context="None", 
-                        files_to_analyze=[]
-                    )
-                ]
-            )
-        elif schema == SolutionSchema:
-            print("[MockLLM] Generating SolutionSchema...")
-            return SolutionSchema(
-                task_id="mock_id",
-                solutions=[
-                    SolutionDefinition(
-                        solution_id="s1",
-                        problem_id="p1",
-                        approach="Mock approach",
-                        required_tools=["mock_tool"]
-                    )
-                ]
-            )
-        elif schema == ActionSchema:
-            print("[MockLLM] Generating ActionSchema...")
-            return ActionSchema(
-                solution_id="s1",
-                tools_to_call=[ToolCall(tool_name="mock_tool", arguments={"arg1": "val1"})],
-                io_operations=[
-                    IOOperation(operation="create", file_path="mock.txt", content="mock content")
-                ],
-                action_plan="Will run mock tools"
-            )
-        elif schema == ReflectionSchema:
-            print("[MockLLM] Generating ReflectionSchema...")
-            return ReflectionSchema(
-                status="completed",
-                feedback="All looks good.",
-                rating=10,
-                is_task_complete=True
-            )
-        raise ValueError(f"Unknown schema requested: {schema}")
+from phoenix.services.llm.openai import OpenAILLM
+from phoenix.framework.agent.tools.io import FileReadTool, FileWriteTool, FileSearchTool, FileEditTool, FileAppendTool
+from phoenix.framework.agent.tools.code import PythonAnalyzerTool, CommandExecutionTool
 
 async def test_centralized_brain_arch():
     print("="*60)
-    print("🚀 Testing Centralized Brain (Thinker) Architecture")
+    print("🚀 Testing Centralized Brain (Thinker) Architecture with Real LLM")
     print("="*60)
     
-    mock_llm = MockLLM()
-    registry = ToolRegistry()
-    registry.register(MockTool("mock_tool"))
-    
-    agent = Agent(
-        llm=mock_llm,
-        tools=registry
+    # 1. Setup LLM strictly using the requested configuration
+    print("[*] Initializing OpenAILLM (LongCat-2.0-Preview)...")
+    llm = OpenAILLM(
+        api_key="ak_2yp3Xw1Ny7ky2pF7er9x93ZO9jj6G",
+        model="LongCat-2.0-Preview",
+        base_url="https://api.longcat.chat/openai"
     )
     
-    prompt = "Create a test project"
-    print(f"[*] Starting Agent loop with prompt: {prompt}")
+    # 2. Register core Tools
+    tools = [
+        FileReadTool(),
+        FileWriteTool(),
+        FileEditTool(),
+        FileAppendTool(),
+        FileSearchTool(),
+        PythonAnalyzerTool(),
+        CommandExecutionTool()
+    ]
     
-    result = await agent.run(prompt, mode="plan")
+    # 3. Initialize Agent
+    print("[*] Instantiating Agent (Thinker central brain + schemas)...")
+    agent = Agent(
+        llm=llm,
+        tools=tools
+    )
+    
+    # 4. Standard Run Test
+    prompt = (
+        "create a simple python script in tests/agent/agent_new_arch/hello_world.py "
+        "that just prints 'Hello from Centralized Brain!'. "
+        "Use your tools to write this file to disk."
+    )
+    
+    print("\n" + "-"*40)
+    print(f"[*] Phase 1: Running Centralized Brain Loop")
+    print(f"[*] Prompt: {prompt}")
+    print("-" * 40)
+    
+    # Using max_iterations=5 since this is a very simple task
+    result = await agent.run(prompt, max_iterations=5, mode="plan")
     
     print("\n[🎯] FINAL ANSWER:")
     print(result)
     
-    print("\n[✅] Brain Architecture Test completed successfully!")
-    print("The system successfully flowed through Planner -> Thinker -> Actor -> Runtime -> Reflector -> Thinker.")
+    print("\n[✅] Execution completed! Please check tests/agent/agent_new_arch/hello_world.py manually to verify.")
+        
+    # 5. Stream Run Test
+    stream_prompt = (
+        "Read the tests/agent/agent_new_arch/hello_world.py file you just created "
+        "and tell me what it says."
+    )
+    
+    print("\n" + "-"*40)
+    print(f"[*] Phase 2: Running Streaming Centralized Loop")
+    print(f"[*] Prompt: {stream_prompt}")
+    print("-" * 40)
+    
+    print("\n[🌊] Streaming Output Started:\n")
+    async for event in agent.run_stream(stream_prompt, max_iterations=5, mode="plan"):
+        if event["type"] == "status":
+            print(f"\n[STATUS] {event['content']}")
+        elif event["type"] == "chunk":
+            print(event["content"], end="", flush=True)
+            
+    print("\n\n" + "="*60)
+    print("✅ Test Suite Complete")
+    print("="*60)
 
 if __name__ == "__main__":
+    # Ensure graceful async exit
     try:
         asyncio.run(test_centralized_brain_arch())
+    except KeyboardInterrupt:
+        print("\n[!] Test interrupted by user.")
     except Exception as e:
         import traceback
         traceback.print_exc()
