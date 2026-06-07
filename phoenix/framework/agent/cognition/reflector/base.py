@@ -3,8 +3,8 @@ from typing import Any, Optional
 from phoenix.framework.agent.cognition.reflector.schema import ReflectorInputSchema, ReflectorOutputSchema
 
 class BaseReflector(ABC):
-    def __init__(self, llm: Any, profile: Optional[Any] = None):
-        self.llm = llm
+    def __init__(self, thinker: Any, profile: Optional[Any] = None):
+        self.thinker = thinker
         self.profile = profile
 
     @abstractmethod
