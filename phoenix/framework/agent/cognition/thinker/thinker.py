@@ -56,8 +56,12 @@ class Thinker(BaseThinker):
 
         system_prompt = (
             "You are the Thinker. Given the following defined problems, generate an algorithmic "
-            "or architectural solution for each problem, including the tools required."
-            f"{tools_list}"
+            "or architectural solution for each problem, including the tools required.\n"
+            f"{tools_list}\n\n"
+            "IMPORTANT:\n"
+            "1. NEVER recommend using shell commands (mkdir, touch, rm, cat, echo) for file or directory operations.\n"
+            "2. ALWAYS use native io_operations for all file and directory creations or edits.\n"
+            "3. NEVER use bash brace expansions like {css,js,assets} anywhere."
         )
         problems_json = problems.json()
         full_prompt = f"{system_prompt}\n\nContext:\n{context}\n\nProblems:\n{problems_json}"
