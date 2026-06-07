@@ -269,3 +269,58 @@ class OpenAILLM(BaseLLM):
             tracer.end_span(span_id, status="error", error=str(e))
             raise RuntimeError(f"OpenAILLM API call failed: {e}")
 
+    async def generate_structured(
+        self,
+        prompt: str,
+        schema: Any,
+        session_id: Optional[str] = None,
+        max_tokens: Optional[int] = None
+    ) -> Any:
+        if not self.client:
+            raise RuntimeError("OpenAILLM is not initialized.")
+
+        import json
+        # Handle pydantic v1 vs v2 schema extraction
+        schema_json = schema.model_json_schema() if hasattr(schema, "model_json_schema") else (schema.schema_json() if hasattr(schema, "schema_json") else str(schema))
+        if isinstance(schema_json, dict):
+            schema_json = json.dumps(schema_json)
+
+        system_prompt = (
+            f"You are a strict data-generation assistant. "
+            f"You MUST output raw JSON matching the following JSON schema:\n{schema_json}\n"
+            f"Do not output markdown code blocks or any conversational text. Just the raw valid JSON object."
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt}
+        ]
+
+        span_id = tracer.start_span("OpenAILLM.generate_structured", {"model": self.model})
+        try:
+            # We try using response_format, if it fails due to API compatibility, we could fallback, 
+            # but LongCat supports json_object.
+            resp = await self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                max_tokens=max_tokens or config.SECURITY_MAX_OUTPUT_LENGTH,
+                response_format={"type": "json_object"}
+            )
+
+            content = resp.choices[0].message.content.strip()
+            tracer.end_span(span_id, status="success")
+
+            # Remove potential markdown formatting if the model ignored instructions
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+
+            parsed_data = json.loads(content.strip())
+            return schema(**parsed_data)
+        except Exception as e:
+            tracer.end_span(span_id, status="error", error=str(e))
+            raise RuntimeError(f"Structured generation failed: {e}")
+
