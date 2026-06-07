@@ -48,9 +48,16 @@ class Thinker(BaseThinker):
         return await self.llm.generate_structured(full_prompt, ProblemSchema)
 
     async def create_solutions(self, problems: ProblemSchema) -> SolutionSchema:
+        tools_list = ""
+        if self.tool_manager and hasattr(self.tool_manager, "registry"):
+            import json
+            tools_info = self.tool_manager.registry.get_all_tools_info()
+            tools_list = "\n\nAvailable Tools:\n" + json.dumps(tools_info, indent=2)
+
         system_prompt = (
             "You are the Thinker. Given the following defined problems, generate an algorithmic "
             "or architectural solution for each problem, including the tools required."
+            f"{tools_list}"
         )
         problems_json = problems.json()
         full_prompt = f"{system_prompt}\n\nProblems:\n{problems_json}"
