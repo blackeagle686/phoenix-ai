@@ -2,18 +2,18 @@ from abc import ABC, abstractmethod
 from typing import Any, Optional
 from phoenix.framework.agent.cognition.actor.schema import ActorInputSchema, ActorOutputSchema
 from phoenix.framework.agent.cognition.planner.schema import Task
-
-
-class Execution_type(str, Enum):
+from enum import Enum
+from phoenix.framework.agent.runtime.base import BaseRuntime
     COMPILE = "compile"
     RUN = "run"
         
 
 class BaseActor(ABC):
-    def __init__(self, tool_manager: Any, llm: Optional[Any] = None, reflector: Optional[Any] = None):
+    def __init__(self, tool_manager: Any, llm: Optional[Any] = None, reflector: Optional[Any] = None, runtime: Optional[BaseRuntime] = None):
         self.tool_manager = tool_manager
         self.llm = llm
         self.reflector = reflector
+        self.runtime = runtime
 
     @abstractmethod
     async def execute(self, task_input: ActorInputSchema, task_context: Optional[Task] = None) -> ActorOutputSchema:
