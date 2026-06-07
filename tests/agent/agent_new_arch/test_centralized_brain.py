@@ -58,7 +58,7 @@ async def test_centralized_brain_step_by_step():
     session_id = "test_session_001"
     
     prompt = (
-        f"create a simple python script in /home/tlk/Documents/Projects/my_AItools/IRYM_sdk/tests/agent/agent_new_arch/front_test "
+        f"create a midum wallet  in /home/tlk/Documents/Projects/my_AItools/IRYM_sdk/tests/agent/agent_new_arch/front_test "
         "that just prints 'Hello from Centralized Brain!'. "
         "Use your tools to write this file to disk."
     )
