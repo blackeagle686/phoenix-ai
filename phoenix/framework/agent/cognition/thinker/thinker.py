@@ -82,7 +82,9 @@ class Thinker(BaseThinker):
             "IMPORTANT:\n"
             "1. ALWAYS use ABSOLUTE file paths for any file_path or directory, based on the directories mentioned in the context or user request.\n"
             "2. When specifying tools_to_call, ONLY use the tool names provided in the Available Tools list.\n"
-            "3. Use `io_operations` natively for creating, reading, editing, or deleting files.\n"
+            "3. Use `io_operations` natively for creating, reading, editing, or deleting files AND directories.\n"
+            "   - For files, use operations: `create`, `read`, `edit`, `append`, `delete`.\n"
+            "   - For directories, use operation: `create_dir`.\n"
             "4. NEVER use the execute_command tool for file or directory operations (no mkdir, touch, rm, etc.). ALWAYS use io_operations instead.\n"
             "5. Do NOT use bash brace expansion like `{css,js,assets}` in file paths or commands. You MUST specify each absolute path explicitly as a separate operation."
         )
