@@ -36,41 +36,48 @@ class Actor(BaseActor):
         success = True
         
         # 3. Execute IO Operations via Runtime
-        for io_op in action_payload.io_operations:
-            if io_op.operation == "create" or io_op.operation == "edit":
-                # Assuming runtime has write_file / edit_file, or we use command for now
-                if self.runtime and hasattr(self.runtime, "execute_command"):
-                    # Basic write emulation if specific runtime methods aren't available yet
-                    cmd = f"cat << 'EOF' > {io_op.file_path}\n{io_op.content}\nEOF"
-                    res = await self.runtime.execute_command(cmd)
-                    results.append({"io_op": io_op.operation, "path": io_op.file_path, "success": res.success, "output": res.output})
-                    if not res.success: success = False
+        if self.runtime and hasattr(self.runtime, "execute_io"):
+            for io_op in action_payload.io_operations:
+                res = await self.runtime.execute_io(io_op.operation, io_op.file_path, getattr(io_op, "content", None))
+                results.append({"io_op": io_op.operation, "path": io_op.file_path, "success": res.success, "output": res.output, "error": res.error})
+                if not res.success: success = False
+        else:
+            if action_payload.io_operations:
+                results.append({"io_op": "all", "success": False, "error": "Runtime does not support execute_io."})
+                success = False
 
-        # 4. Execute Tools
+        # 4. Execute Tools STRICTLY via Runtime
         for tool_call in action_payload.tools_to_call:
             try:
-                # If we have a runtime method execute_code or command, map them. 
-                # Otherwise, fallback to standard tool manager.
                 tool_name = tool_call.tool_name
                 payload = tool_call.arguments
                 
-                if tool_name == "python_repl" and self.runtime and hasattr(self.runtime, "execute_code"):
+                if tool_name in ["python_repl", "execute_code", "python"] and self.runtime and hasattr(self.runtime, "execute_code"):
                     code = payload.get("code", "")
                     res = await self.runtime.execute_code(code)
-                    results.append({"tool": tool_name, "success": res.success, "output": res.output})
+                    results.append({"tool": tool_name, "success": res.success, "output": res.output, "error": getattr(res, "error", None)})
                     if not res.success: success = False
-                elif tool_name == "execute_command" and self.runtime and hasattr(self.runtime, "execute_command"):
+                elif tool_name in ["execute_command", "bash"] and self.runtime and hasattr(self.runtime, "execute_command"):
                     cmd = payload.get("command", "")
                     cwd = payload.get("cwd")
                     res = await self.runtime.execute_command(cmd, cwd=cwd)
-                    results.append({"tool": tool_name, "success": res.success, "output": res.output})
+                    results.append({"tool": tool_name, "success": res.success, "output": res.output, "error": getattr(res, "error", None)})
+                    if not res.success: success = False
+                elif tool_name in ["read_file", "write_file", "edit_file", "append_file", "delete_file"] and self.runtime and hasattr(self.runtime, "execute_io"):
+                    op_map = {
+                        "read_file": "read", "write_file": "create", 
+                        "edit_file": "edit", "append_file": "append", "delete_file": "delete"
+                    }
+                    op = op_map.get(tool_name)
+                    path = payload.get("file_path", payload.get("path", ""))
+                    content = payload.get("content", "")
+                    res = await self.runtime.execute_io(op, path, content)
+                    results.append({"tool": tool_name, "success": res.success, "output": res.output, "error": getattr(res, "error", None)})
                     if not res.success: success = False
                 else:
-                    # Fallback to general tool manager
-                    res_str = await self.tool_manager.execute_tool(tool_name, payload)
-                    res_success = "failed" not in str(res_str).lower() and "error" not in str(res_str).lower()
-                    results.append({"tool": tool_name, "success": res_success, "output": res_str})
-                    if not res_success: success = False
+                    # Enforce strict boundary: No tool manager fallback.
+                    results.append({"tool": tool_name, "success": False, "error": f"Tool '{tool_name}' blocked. Strict runtime execution enforced."})
+                    success = False
             except Exception as e:
                 results.append({"tool": tool_call.tool_name, "success": False, "error": str(e)})
                 success = False
