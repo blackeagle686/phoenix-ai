@@ -33,7 +33,7 @@ class Thinker(BaseThinker):
         full_prompt = f"{system_prompt}\n\nContext:\n{context}\n\nUser Request: {prompt}"
         
         # We assume the LLM implementation has `generate_structured`
-        return await self.llm.generate_structured(full_prompt, PlanSchema, session_id=session_id)
+        return await self.llm.generate_structured(full_prompt, PlanSchema, session_id=session_id, max_tokens=8192)
 
     async def define_problems(self, task: Any) -> ProblemSchema:
         task_desc = getattr(task, "description", str(task))
