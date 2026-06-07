@@ -12,44 +12,27 @@ from phoenix.framework.agent.cognition.actor.schema import (
     PythonAnalysisResult,
     PythonClassInfo,
     PythonMethodInfo,
-    CommandExecutionResult,
     CodeCompileResult
 )
+from phoenix.framework.agent.runtime.restricted_python import RestrictedPythonRuntime
 
 class CodeExecutionTool(BaseTool):
     name = "python_repl"
     description = "Executes safe python code to perform calculations or logic. Input: 'code' (str)."
 
+    def __init__(self, runtime=None):
+        super().__init__()
+        self.runtime = runtime or RestrictedPythonRuntime()
+
     async def execute(self, code: str, **kwargs) -> ToolResult:
         try:
-            local_vars = {}
-            old_stdout = sys.stdout
-            redirected_output = sys.stdout = io.StringIO()
-            
-            try:
-                exec(code, {"__builtins__": __builtins__}, local_vars)
-                success = True
-                error_msg = None
-            except Exception as e:
-                sys.stdout = old_stdout
-                return ToolResult(
-                    success=False,
-                    output=CodeExecutionResult(success=False, output="", error=str(e)).dict(),
-                    error=f"Execution error: {str(e)}"
-                )
-                
-            sys.stdout = old_stdout
-            output = redirected_output.getvalue()
-            
-            if not output and "result" in local_vars:
-                output = str(local_vars["result"])
-                
+            exe_result = await self.runtime.execute_code(code, language="python")
             result = CodeExecutionResult(
-                success=success,
-                output=output.strip() if output else "Executed successfully (no output)",
-                error=error_msg
+                success=exe_result.success,
+                output=exe_result.output,
+                error=exe_result.error
             )
-            return ToolResult(success=True, output=result.dict())
+            return ToolResult(success=exe_result.success, output=result.dict(), error=exe_result.error)
         except Exception as e:
             return ToolResult(success=False, output=None, error=str(e))
 
@@ -116,28 +99,21 @@ class CommandExecutionTool(BaseTool):
     name = "execute_command"
     description = "Executes a shell/terminal command in the specified directory and returns stdout, stderr, and exit code. Input: 'command' (str), 'cwd' (Optional[str])."
 
+    def __init__(self, runtime=None):
+        super().__init__()
+        self.runtime = runtime or RestrictedPythonRuntime()
+
     async def execute(self, command: str, cwd: Optional[str] = None, **kwargs) -> ToolResult:
         try:
-            proc = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=cwd
-            )
-            stdout, stderr = await proc.communicate()
-            stdout_str = stdout.decode('utf-8', errors='replace')
-            stderr_str = stderr.decode('utf-8', errors='replace')
-            exit_code = proc.returncode
-            success = (exit_code == 0)
-            
+            exe_result = await self.runtime.execute_command(command, cwd=cwd)
             result = CommandExecutionResult(
                 command=command,
-                success=success,
-                stdout=stdout_str,
-                stderr=stderr_str,
-                exit_code=exit_code
+                success=exe_result.success,
+                stdout=exe_result.output,
+                stderr=exe_result.error or "",
+                exit_code=exe_result.exit_code
             )
-            return ToolResult(success=success, output=result.dict(), error=stderr_str if not success else None)
+            return ToolResult(success=exe_result.success, output=result.dict(), error=exe_result.error)
         except Exception as e:
             return ToolResult(success=False, output=None, error=str(e))
 
