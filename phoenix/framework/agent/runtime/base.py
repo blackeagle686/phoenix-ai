@@ -28,3 +28,10 @@ class BaseRuntime(ABC):
         Executes a shell command or bash script in an isolated environment.
         """
         pass
+
+    @abstractmethod
+    async def execute_io(self, operation: str, file_path: str, content: Optional[str] = None) -> ExecutionResult:
+        """
+        Executes a strict File I/O operation (create, read, edit, delete).
+        """
+        pass
