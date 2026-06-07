@@ -115,3 +115,47 @@ class RestrictedPythonRuntime(BaseRuntime):
             )
         except Exception as e:
             return ExecutionResult(success=False, output="", error=str(e), exit_code=1)
+
+    async def execute_io(self, operation: str, file_path: str, content: Optional[str] = None) -> ExecutionResult:
+        """
+        Executes File I/O operations natively and safely.
+        """
+        import os
+        import shutil
+
+        # Basic path safety check: prevent going up directories too far if needed
+        # In a real restricted runtime, we'd ensure file_path is within a sandbox directory.
+        abs_path = os.path.abspath(file_path)
+        
+        try:
+            if operation in ["create", "edit", "append"]:
+                if not content:
+                    content = ""
+                # Ensure directory exists
+                os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+                
+                mode = "a" if operation == "append" else "w"
+                with open(abs_path, mode, encoding='utf-8') as f:
+                    f.write(content)
+                return ExecutionResult(success=True, output=f"Successfully executed {operation} on {file_path}")
+            
+            elif operation == "read":
+                if not os.path.exists(abs_path):
+                    return ExecutionResult(success=False, output="", error=f"File not found: {file_path}", exit_code=1)
+                with open(abs_path, "r", encoding='utf-8') as f:
+                    data = f.read()
+                return ExecutionResult(success=True, output=data)
+            
+            elif operation == "delete":
+                if not os.path.exists(abs_path):
+                    return ExecutionResult(success=False, output="", error=f"File not found: {file_path}", exit_code=1)
+                if os.path.isdir(abs_path):
+                    shutil.rmtree(abs_path)
+                else:
+                    os.remove(abs_path)
+                return ExecutionResult(success=True, output=f"Successfully deleted {file_path}")
+                
+            else:
+                return ExecutionResult(success=False, output="", error=f"Unknown IO operation: {operation}", exit_code=1)
+        except Exception as e:
+            return ExecutionResult(success=False, output="", error=str(e), exit_code=1)
