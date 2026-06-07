@@ -5,8 +5,8 @@ from phoenix.framework.agent.cognition.planner.schema import Task
 
 
 class Execution_type(str, Enum):
-    
-    pass
+    CODE = "code"
+    TOOL = "tool"
 
 
 class BaseActor(ABC):
