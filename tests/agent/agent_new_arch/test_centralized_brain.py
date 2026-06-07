@@ -39,14 +39,10 @@ async def test_centralized_brain_step_by_step():
         PythonAnalyzerTool(),
         CommandExecutionTool()
     ]
-    tool_manager = ToolManager()
-    for t in tools:
-        tool_manager.register_tool(t)
-        
-    print(f"[*] Registered {len(tools)} tools.")
-    
     # 3. Initialize Agent to get all components
     agent = Agent(llm=llm, tools=tools)
+    tool_manager = agent.tool_manager
+    print(f"[*] Registered {len(tools)} tools.")
     
     # Get components
     thinker = agent.thinker
