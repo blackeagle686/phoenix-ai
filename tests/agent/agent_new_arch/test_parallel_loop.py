@@ -43,7 +43,7 @@ async def test_parallel_arch():
     
     # 4. Standard Run Test (Frontend Project Update)
     prompt = (
-        "upgrade and enhance this frontend project located in /home/tlk/Documents/Projects/my_AItools/IRYM_sdk/tests/agent/agent_new_arch/front_test/. "
+        "upgrade and enhance this frontend project located in "
         "The JS components don't appear in the index.html. Please fix it. "
         "Check the index.html and the assets/js folder, and make all necessary updates."
     )
