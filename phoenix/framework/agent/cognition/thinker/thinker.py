@@ -62,7 +62,7 @@ class Thinker(BaseThinker):
         problems_json = problems.json()
         full_prompt = f"{system_prompt}\n\nProblems:\n{problems_json}"
         
-        return await self.llm.generate_structured(full_prompt, SolutionSchema)
+        return await self.llm.generate_structured(full_prompt, SolutionSchema, max_tokens=8192)
 
     async def generate_action_payload(self, solution: SolutionSchema) -> ActionSchema:
         tools_list = ""
@@ -80,7 +80,7 @@ class Thinker(BaseThinker):
         solution_json = solution.json()
         full_prompt = f"{system_prompt}\n\nSolutions:\n{solution_json}"
         
-        return await self.llm.generate_structured(full_prompt, ActionSchema)
+        return await self.llm.generate_structured(full_prompt, ActionSchema, max_tokens=8192)
 
     async def generate_reflection(self, runtime_output: Any, context: str) -> ReflectionSchema:
         system_prompt = (
