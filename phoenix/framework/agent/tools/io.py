@@ -81,7 +81,11 @@ class FileReadTool(BaseTool):
 
 class FileWriteTool(BaseTool):
     name = "file_write"
-    description = "Writes/Appends content to a file at a specific line range and returns FileWriteResult."
+    description = (
+        "Writes or overwrites content in a file. "
+        "Payload must include: 'file_path' (str), 'write_content' (str, the actual code/text). "
+        "Optional: 'from_line' (int, 1-indexed), 'to_line' (int)."
+    )
 
     async def execute(self, file_path: str, write_content: str = None, from_line: int = 1, to_line: Optional[int] = None, content: str = None, **kwargs) -> ToolResult:
         try:
@@ -155,13 +159,22 @@ class FileAppendTool(BaseTool):
 class FileEditTool(BaseTool):
     name = "file_edit"
     description = (
-        "Updates/Edits a file using line-based chunks or search-and-replace lists. "
-        "Input matches FileUpdateTask: 'file_path' (str), 'chunks' (list of ReplacementChunk). "
-        "Fallback/legacy input: 'edits' (list of {search, replace})."
+        "Updates/Edits a file using line-based chunks. "
+        "Payload must include: 'file_path' (str), 'chunks' (list of dicts). "
+        "Each chunk dict must have: 'from_line' (int, 1-indexed start), "
+        "'to_line' (int, 1-indexed end, inclusive), and 'replacement_content' (str, the new code/text to insert). "
+        "Optional chunk field: 'target_content' (str). "
+        "Example chunk: {\"from_line\": 1, \"to_line\": 2, \"replacement_content\": \"def sum(a, b):\\n    return a + b\\n\"}"
     )
 
     async def execute(self, file_path: str, chunks: List[Union[ReplacementChunk, Dict[str, Any]]] = None, edits: list = None, upsert: bool = True, **kwargs) -> ToolResult:
         try:
+            print("\n\n---------------------- From FileEditTool ----------------------")
+            print(f"file_path: {file_path}")
+            print(f"chunks: {chunks}")
+            print(f"edits: {edits}")
+            print(f"upsert: {upsert}")
+            print("--------------------------------------------------------------\n\n")
             os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
             
             if not os.path.exists(file_path):

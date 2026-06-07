@@ -43,10 +43,9 @@ async def test_parallel_arch():
     
     # 4. Standard Run Test (Frontend Project Update)
     prompt = (
-        "Please update and fix the frontend project located in tests/agent/agent_new_arch/front_test/. "
-        "The JS files are not properly linked or appearing in the index.html. "
-        "Check the index.html and the assets/js folder, make the necessary multiple updates, and fix the project "
-        "to ensure it works correctly."
+        "Please fix the frontend project located in /home/tlk/Documents/Projects/my_AItools/IRYM_sdk/tests/agent/agent_new_arch/front_test/. "
+        "The JS components don't appear in the index.html. Please fix it. "
+        "Check the index.html and the assets/js folder, and make all necessary updates."
     )
     
     print("\n" + "-"*40)
@@ -55,7 +54,7 @@ async def test_parallel_arch():
     print("-" * 40)
     
     # Increase max_iterations slightly since updating multiple files can take a few steps
-    result = await agent.run(prompt, max_iterations=10, mode="plan")
+    result = await agent.run(prompt, max_iterations=25, mode="plan")
     
     print("\n[🎯] FINAL ANSWER:")
     print(result)

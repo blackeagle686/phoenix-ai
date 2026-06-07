@@ -25,6 +25,8 @@ class Reflector(BaseReflector):
         Target Content to Evaluate:
         {json.dumps(input_data.target_content, indent=2, default=str) if isinstance(input_data.target_content, (dict, list)) else input_data.target_content}
         
+        IMPORTANT: If you are evaluating an execution result (Target Content contains "action_result" with a "tool_name"), you must evaluate the output based strictly on the tool that was executed. For example, if the tool was 'file_read', the output is just the contents of the file, NOT a change that was made. Do not mistake a read operation for a write operation.
+        
         Evaluate the content based on correctness, logical integrity, and alignment with the context/objective. Be highly critical but fair. Provide a fast and optimized analysis.
         
         Respond strictly with JSON matching this exact schema:

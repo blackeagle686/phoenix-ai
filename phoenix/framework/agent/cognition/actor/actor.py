@@ -26,7 +26,15 @@ class Actor(BaseActor):
             
         solution_context = task.payload.get("solution_context", "No context provided.")
         tools_required = task.payload.get("tools_required", [])
-        
+        # Get full tool info for required tools
+        tool_info_list = []
+        for t_name in tools_required:
+            try:
+                t = self.tool_manager.registry.get_tool(t_name)
+                tool_info_list.append({"name": t.name, "description": t.description})
+            except Exception:
+                tool_info_list.append({"name": t_name, "description": "Unknown tool"})
+                
         # Build the prompt
         prompt = f"""
         You are the Execution Engine of an autonomous AI agent.
@@ -36,12 +44,13 @@ class Actor(BaseActor):
         Architectural Plan / Strategy: {solution_context}
         Previous Results: {previous_results if previous_results else 'None so far.'}
         
-        Available Tools: {json.dumps(tools_required)}
+        Available Tools: {json.dumps(tool_info_list, indent=2)}
         
-        Based on the plan and previous results, generate the exact code or payload for the NEXT single step.
-        If the task requires creating a file, generate the FULL source code and use the 'file_write' tool.
-        If the task requires a directory, use 'folder_create'.
-        If the plan is complete or no more actions are needed, use the tool 'finish'.
+        Rules for execution:
+        1. If you need to modify an existing file but do not know its exact current contents or line numbers, you MUST use 'file_read' or 'file_search' FIRST to gather context. Do NOT guess file contents or line numbers.
+        2. Based on the plan and previous results, generate the exact payload for the NEXT single step only.
+        3. If creating a new file from scratch, generate the FULL source code and use the 'file_write' tool.
+        4. If the task is fully complete and verified, use the tool 'finish'.
         
         Respond ONLY in valid JSON matching this exact structure:
         {{
@@ -62,6 +71,7 @@ class Actor(BaseActor):
         if tool_name == "finish":
             return ActorOutputSchema(
                 task_id=task.task_id,
+                tool_name=tool_name,
                 success=True,
                 result={"status": "finished", "message": "Actor determined no further actions are needed."},
                 error_context=None
@@ -116,6 +126,7 @@ class Actor(BaseActor):
 
         actor_output = ActorOutputSchema(
             task_id=task_input.task_id,
+            tool_name=tool_name,
             success=res.success,
             result=output_data,
             error_context=res.error

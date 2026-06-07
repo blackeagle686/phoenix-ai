@@ -1,0 +1,73 @@
+============================================================
+🚀 Testing Phoenix Parallel Agent Architecture
+============================================================
+[*] Initializing OpenAILLM (LongCat-2.0-Preview)...
+[*] Instantiating Agent (Planner <-> Actor <-> Reflector)...
+
+----------------------------------------
+[*] Phase 1: Running Standard Parallel Loop (Frontend Update Test)
+[*] Prompt: Please fix the code in /home/tlk/Documents/Projects/my_AItools/IRYM_sdk/math.py . 
+----------------------------------------
+2026-06-06T23:13:00.492347 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 5361.54ms | Tokens: 181 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 5361.54, "usage": {"prompt_tokens": 127, "completion_tokens": 54, "total_tokens": 181}}
+2026-06-06T23:13:05.238482 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 4744.94ms | Tokens: 307 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 4744.94, "usage": {"prompt_tokens": 182, "completion_tokens": 125, "total_tokens": 307}}
+DEBUG - LLM Raw Response for create_solution (Variant 1):
+{
+    "description": "Analyze the IRYM_sdk/math.py file to identify and resolve any issues by examining the code logic and dependencies.",
+    "solution_type": "plan",
+    "content": [
+        "Carefully read through the IRYM_sdk/math.py file to understand its intended functionality and spot any logical or syntax errors.",
+        "Check for missing imports, incorrect variable usage, or mathematical operation issues that could cause runtime failures.",
+        "Run the file in a controlled environment, add debug prints or use a debugger to isolate the exact location of the error, and fix the identified problem."
+    ]
+}
+
+DEBUG - Parsed Data:
+{'description': 'Analyze the IRYM_sdk/math.py file to identify and resolve any issues by examining the code logic and dependencies.', 'solution_type': 'plan', 'content': ['Carefully read through the IRYM_sdk/math.py file to understand its intended functionality and spot any logical or syntax errors.', 'Check for missing imports, incorrect variable usage, or mathematical operation issues that could cause runtime failures.', 'Run the file in a controlled environment, add debug prints or use a debugger to isolate the exact location of the error, and fix the identified problem.']}
+
+2026-06-06T23:13:05.684252 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 5187.61ms | Tokens: 296 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 5187.61, "usage": {"prompt_tokens": 182, "completion_tokens": 114, "total_tokens": 296}}
+DEBUG - LLM Raw Response for create_solution (Variant 2):
+{
+    "description": "Diagnose missing error logs by adding error handling and logging to the IRYM_sdk/math.py file.",
+    "solution_type": "plan",
+    "content": [
+        "Add try-except blocks around critical functions in math.py to catch and log exceptions with meaningful messages.",
+        "Integrate a logging framework (e.g., Python's logging module) to output errors to a file or console for debugging.",
+        "Verify the fix by running test cases that previously failed and checking the logs for clear error descriptions."
+    ]
+}
+
+DEBUG - Parsed Data:
+{'description': 'Diagnose missing error logs by adding error handling and logging to the IRYM_sdk/math.py file.', 'solution_type': 'plan', 'content': ['Add try-except blocks around critical functions in math.py to catch and log exceptions with meaningful messages.', "Integrate a logging framework (e.g., Python's logging module) to output errors to a file or console for debugging.", 'Verify the fix by running test cases that previously failed and checking the logs for clear error descriptions.']}
+
+2026-06-06T23:13:05.947086 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 5448.15ms | Tokens: 310 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 5448.15, "usage": {"prompt_tokens": 182, "completion_tokens": 128, "total_tokens": 310}}
+DEBUG - LLM Raw Response for create_solution (Variant 3):
+{
+    "description": "Investigate the IRYM_sdk/math.py file by examining its contents and usage context to infer potential issues without error logs.",
+    "solution_type": "plan",
+    "content": [
+        "Review the source code of IRYM_sdk/math.py to identify common patterns such as division by zero, incorrect imports, or invalid mathematical operations.",
+        "Check how IRYM_sdk/math.py is imported and used elsewhere in the project to pinpoint mismatched expectations or incorrect function calls.",
+        "Run the file with sample inputs or add print statements to observe its behavior and isolate the source of the problem."
+    ]
+}
+
+DEBUG - Parsed Data:
+{'description': 'Investigate the IRYM_sdk/math.py file by examining its contents and usage context to infer potential issues without error logs.', 'solution_type': 'plan', 'content': ['Review the source code of IRYM_sdk/math.py to identify common patterns such as division by zero, incorrect imports, or invalid mathematical operations.', 'Check how IRYM_sdk/math.py is imported and used elsewhere in the project to pinpoint mismatched expectations or incorrect function calls.', 'Run the file with sample inputs or add print statements to observe its behavior and isolate the source of the problem.']}
+
+2026-06-06T23:13:08.608672 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 2660.62ms | Tokens: 551 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 2660.62, "usage": {"prompt_tokens": 473, "completion_tokens": 78, "total_tokens": 551}}
+2026-06-06T23:13:10.251300 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 1641.75ms | Tokens: 443 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 1641.75, "usage": {"prompt_tokens": 412, "completion_tokens": 31, "total_tokens": 443}}
+2026-06-06T23:13:16.721859 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 6469.75ms | Tokens: 621 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 6469.75, "usage": {"prompt_tokens": 334, "completion_tokens": 287, "total_tokens": 621}}
+2026-06-06T23:13:19.186406 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 2463.38ms | Tokens: 584 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 2463.38, "usage": {"prompt_tokens": 541, "completion_tokens": 43, "total_tokens": 584}}
+2026-06-06T23:13:26.676034 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 7488.36ms | Tokens: 709 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 7488.36, "usage": {"prompt_tokens": 475, "completion_tokens": 234, "total_tokens": 709}}
+2026-06-06T23:13:28.670015 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 1993.19ms | Tokens: 812 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 1993.19, "usage": {"prompt_tokens": 769, "completion_tokens": 43, "total_tokens": 812}}
+2026-06-06T23:13:35.255119 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 5826.04ms | Tokens: 726 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 5826.04, "usage": {"prompt_tokens": 475, "completion_tokens": 251, "total_tokens": 726}}
+2026-06-06T23:13:37.849429 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 2593.57ms | Tokens: 1071 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 2593.57, "usage": {"prompt_tokens": 1028, "completion_tokens": 43, "total_tokens": 1071}}
+2026-06-06T23:13:43.665187 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 5814.69ms | Tokens: 744 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 5814.69, "usage": {"prompt_tokens": 475, "completion_tokens": 269, "total_tokens": 744}}
+2026-06-06T23:13:45.891287 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 2225.14ms | Tokens: 1356 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 2225.14, "usage": {"prompt_tokens": 1313, "completion_tokens": 43, "total_tokens": 1356}}
+2026-06-06T23:13:51.945036 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 6052.59ms | Tokens: 740 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 6052.59, "usage": {"prompt_tokens": 475, "completion_tokens": 265, "total_tokens": 740}}
+2026-06-06T23:13:54.154693 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 2207.34ms | Tokens: 1623 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 2207.34, "usage": {"prompt_tokens": 1580, "completion_tokens": 43, "total_tokens": 1623}}
+2026-06-06T23:13:59.682193 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 5526.55ms | Tokens: 729 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 5526.55, "usage": {"prompt_tokens": 475, "completion_tokens": 254, "total_tokens": 729}}
+2026-06-06T23:14:01.942891 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 2259.81ms | Tokens: 1894 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 2259.81, "usage": {"prompt_tokens": 1851, "completion_tokens": 43, "total_tokens": 1894}}
+2026-06-06T23:14:08.600583 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 6656.07ms | Tokens: 752 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 6656.07, "usage": {"prompt_tokens": 475, "completion_tokens": 277, "total_tokens": 752}}
+2026-06-06T23:14:10.856543 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 2255.17ms | Tokens: 2179 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 2255.17, "usage": {"prompt_tokens": 2136, "completion_tokens": 43, "total_tokens": 2179}}
+2026-06-06T23:14:18.187408 - Phoenix AI.Telemetry - INFO - Request Completed: OpenAILLM.generate | Status: success | Latency: 7329.65ms | Tokens: 802 | META: {"model": "LongCat-2.0-Preview", "mode": "standard", "status": "success", "duration_ms": 7329.65, "usage": {"prompt_tokens": 475, "completion_tokens": 327, "total_tokens": 802}}

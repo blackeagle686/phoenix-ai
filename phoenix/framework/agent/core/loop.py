@@ -169,7 +169,7 @@ class AgentLoop:
                     
                     reflection = await self.reflector.reflect(ref_input)
                     
-                    result_summary = f"\nAction Result: {actor_output.success}\nDetails: {actor_output.result}\nFeedback: {reflection.feedback}\nRating: {reflection.rating}/10\n"
+                    result_summary = f"\nTool Executed: {actor_output.tool_name}\nAction Result: {actor_output.success}\nDetails: {actor_output.result}\nFeedback: {reflection.feedback}\nRating: {reflection.rating}/10\n"
                     shared_state["previous_results"] += result_summary
                     shared_state["iterations"] += 1
                     
@@ -293,7 +293,7 @@ class AgentLoop:
                     )
                     
                     reflection = await self.reflector.reflect(ref_input)
-                    shared_state["previous_results"] += f"\nAction Result: {actor_output.success}\nDetails: {actor_output.result}\nFeedback: {reflection.feedback}\nRating: {reflection.rating}/10\n"
+                    shared_state["previous_results"] += f"\nTool Executed: {actor_output.tool_name}\nAction Result: {actor_output.success}\nDetails: {actor_output.result}\nFeedback: {reflection.feedback}\nRating: {reflection.rating}/10\n"
                     shared_state["iterations"] += 1
                     
                     self._schedule_background(memory.add_interaction(session_id, "system", f"Output: {actor_output.success}"))

@@ -41,6 +41,7 @@ class ActorInputSchema(BaseModel):
 class ActorOutputSchema(BaseModel):
     """Strict output schema for the Actor module returning a task execution."""
     task_id: str = Field(..., description="Unique ID of the task that was executed")
+    tool_name: str = Field(default="unknown", description="Name of the tool that was executed")
     success: bool = Field(..., description="Whether the actor successfully completed the task")
     result: Optional[Dict[str, Any]] = Field(None, description="The normalized tool output payload")
     error_context: Optional[str] = Field(None, description="Additional actor-level error context")
@@ -113,7 +114,7 @@ class FileSearchResult(BaseFileTaskOutputSchema):
 class ReplacementChunk(BaseModel):
     from_line: int = Field(..., description="1-indexed start line of the range to replace")
     to_line: int = Field(..., description="1-indexed end line of the range to replace (inclusive)")
-    target_content: str = Field(..., description="The exact content targeted for replacement")
+    target_content: Optional[str] = Field(None, description="The exact content targeted for replacement")
     replacement_content: str = Field(..., description="The content to substitute into the file")
 
 class FileUpdateTask(BaseFileTaskInputSchema):
