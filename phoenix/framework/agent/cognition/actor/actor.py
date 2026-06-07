@@ -13,7 +13,7 @@ class Actor(BaseActor):
     def __init__(self, tool_manager, thinker, runtime=None, reflector: Optional[Any] = None):
         super().__init__(tool_manager=tool_manager, thinker=thinker, reflector=reflector, runtime=runtime)
         
-    async def generate_and_execute(self, task: Any, previous_results: str = "") -> ActorOutputSchema:
+    async def generate_and_execute(self, task: Any, previous_results: str = "", context: str = "") -> ActorOutputSchema:
         """
         Dynamically generates the required code and tool payload based on the Task's high-level strategy
         by delegating strictly to the Thinker, then executes the tool via Runtime.
@@ -27,10 +27,10 @@ class Actor(BaseActor):
         # For this refactor, we directly get the ActionSchema from the Thinker based on the task.
         
         # We ask Thinker to define solutions for this task.
-        solution = await self.thinker.create_solutions(task)
+        solution = await self.thinker.create_solutions(task, context=context)
         
         # 2. Ask Thinker to generate strict action payload (tools, code, I/O paths)
-        action_payload: ActionSchema = await self.thinker.generate_action_payload(solution)
+        action_payload: ActionSchema = await self.thinker.generate_action_payload(solution, context=context)
         
         results = []
         success = True

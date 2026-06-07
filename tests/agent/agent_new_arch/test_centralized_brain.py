@@ -95,18 +95,18 @@ async def test_centralized_brain_step_by_step():
         print(f"\n>>> BRAIN STEP 3: Thinker creating SolutionSchema & ActionSchema, Actor executing...")
         
         print("  -> Thinker generating SolutionSchema...")
-        solution = await thinker.create_solutions(problems)
+        solution = await thinker.create_solutions(problems, context=plan.objective)
         print("\n[💡 SOLUTIONS CREATED]")
         print(json.dumps(solution.model_dump(), indent=2))
         
         print("\n  -> Thinker generating ActionSchema...")
-        action_payload = await thinker.generate_action_payload(solution)
+        action_payload = await thinker.generate_action_payload(solution, context=plan.objective)
         print("\n[⚙️ ACTIONS TO TAKE]")
         print(json.dumps(action_payload.model_dump(), indent=2))
         
         # Execute tools via strict Runtime using Actor
         print("\n[🚀 EXECUTING ACTIONS VIA STRICT RUNTIME]")
-        actor_output = await actor.generate_and_execute(problems)
+        actor_output = await actor.generate_and_execute(problems, context=plan.objective)
         
         print("\n[✅ ACTOR EXECUTION RESULTS]")
         print(json.dumps(actor_output.model_dump(), indent=2))
