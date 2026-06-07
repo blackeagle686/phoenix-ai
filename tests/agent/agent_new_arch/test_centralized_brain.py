@@ -15,6 +15,8 @@ from phoenix.framework.agent.execution.tool_manager import ToolManager
 from phoenix.framework.agent.memory.hybrid import HybridMemory
 from phoenix.framework.agent.cognition.reflector.schema import ReflectorInputSchema, ReflectorType
 
+from phoenix.framework.agent.runtime.restricted_python import RestrictedPythonRuntime
+
 async def test_centralized_brain_step_by_step():
     print("="*80)
     print("🚀 Testing Centralized Brain Architecture - Step-by-Step Flow")
@@ -29,7 +31,7 @@ async def test_centralized_brain_step_by_step():
     )
     await llm.init()
     
-    # 2. Register core Tools
+    # 2. Register core Tools and Runtime
     tools = [
         FileReadTool(),
         FileWriteTool(),
@@ -39,8 +41,11 @@ async def test_centralized_brain_step_by_step():
         PythonAnalyzerTool(),
         CommandExecutionTool()
     ]
+    
+    runtime = RestrictedPythonRuntime()
+    
     # 3. Initialize Agent to get all components
-    agent = Agent(llm=llm, tools=tools)
+    agent = Agent(llm=llm, tools=tools, runtime=runtime)
     tool_manager = agent.tool_manager
     print(f"[*] Registered {len(tools)} tools.")
     
