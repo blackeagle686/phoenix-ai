@@ -18,11 +18,11 @@ from phoenix.framework.agent.cognition.utils import parse_llm_json
 
 class TaskCreator:
     def __init__(self, thinker:Any, tools: Optional[Any] = None, cache: Optional[Any] = None ):
-        self.llm = thinker.llm
+        self.thinker = thinker
         self.tools = tools
         self.cache = cache
         self.problems = []
-    
+
         if not cache: 
             self.memory = {}
 
