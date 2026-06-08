@@ -216,6 +216,7 @@ class PlannerOutputSchema(BaseModel):
     solutions: List[Solution] = Field(default_factory=list, description="Direct solutions, code snippets, or fast answers provided")
     tasks: List[Task] = Field(default_factory=list, description="The ordered sequence of actionable tasks to execute if needed")
     summary: str = Field(..., description="A high-level summary of the planner's reasoning and output")
+
 class FileIOMeta(BaseModel):
     file_meta: BaseFileMeta = Field(..., description="Configuration of the file")
     from_line: int = Field(..., description="Start line number of the file")
