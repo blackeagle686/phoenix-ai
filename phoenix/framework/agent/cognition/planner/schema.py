@@ -69,6 +69,8 @@ class TaskPriority(str, Enum):
     LOW = "low"
 
 class FileOperation(str, Enum):
+    CREATE = "create"
+    CREATE_DIR = "create_dir"
     READ = "read"
     WRITE = "write"
     APPEND = "append"

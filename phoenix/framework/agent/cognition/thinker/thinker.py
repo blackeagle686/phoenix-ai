@@ -25,7 +25,11 @@ class Thinker(BaseThinker):
         context = await memory.get_full_context(session_id, query=prompt)
         system_prompt = (
             "You are the master Thinker and Planner. Analyze the user request and project context.\n"
-            "Create a strict plan containing a main objective and a list of step-by-step tasks to accomplish it."
+            "Create a strict plan containing a main objective and a list of step-by-step tasks to accomplish it.\n"
+            "IMPORTANT:\n"
+            " - For `task_type`, use valid enum strings (e.g. 'read', 'write', 'search', 'update', 'delete', 'execute', 'other').\n"
+            " - For `priority`, use 'critical', 'high', 'medium', or 'low'.\n"
+            " - For `status`, use 'pending', 'in_progress', 'done', or 'skipped'."
         )
         if self.profile:
             system_prompt += f"\n\n{self.profile.to_prompt_string()}"
@@ -41,7 +45,9 @@ class Thinker(BaseThinker):
         
         system_prompt = (
             "You are the Thinker. Given the following task, define the explicit problems "
-            "that need to be solved. Break down the task into distinct technical problems."
+            "that need to be solved. Break down the task into distinct technical problems.\n"
+            "IMPORTANT:\n"
+            " - For `complexity`, use 'low', 'medium', 'high', or 'extreme'."
         )
         full_prompt = f"{system_prompt}\n\nTask ID: {task_id}\nTask Description: {task_desc}"
         
@@ -61,7 +67,8 @@ class Thinker(BaseThinker):
             "IMPORTANT:\n"
             "1. NEVER recommend using shell commands (mkdir, touch, rm, cat, echo) for file or directory operations.\n"
             "2. ALWAYS use native io_operations for all file and directory creations or edits.\n"
-            "3. NEVER use bash brace expansions like {css,js,assets} anywhere."
+            "3. NEVER use bash brace expansions like {css,js,assets} anywhere.\n"
+            "4. For `solution_type`, use 'plan', 'code', 'terminal', 'network', 'mission', 'fastanswer', or 'other'."
         )
         problems_json = problems.json()
         full_prompt = f"{system_prompt}\n\nContext:\n{context}\n\nProblems:\n{problems_json}"
@@ -83,7 +90,7 @@ class Thinker(BaseThinker):
             "1. ALWAYS use ABSOLUTE file paths for any file_path or directory, based on the directories mentioned in the context or user request.\n"
             "2. When specifying tools_to_call, ONLY use the tool names provided in the Available Tools list.\n"
             "3. Use `io_operations` natively for creating, reading, editing, or deleting files AND directories.\n"
-            "   - For files, use operations: `create`, `read`, `edit`, `append`, `delete`.\n"
+            "   - For files, use operations: `create`, `read`, `write`, `append`, `replace`, `delete`.\n"
             "   - For directories, use operation: `create_dir`.\n"
             "4. NEVER use the execute_command tool for file or directory operations (no mkdir, touch, rm, etc.). ALWAYS use io_operations instead.\n"
             "5. Do NOT use bash brace expansion like `{css,js,assets}` in file paths or commands. You MUST specify each absolute path explicitly as a separate operation."
@@ -97,7 +104,9 @@ class Thinker(BaseThinker):
         system_prompt = (
             "You are the Thinker reflecting on the output of the isolated runtime execution.\n"
             "Analyze the success, stdout, and stderr. Judge if the current task is complete.\n"
-            "Provide detailed feedback and a rating."
+            "Provide detailed feedback and a rating.\n"
+            "IMPORTANT:\n"
+            " - For `status`, use 'done', 'failed', or 'in_progress'."
         )
         full_prompt = f"{system_prompt}\n\nContext/Objective: {context}\n\nRuntime Output:\n{runtime_output}"
         

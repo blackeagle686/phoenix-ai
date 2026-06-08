@@ -72,7 +72,7 @@ async def test_centralized_brain_step_by_step():
     print(f"Objective: {plan.objective}")
     for idx, t in enumerate(plan.tasks):
         print(f"  Task {idx+1}: {t.task_id} - {t.description} (Status: {t.status})")
-    print(json.dumps(plan.dict(), indent=2))
+    print(json.dumps(plan.model_dump(mode='json'), indent=2))
     
     if not plan.tasks:
         print("[!] No tasks generated. Exiting.")
@@ -89,7 +89,7 @@ async def test_centralized_brain_step_by_step():
         problems = await planner.define_task_problems(current_task)
         
         print("\n[🔍 PROBLEMS DEFINED]")
-        print(json.dumps(problems.model_dump(), indent=2))
+        print(json.dumps(problems.model_dump(mode='json'), indent=2))
         
         # --- Brain Step 3: Actor Solutions & Execution ---
         print(f"\n>>> BRAIN STEP 3: Thinker creating SolutionSchema & ActionSchema, Actor executing...")
@@ -97,32 +97,32 @@ async def test_centralized_brain_step_by_step():
         print("  -> Thinker generating SolutionSchema...")
         solution = await thinker.create_solutions(problems, context=plan.objective)
         print("\n[💡 SOLUTIONS CREATED]")
-        print(json.dumps(solution.model_dump(), indent=2))
+        print(json.dumps(solution.model_dump(mode='json'), indent=2))
         
         print("\n  -> Thinker generating ActionSchema...")
         action_payload = await thinker.generate_action_payload(solution, context=plan.objective)
         print("\n[⚙️ ACTIONS TO TAKE]")
-        print(json.dumps(action_payload.model_dump(), indent=2))
+        print(json.dumps(action_payload.model_dump(mode='json'), indent=2))
         
         # Execute tools via strict Runtime using Actor
         print("\n[🚀 EXECUTING ACTIONS VIA STRICT RUNTIME]")
         actor_output = await actor.generate_and_execute(problems, context=plan.objective)
         
         print("\n[✅ ACTOR EXECUTION RESULTS]")
-        print(json.dumps(actor_output.model_dump(), indent=2))
+        print(json.dumps(actor_output.model_dump(mode='json'), indent=2))
         
         # --- Brain Step 4: Reflection ---
         print(f"\n>>> BRAIN STEP 4: Thinker generating ReflectionSchema to judge execution...")
         ref_input = ReflectorInputSchema(
             reflector_type=ReflectorType.TASK,
             target_id=current_task.task_id,
-            target_content=actor_output.model_dump(),
+            target_content=actor_output.model_dump(mode='json'),
             context=plan.objective
         )
         
         reflection = await reflector.reflect(ref_input)
         print("\n[🧐 REFLECTION CREATED]")
-        print(json.dumps(reflection.model_dump(), indent=2))
+        print(json.dumps(reflection.model_dump(mode='json'), indent=2))
         
         print("\n" + "="*80)
         if reflection.is_task_complete:
