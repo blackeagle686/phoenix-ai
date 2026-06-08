@@ -11,121 +11,127 @@ from phoenix.framework.agent.cognition.planner.schema import (
     FileOperation
 )
 
+
 class Thinker(BaseThinker):
-    """
-    The Central Brain. This is the only module that makes LLM generation calls.
-    It takes requests from the Planner, Actor, and Reflector and returns strict schemas.
-    """
-    
+    """Central Brain. Only module that makes LLM generation calls"""
+
     def __init__(self, llm, profile=None, tool_manager=None):
         super().__init__(llm, profile=profile, tool_manager=tool_manager)
 
-    async def _execute_search_tools(self, prompt: str) -> str:
-        """Helper to run search/read tools directly to gather context if needed."""
-        context = ""
-        if self.tool_manager:
-            # Simple heuristic: if we have tool manager, we could call specific read tools.
-            # For now, we will rely on the agent's memory or explicit file contents passed.
-            pass
-        return context
+    def _get_tools_list(self) -> str:
+        """Build available tools string for prompt injection"""
+        if self.tool_manager and hasattr(self.tool_manager, "registry"):
+            tools_info = self.tool_manager.registry.get_all_tools_info()
+            return "\n\nAvailable Tools:\n" + json.dumps(tools_info, indent=2)
+        return ""
+
+    def _get_profile_string(self) -> str:
+        """Get the agent profile prompt string"""
+        if self.profile:
+            return f"\n\n{self.profile.to_prompt_string()}"
+        return ""
 
     async def generate_plan(self, prompt: str, memory: Any, session_id: str) -> PlanSchema:
+        """Brain Step 1: Analyze user request and generate a structured plan with tasks"""
         context = await memory.get_full_context(session_id, query=prompt)
         task_types = [e.value for e in TaskType]
         task_priorities = [e.value for e in TaskPriority]
         task_statuses = [e.value for e in TaskStatus]
-        
+
         system_prompt = (
             "You are the master Thinker and Planner. Analyze the user request and project context.\n"
-            "Create a strict plan containing a main objective and a list of step-by-step tasks to accomplish it.\n"
+            "Create a strict plan containing a main objective and a list of step by step tasks to accomplish it.\n"
             "IMPORTANT:\n"
-            f" - For `task_type`, use one of: {task_types}.\n"
-            f" - For `priority`, use one of: {task_priorities}.\n"
-            f" - For `status`, use one of: {task_statuses}."
+            f" - For task_type, use one of: {task_types}.\n"
+            f" - For priority, use one of: {task_priorities}.\n"
+            f" - For status, use one of: {task_statuses}.\n"
+            " - ALL file paths must be ABSOLUTE full paths. Never use relative paths."
         )
+        system_prompt += self._get_profile_string()
 
-        
-        
-        if self.profile:
-            system_prompt += f"\n\n{self.profile.to_prompt_string()}"
-            
         full_prompt = f"{system_prompt}\n\nContext:\n{context}\n\nUser Request: {prompt}"
-        
-        # We assume the LLM implementation has `generate_structured`
         return await self.llm.generate_structured(full_prompt, PlanSchema, session_id=session_id, max_tokens=8192)
 
-    async def define_problems(self, task: Any) -> ProblemSchema:
+    async def define_problems(self, task: Any, context: str = "") -> ProblemSchema:
+        """Brain Step 2: Break a task into distinct technical problems"""
         task_desc = getattr(task, "description", str(task))
         task_id = getattr(task, "task_id", "unknown")
-        
         complexities = [e.value for e in ProblemComplexity]
+
         system_prompt = (
-            "You are the Thinker. Given the following task, define the explicit problems "
+            "You are the Thinker. Given the following task and its full context, define the explicit problems "
             "that need to be solved. Break down the task into distinct technical problems.\n"
             "IMPORTANT:\n"
-            f" - For `complexity`, use one of: {complexities}."
+            f" - For complexity, use one of: {complexities}.\n"
+            " - ALL file paths must be ABSOLUTE full paths."
         )
+
         full_prompt = f"{system_prompt}\n\nTask ID: {task_id}\nTask Description: {task_desc}"
-        
+        if context:
+            full_prompt += f"\n\nFull Context:\n{context}"
+
         return await self.llm.generate_structured(full_prompt, ProblemSchema)
 
     async def create_solutions(self, problems: ProblemSchema, context: str = "") -> SolutionSchema:
-        tools_list = ""
-        if self.tool_manager and hasattr(self.tool_manager, "registry"):
-            import json
-            tools_info = self.tool_manager.registry.get_all_tools_info()
-            tools_list = "\n\nAvailable Tools:\n" + json.dumps(tools_info, indent=2)
-
+        """Brain Step 3: Generate algorithmic solutions for each defined problem"""
+        tools_list = self._get_tools_list()
         solution_types = [e.value for e in SolutionType]
+
         system_prompt = (
-            "You are the Thinker. Given the following defined problems, generate an algorithmic "
-            "or architectural solution for each problem, including the tools required.\n"
+            "You are the Thinker. Given the following defined problems and the full task context, "
+            "generate an algorithmic or architectural solution for each problem, including the tools required.\n"
             f"{tools_list}\n\n"
             "IMPORTANT:\n"
             "1. NEVER recommend using shell commands (mkdir, touch, rm, cat, echo) for file or directory operations.\n"
             "2. ALWAYS use native io_operations for all file and directory creations or edits.\n"
-            "3. NEVER use bash brace expansions like {css,js,assets} anywhere.\n"
-            f"4. For `solution_type`, use one of: {solution_types}."
+            "3. NEVER use bash brace expansions like {{css,js,assets}} anywhere.\n"
+            f"4. For solution_type, use one of: {solution_types}.\n"
+            "5. ALL file paths must be ABSOLUTE full paths. Never use relative paths.\n"
+            "6. Reference the problems by their problem_id when creating solutions."
         )
+
         problems_json = problems.json()
         full_prompt = f"{system_prompt}\n\nContext:\n{context}\n\nProblems:\n{problems_json}"
-        
         return await self.llm.generate_structured(full_prompt, SolutionSchema, max_tokens=8192)
 
     async def generate_action_payload(self, solution: SolutionSchema, context: str = "") -> ActionSchema:
-        tools_list = ""
-        if self.tool_manager and hasattr(self.tool_manager, "registry"):
-            import json
-            tools_info = self.tool_manager.registry.get_all_tools_info()
-            tools_list = "\n\nAvailable Tools:\n" + json.dumps(tools_info, indent=2)
-
+        """Brain Step 4: Generate exact tool calls and IO operations from solutions"""
+        tools_list = self._get_tools_list()
         file_ops = [e.value for e in FileOperation]
+
         system_prompt = (
-            "You are the Thinker. Given the following solutions, define the exact strict actions to take.\n"
-            "Include the precise tools to call with arguments, and strict file I/O operations (file paths and contents) to enact the solution."
+            "You are the Thinker. Given the following solutions and the full task context, "
+            "define the exact strict actions to take.\n"
+            "Include the precise tools to call with arguments, and strict file IO operations with file paths and contents.\n"
             f"{tools_list}\n\n"
             "IMPORTANT:\n"
-            "1. ALWAYS use ABSOLUTE file paths for any file_path or directory, based on the directories mentioned in the context or user request.\n"
+            "1. ALWAYS use ABSOLUTE file paths for any file_path or directory. Never use relative paths.\n"
             "2. When specifying tools_to_call, ONLY use the tool names provided in the Available Tools list.\n"
-            "3. Use `io_operations` natively for creating, reading, editing, or deleting files AND directories.\n"
+            "3. Use io_operations natively for creating, reading, editing, or deleting files AND directories.\n"
             f"   - You MUST use operations exactly from: {file_ops}.\n"
-            "4. NEVER use the execute_command tool for file or directory operations (no mkdir, touch, rm, etc.). ALWAYS use io_operations instead.\n"
-            "5. Do NOT use bash brace expansion like `{css,js,assets}` in file paths or commands. You MUST specify each absolute path explicitly as a separate operation."
+            "4. NEVER use the execute_command tool for file or directory operations. ALWAYS use io_operations instead.\n"
+            "5. Do NOT use bash brace expansion in file paths or commands. Specify each absolute path explicitly as a separate operation.\n"
+            "6. If previous attempts failed, check the context for error details and adjust your approach."
         )
+
         solution_json = solution.json()
         full_prompt = f"{system_prompt}\n\nContext:\n{context}\n\nSolutions:\n{solution_json}"
-        
         return await self.llm.generate_structured(full_prompt, ActionSchema, max_tokens=8192)
 
     async def generate_reflection(self, runtime_output: Any, context: str) -> ReflectionSchema:
+        """Brain Step 5: Evaluate runtime execution results and judge task completion"""
         task_statuses = [e.value for e in TaskStatus]
+
         system_prompt = (
-            "You are the Thinker reflecting on the output of the isolated runtime execution.\n"
-            "Analyze the success, stdout, and stderr. Judge if the current task is complete.\n"
-            "Provide detailed feedback and a rating.\n"
+            "You are the Thinker reflecting on the output of the runtime execution.\n"
+            "Analyze the success, stdout, stderr, and any IO or tool failures.\n"
+            "Use the full context including previous attempts, failed operations, and error logs.\n"
+            "Judge if the current task is complete. Provide detailed feedback and a rating.\n"
             "IMPORTANT:\n"
-            f" - For `status`, use one of: {task_statuses}."
+            f" - For status, use one of: {task_statuses}.\n"
+            " - If IO operations failed, explain what went wrong and suggest corrections.\n"
+            " - If tools were blocked, suggest the correct tool or io_operation to use."
         )
-        full_prompt = f"{system_prompt}\n\nContext/Objective: {context}\n\nRuntime Output:\n{runtime_output}"
-        
+
+        full_prompt = f"{system_prompt}\n\nFull Context:\n{context}\n\nRuntime Output:\n{runtime_output}"
         return await self.llm.generate_structured(full_prompt, ReflectionSchema)
