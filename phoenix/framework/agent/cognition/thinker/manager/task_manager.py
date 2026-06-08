@@ -7,7 +7,7 @@ class TaskManager:
     def push_task(self, task: TaskSchema) -> Task:
         pass
 
-    def get_task(self, task_id: str) -> TaskSchema:
+    def get_task(self, task_id: str) -> Task:
         pass
 
     def update_task(self, task: TaskSchema) -> None:
