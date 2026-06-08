@@ -36,7 +36,7 @@ class SolutionSchema(BaseModel):
 
 class IOOperation(BaseModel):
     operation: FileOperation = Field(..., description="The type of operation (e.g., 'create', 'create_dir', 'edit', 'delete', 'read')")
-    file_path: str = Field(..., description="Absolute or relative path to the file")
+    file_path: str = Field(..., description="ABSOLUTE full path to the file (MUST be the complete absolute path, NO relative paths allowed)")
     content: Optional[str] = Field(None, description="The content to write or edit if applicable")
 
 class ToolCall(BaseModel):

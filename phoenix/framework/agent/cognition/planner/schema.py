@@ -69,27 +69,27 @@ class TaskType(str, Enum):
 
 # 1. STANDARD CRUD & FILE SYSTEM I/O
 class ReadTaskSchema(BaseModel):
-    file_path: str = Field(..., description="Target file path to read")
+    file_path: str = Field(..., description="ABSOLUTE full path to read (MUST be a full absolute path, no relative paths)")
     offset: Optional[int] = Field(None, description="Byte offset to start reading from")
     length: Optional[int] = Field(None, description="Number of bytes to read")
 
 class WriteTaskSchema(BaseModel):
-    file_path: str = Field(..., description="Target file path to write to")
+    file_path: str = Field(..., description="ABSOLUTE full path to write to (MUST be a full absolute path, no relative paths)")
     content: Union[str, bytes] = Field(..., description="Content to write")
     append: bool = Field(False, description="Whether to append to the file instead of overwriting")
 
 class SearchTaskSchema(BaseModel):
-    directory_path: str = Field(..., description="Directory to search in")
+    directory_path: str = Field(..., description="ABSOLUTE full directory path to search in")
     query: str = Field(..., description="Regex or string query to search for")
     file_pattern: Optional[str] = Field(None, description="File glob pattern to restrict search")
 
 class UpdateTaskSchema(BaseModel):
-    file_path: str = Field(..., description="Target file path to update")
+    file_path: str = Field(..., description="ABSOLUTE full path to update (MUST be a full absolute path, no relative paths)")
     search_query: str = Field(..., description="Text or block to find")
     replace_content: str = Field(..., description="Content to replace with")
 
 class DeleteTaskSchema(BaseModel):
-    target_path: str = Field(..., description="File or directory path to delete")
+    target_path: str = Field(..., description="ABSOLUTE full file or directory path to delete")
     recursive: bool = Field(False, description="Whether to recursively delete directories")
 
 class BlockReadTaskSchema(BaseModel):
@@ -103,7 +103,7 @@ class BlockWriteTaskSchema(BaseModel):
     data: bytes = Field(..., description="Raw bytes to write to sectors")
 
 class MmapIoTaskSchema(BaseModel):
-    file_path: str = Field(..., description="File to map into memory")
+    file_path: str = Field(..., description="ABSOLUTE full path to map into memory")
     size: int = Field(..., description="Size of mapping")
     offset: int = Field(0, description="Offset in file")
 
@@ -249,7 +249,7 @@ class FileOperation(str, Enum):
     CHMOD = "chmod"       # Crucial for OS file permissions
 
 class FileIOParams(BaseModel):
-    file_path: str = Field(..., description="Absolute path to the target file")
+    file_path: str = Field(..., description="ABSOLUTE full path to the target file (MUST be a full absolute path, no relative paths)")
     operation: FileOperation = Field(..., description="The specific file sub-operation")
     
     # Text and binary data handling
