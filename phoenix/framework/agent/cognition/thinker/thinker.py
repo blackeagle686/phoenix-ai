@@ -43,6 +43,7 @@ class Thinker(BaseThinker):
             f" - For `priority`, use one of: {task_priorities}.\n"
             f" - For `status`, use one of: {task_statuses}."
         )
+
         
         
         if self.profile:
