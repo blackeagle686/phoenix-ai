@@ -17,12 +17,12 @@ from phoenix.framework.agent.cognition.reflector.schema import BaseReflectorMeta
 from phoenix.framework.agent.cognition.utils import parse_llm_json
 
 class TaskCreator:
-    def __init__(self, thinker:, tools: Optional[Any] = None, cache: Optional[Any] = None ):
-        self.llm = llm
+    def __init__(self, thinker:Any, tools: Optional[Any] = None, cache: Optional[Any] = None ):
+        self.llm = thinker.llm
         self.tools = tools
         self.cache = cache
         self.problems = []
-
+    
         if not cache: 
             self.memory = {}
 
