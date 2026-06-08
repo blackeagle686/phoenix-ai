@@ -1,4 +1,4 @@
-from phoenix.framework.agent.cognition.planner.schema import TaskSchema
+from phoenix.framework.agent.cognition.planner.schema import Task
 
 class PlanManager:
     def __init__(self, ):
