@@ -10,6 +10,7 @@ from phoenix.framework.agent.cognition.planner.schema import (
     SolutionType,
     FileOperation
 )
+from phoenix.framework.agent.cognition.utils.id import generate_unique_id
 
 class ProblemDefinition(BaseModel):
     problem_id: str = Field(..., description="Unique ID for this problem") # system defined
@@ -23,7 +24,7 @@ class ProblemSchema(BaseModel):
     problems: List[ProblemDefinition] = Field(default_factory=list, description="List of defined problems to solve the task")
 
 class SolutionDefinition(BaseModel):
-    solution_id: str = Field(..., description="Unique ID for this solution")
+    solution_id: str = Field(default_factory=generate_unique_id, description="Unique ID for this solution")
     problem_id: str = Field(..., description="The ID of the problem this solves")
     solution_type: SolutionType = Field(default=SolutionType.CODE, description="The archetype of the solution")
     approach: str = Field(..., description="Detailed algorithmic or structural approach to solving the problem")
@@ -43,6 +44,7 @@ class ToolCall(BaseModel):
     arguments: Dict[str, Any] = Field(default_factory=dict, description="Arguments to pass to the tool")
 
 class ActionSchema(BaseModel):
+    action_id: str = Field(default_factory=generate_unique_id, description="Unique ID for this action")
     solution_id: str = Field(..., description="The ID of the solution being enacted")
     tools_to_call: List[ToolCall] = Field(default_factory=list, description="Specific tool calls with arguments")
     io_operations: List[IOOperation] = Field(default_factory=list, description="List of explicit file I/O operations")
@@ -55,7 +57,7 @@ class ReflectionSchema(BaseModel):
     is_task_complete: bool = Field(..., description="Whether the entire task is now fully complete")
 
 class TaskSchema(BaseModel):
-    task_id: str = Field(..., description="Unique ID for the task")
+    task_id: str = Field(default_factory=generate_unique_id, description="Unique ID for the task")
     task_type: TaskType = Field(default=TaskType.OTHER, description="The operational archetype of the task")
     priority: TaskPriority = Field(default=TaskPriority.MEDIUM, description="Execution priority")
     description: str = Field(..., description="What the task requires")
