@@ -4,7 +4,7 @@ class TaskManager:
     def __init__(self, ) -> Task:
         pass
 
-    def push_task(self, task: TaskSchema) -> str:
+    def push_task(self, task: TaskSchema) -> Task:
         pass
 
     def get_task(self, task_id: str) -> TaskSchema:
