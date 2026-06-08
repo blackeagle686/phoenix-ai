@@ -13,7 +13,7 @@ from phoenix.framework.agent.cognition.planner.schema import (
 from phoenix.framework.agent.cognition.utils.id import generate_unique_id
 
 class ProblemDefinition(BaseModel):
-    problem_id: str = Field(..., description="Unique ID for this problem") # system defined
+    problem_id: str = Field(default_factory=generate_unique_id, description="Unique ID for this problem") # system defined
     description: str = Field(..., description="Clear description of the problem to solve") # llm defined 
     related_context: str = Field(..., description="Context or findings related to this problem") # llm defined
     files_to_analyze: List[str] = Field(default_factory=list, description="List of files to look into for this problem") # llm defined

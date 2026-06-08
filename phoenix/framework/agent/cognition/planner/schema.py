@@ -307,7 +307,7 @@ class Problem(BaseModel):
 
 class Task(BaseModel):
     prompt_id: UUID = Field(default_factory=uuid4, description="Unique identifier for the parent session/prompt request")
-    task_id: str = Field(..., description="Unique deterministic identifier for this specific task")
+    task_id: str = Field(default_factory=lambda: uuid4().hex, description="Unique deterministic identifier for this specific task")
     dependencies: List[str] = Field(default_factory=list, description="List of task_ids that must complete successfully first")
     task_type: TaskType = Field(..., description="The specific systemic I/O operation archetype")
     priority: TaskPriority = Field(default=TaskPriority.MEDIUM, description="The execution urgency tier")
