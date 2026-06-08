@@ -4,10 +4,6 @@ from phoenix.framework.agent.cognition.planner.schema import (
     Prompt, PlannerInputSchema, PlannerOutputSchema,
     Task, TaskType, Problem, Solution
 )
-from phoenix.framework.agent.cognition.actor.schema import (
-    BaseTaskInputSchema, BaseTaskOutputSchema,
-    BaseFileTaskInputSchema, BaseFileTaskOutputSchema
-)
 from phoenix.framework.agent.cognition.reflector.schema import BaseReflectorMeta
 
 class BasePlanner(ABC): 

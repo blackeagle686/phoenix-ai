@@ -1,8 +1,11 @@
+from __future__ import annotations
 import json
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
 from .base import BasePlanner
 from phoenix.services.cache import RedisCache
-from phoenix.framework.agent.cognition.schemas.brain import PlanSchema, ProblemSchema
+
+if TYPE_CHECKING:
+    from phoenix.framework.agent.cognition.schemas.brain import PlanSchema, ProblemSchema
 
 class Planner(BasePlanner):
     """

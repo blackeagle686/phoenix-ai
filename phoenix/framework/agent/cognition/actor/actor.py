@@ -1,8 +1,11 @@
-from typing import Optional, Any
+from __future__ import annotations
+from typing import Optional, Any, TYPE_CHECKING
 from .base import BaseActor
 from phoenix.framework.agent.tools.base import ToolResult
 from phoenix.framework.agent.cognition.actor.schema import ActorInputSchema, ActorOutputSchema, ActorToReflectorSchema
-from phoenix.framework.agent.cognition.schemas.brain import ActionSchema, SolutionSchema, ProblemSchema
+
+if TYPE_CHECKING:
+    from phoenix.framework.agent.cognition.schemas.brain import ActionSchema, SolutionSchema, ProblemSchema
 
 class Actor(BaseActor):
     """

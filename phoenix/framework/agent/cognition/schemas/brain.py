@@ -1,3 +1,4 @@
+
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Any
 
@@ -11,11 +12,11 @@ from phoenix.framework.agent.cognition.planner.schema import (
 )
 
 class ProblemDefinition(BaseModel):
-    problem_id: str = Field(..., description="Unique ID for this problem")
-    description: str = Field(..., description="Clear description of the problem to solve")
-    related_context: str = Field(..., description="Context or findings related to this problem")
-    files_to_analyze: List[str] = Field(default_factory=list, description="List of files to look into for this problem")
-    complexity: ProblemComplexity = Field(default=ProblemComplexity.MEDIUM, description="The assessed complexity of this problem")
+    problem_id: str = Field(..., description="Unique ID for this problem") # system defined
+    description: str = Field(..., description="Clear description of the problem to solve") # llm defined 
+    related_context: str = Field(..., description="Context or findings related to this problem") # llm defined
+    files_to_analyze: List[str] = Field(default_factory=list, description="List of files to look into for this problem") # llm defined
+    complexity: ProblemComplexity = Field(default=ProblemComplexity.MEDIUM, description="The assessed complexity of this problem") # llm defined
 
 class ProblemSchema(BaseModel):
     task_id: str = Field(..., description="The ID of the task these problems belong to")
