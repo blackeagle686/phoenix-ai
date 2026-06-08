@@ -1,6 +1,6 @@
 from typing import Dict, List, Union
 from uuid import UUID
-from phoenix.framework.agent.cognition.planner.schema import Problem
+from phoenix.framework.agent.cognition.schema import Problem
 
 class ProblemManager:
     def __init__(self) -> None:

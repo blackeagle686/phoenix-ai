@@ -1,5 +1,5 @@
 from phoenix.framework.agent.tools.base import BaseTool, ToolResult
-from phoenix.framework.agent.cognition.actor.schema import WebSearchItem, WebSearchResult
+from phoenix.framework.agent.cognition.schema import WebSearchItem, WebSearchResult
 
 class WebSearchTool(BaseTool):
     name = "web_search"

@@ -1,7 +1,6 @@
 from phoenix.framework.agent.tools.base import BaseTool, ToolResult
-import os
 from typing import List, Dict, Union
-from phoenix.framework.agent.cognition.actor.schema import MultiBlockUpdateEdit, MultiBlockUpdateResult
+from phoenix.framework.agent.cognition.schema import MultiBlockUpdateEdit, MultiBlockUpdateResult
 
 class MultiBlockUpdateTool(BaseTool):
     """
@@ -13,23 +12,24 @@ class MultiBlockUpdateTool(BaseTool):
         "Input: 'file_path' (str), 'edits' (list of MultiBlockUpdateEdit)."
     )
 
+    def __init__(self, runtime=None):
+        super().__init__()
+        from phoenix.framework.agent.runtime.restricted_python import RestrictedPythonRuntime
+        self.runtime = runtime or RestrictedPythonRuntime()
+
     async def execute(self, file_path: str, edits: List[Union[MultiBlockUpdateEdit, Dict[str, str]]], **kwargs) -> ToolResult:
         try:
-            if not os.path.exists(file_path):
+            read_result = await self.runtime.execute_io("read", file_path)
+            if not read_result.success:
                 result = MultiBlockUpdateResult(
                     file_path=file_path,
                     success=False,
                     applied_count=0,
                     output=f"File not found: {file_path}"
                 )
-
-
                 return ToolResult(success=False, output=result.dict(), error=f"File not found: {file_path}")
 
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-
-            new_content = content
+            new_content = read_result.output or ""
             applied_count = 0
             
             processed_edits = []
@@ -76,8 +76,9 @@ class MultiBlockUpdateTool(BaseTool):
                 new_content = new_content.replace(target, replacement)
                 applied_count += 1
 
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(new_content)
+            write_result = await self.runtime.execute_io("edit", file_path, new_content)
+            if not write_result.success:
+                return ToolResult(success=False, output=None, error=write_result.error)
 
             result = MultiBlockUpdateResult(
                 file_path=file_path,
@@ -95,4 +96,3 @@ class MultiBlockUpdateTool(BaseTool):
                 output=str(e)
             )
             return ToolResult(success=False, output=result.dict(), error=str(e))
-

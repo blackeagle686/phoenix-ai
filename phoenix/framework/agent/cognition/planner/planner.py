@@ -5,7 +5,7 @@ from .base import BasePlanner
 from phoenix.services.cache import RedisCache
 
 if TYPE_CHECKING:
-    from phoenix.framework.agent.cognition.schemas.brain import PlanSchema, ProblemSchema
+    from phoenix.framework.agent.cognition.schema import PlanSchema, ProblemSchema
 
 class Planner(BasePlanner):
     """
@@ -43,12 +43,7 @@ class Planner(BasePlanner):
         await self.save_plan(session_id, plan)
         return plan
 
-    async def define_task_problems(self, task: Any) -> ProblemSchema:
-        """
-        Brain Step 2: For a specific task, defines the explicit problems to solve.
-        """
-        problems = await self.thinker.define_problems(task)
-        return problems
+
 
     # Keeping legacy method signatures for backward compatibility, 
     # but pointing them to the new schema-based flow if needed.

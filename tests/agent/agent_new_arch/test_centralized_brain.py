@@ -12,8 +12,8 @@ from phoenix.services.llm.openai import OpenAILLM
 from phoenix.framework.agent.tools.io import FileReadTool, FileWriteTool, FileSearchTool, FileEditTool, FileAppendTool
 from phoenix.framework.agent.tools.code import PythonAnalyzerTool, CommandExecutionTool
 from phoenix.framework.agent.execution.tool_manager import ToolManager
-from phoenix.framework.agent.memory.hybrid import HybridMemory
-from phoenix.framework.agent.cognition.reflector.schema import ReflectorInputSchema, ReflectorType
+from phoenix.framework.agent.memory.manager import MemoryManager
+from phoenix.framework.agent.cognition.schema import ReflectorInputSchema, ReflectorType
 
 from phoenix.framework.agent.runtime.restricted_python import RestrictedPythonRuntime
 
@@ -33,9 +33,8 @@ async def test_centralized_brain_step_by_step():
     
     # 2. Register core Tools and Runtime (Removed basic IO tools because ActionSchema io_operations handles them natively)
     tools = [
-        FileSearchTool(),
-        PythonAnalyzerTool(),
-        CommandExecutionTool()
+        FileReadTool(), 
+        FileWriteTool(),
     ]
     
     runtime = RestrictedPythonRuntime()
@@ -79,34 +78,17 @@ async def test_centralized_brain_step_by_step():
         return
         
     for task_idx, current_task in enumerate(plan.tasks):
-        if task_idx > 1: # Limit to 2 tasks for testing to prevent infinite loops
+        if task_idx > 5: # Limit to 2 tasks for testing to prevent infinite loops
             print("\n[!] Stopping after 2 tasks for safety.")
             break
             
         print(f"\n{'='*40}")
-        print(f">>> BRAIN STEP 2: Thinker defining ProblemSchema for Task '{current_task.task_id}'...")
+        print(f">>> BRAIN STEP 2: Actor executing Task '{current_task.task_id}'...")
         print(f"{'='*40}")
-        problems = await planner.define_task_problems(current_task)
-        
-        print("\n[🔍 PROBLEMS DEFINED]")
-        print(json.dumps(problems.model_dump(mode='json'), indent=2))
-        
-        # --- Brain Step 3: Actor Solutions & Execution ---
-        print(f"\n>>> BRAIN STEP 3: Thinker creating SolutionSchema & ActionSchema, Actor executing...")
-        
-        print("  -> Thinker generating SolutionSchema...")
-        solution = await thinker.create_solutions(problems, context=plan.objective)
-        print("\n[💡 SOLUTIONS CREATED]")
-        print(json.dumps(solution.model_dump(mode='json'), indent=2))
-        
-        print("\n  -> Thinker generating ActionSchema...")
-        action_payload = await thinker.generate_action_payload(solution, context=plan.objective)
-        print("\n[⚙️ ACTIONS TO TAKE]")
-        print(json.dumps(action_payload.model_dump(mode='json'), indent=2))
         
         # Execute tools via strict Runtime using Actor
         print("\n[🚀 EXECUTING ACTIONS VIA STRICT RUNTIME]")
-        actor_output = await actor.generate_and_execute(problems, context=plan.objective)
+        actor_output = await actor.generate_and_execute(current_task, context=plan.objective)
         
         print("\n[✅ ACTOR EXECUTION RESULTS]")
         print(json.dumps(actor_output.model_dump(mode='json'), indent=2))

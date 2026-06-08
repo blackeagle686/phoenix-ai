@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional
-from phoenix.framework.agent.cognition.reflector.schema import ReflectorInputSchema, ReflectorOutputSchema
+from phoenix.framework.agent.cognition.schema import ReflectorInputSchema, ReflectorOutputSchema
 
 class BaseReflector(ABC):
     def __init__(self, thinker: Any, profile: Optional[Any] = None):

@@ -2,7 +2,7 @@ import asyncio
 from typing import Dict, List, Any, Optional, Union
 from phoenix.framework.agent.core.agent import Agent
 from phoenix.framework.multi_agent.config import MultiAgentConfig, AgentConfig
-from phoenix.framework.agent.memory.hybrid import HybridMemory
+from phoenix.framework.agent.memory.manager import MemoryManager
 from phoenix.framework.agent.cognition.utils.json import parse_llm_json
 from phoenix.framework.multi_agent.message_bus import MessageBus
 from phoenix.framework.multi_agent.state_store import SharedStateStore
@@ -20,7 +20,7 @@ class MultiAgentManager:
     def __init__(self, config: MultiAgentConfig = None):
         self.config = config
         self.agents: Dict[str, Agent] = {}
-        self.shared_memory = HybridMemory() if (self.config and self.config.shared_memory) else None
+        self.shared_memory = MemoryManager() if (self.config and self.config.shared_memory) else None
         
         # OS-Grade Communication Infrastructure
         self.bus = MessageBus()
@@ -106,7 +106,7 @@ class MultiAgentManager:
         manager = cls()  # Create without config
         
         if shared_memory:
-            manager.shared_memory = HybridMemory()
+            manager.shared_memory = MemoryManager()
             # Inject the shared memory into each agent
             for agent in agents.values():
                 agent.memory = manager.shared_memory

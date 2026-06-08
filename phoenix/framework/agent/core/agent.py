@@ -2,7 +2,7 @@ import uuid
 from typing import Any, Callable, Dict, Optional, Type
 import inspect
 from phoenix.services.llm.openai import OpenAILLM
-from phoenix.framework.agent.memory.hybrid import HybridMemory
+from phoenix.framework.agent.memory.manager import MemoryManager
 from phoenix.framework.agent.memory.adapter import InteractiveMemoryAdapter
 from phoenix.framework.agent.tools.registry import ToolRegistry
 from phoenix.framework.agent.cognition.thinker import Thinker
@@ -88,13 +88,12 @@ class Agent:
 
     def _prepare_memory(self, memory):
         if memory is None:
-            return HybridMemory()
+            return MemoryManager()
 
         required = ("add_interaction", "get_full_context")
         has_required = all(hasattr(memory, name) for name in required)
-        has_layers = hasattr(memory, "session") and hasattr(memory, "reflection")
 
-        if has_required and has_layers:
+        if has_required:
             return memory
 
         return InteractiveMemoryAdapter(memory)

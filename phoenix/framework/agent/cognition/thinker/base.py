@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional
-from ..schemas.brain import PlanSchema, ProblemSchema, SolutionSchema, ActionSchema, ReflectionSchema
+from phoenix.framework.agent.cognition.schema import PlanSchema, TaskExecutionSchema, ReflectionSchema
 
 class BaseThinker(ABC):
     def __init__(self, llm, profile: Any = None, tool_manager: Any = None):
@@ -17,23 +17,9 @@ class BaseThinker(ABC):
         pass
 
     @abstractmethod
-    async def define_problems(self, task: Any) -> ProblemSchema:
+    async def solve_task(self, task: Any, context: str) -> TaskExecutionSchema:
         """
-        Brain Step 2: Given a task, defines the specific problems to solve.
-        """
-        pass
-
-    @abstractmethod
-    async def create_solutions(self, problems: ProblemSchema) -> SolutionSchema:
-        """
-        Brain Step 3: Given defined problems, generates algorithmic/architectural solutions.
-        """
-        pass
-
-    @abstractmethod
-    async def generate_action_payload(self, solution: SolutionSchema) -> ActionSchema:
-        """
-        Brain Step 4: Given solutions, generates the explicit tools and file I/O operations.
+        Brain Step 2: Solves the task by reasoning about problems, solutions, and generating actions (tool calls).
         """
         pass
 

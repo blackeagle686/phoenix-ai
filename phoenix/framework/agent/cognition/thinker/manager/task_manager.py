@@ -1,5 +1,5 @@
 from typing import Any, Dict, List
-from phoenix.framework.agent.cognition.planner.schema import Task
+from phoenix.framework.agent.cognition.schema import Task
 
 class TaskManager:
     def __init__(self) -> None:

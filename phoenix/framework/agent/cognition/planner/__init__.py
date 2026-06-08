@@ -1,6 +1,6 @@
 from .base import BasePlanner
 from .planner import Planner
-from .schema import (
+from phoenix.framework.agent.cognition.schema import (
     TaskStatus,
     TaskType,
     TaskPriority,

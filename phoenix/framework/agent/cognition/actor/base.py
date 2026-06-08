@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional
-from phoenix.framework.agent.cognition.actor.schema import ActorInputSchema, ActorOutputSchema
-from phoenix.framework.agent.cognition.planner.schema import Task
+from phoenix.framework.agent.cognition.schema import ActorInputSchema, ActorOutputSchema
+from phoenix.framework.agent.cognition.schema import Task
 from enum import Enum
 from phoenix.framework.agent.runtime.base import BaseRuntime
 

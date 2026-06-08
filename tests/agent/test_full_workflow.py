@@ -5,7 +5,7 @@ import shutil
 from phoenix.main import init_phoenix, startup_phoenix
 from phoenix.services.llm import OpenAILLM
 from phoenix.framework.agent.core import Agent
-from phoenix.framework.agent.memory.hybrid import HybridMemory
+from phoenix.framework.agent.memory.manager import MemoryManager
 
 class FullAgentWorkflowTest(unittest.IsolatedAsyncioTestCase):
     """
@@ -26,7 +26,7 @@ class FullAgentWorkflowTest(unittest.IsolatedAsyncioTestCase):
         
         # Initialize Real OpenAI LLM and Memory
         self.llm = OpenAILLM()
-        self.memory = HybridMemory()
+        self.memory = MemoryManager()
         self.agent = Agent(llm=self.llm, memory=self.memory)
 
     async def asyncTearDown(self):

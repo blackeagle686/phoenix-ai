@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional, Union
-from phoenix.framework.agent.cognition.planner.schema import (
+from phoenix.framework.agent.cognition.schema import (
     Prompt, PlannerInputSchema, PlannerOutputSchema,
     Task, TaskType, Problem, Solution
 )
-from phoenix.framework.agent.cognition.reflector.schema import BaseReflectorMeta
+from phoenix.framework.agent.cognition.schema import BaseReflectorMeta
 
 class BasePlanner(ABC): 
     def __init__(

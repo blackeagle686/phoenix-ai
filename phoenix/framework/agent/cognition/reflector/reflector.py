@@ -1,10 +1,10 @@
 from __future__ import annotations
 from typing import Any, TYPE_CHECKING
 from .base import BaseReflector
-from .schema import ReflectorInputSchema
+from phoenix.framework.agent.cognition.schema import ReflectorInputSchema
 
 if TYPE_CHECKING:
-    from phoenix.framework.agent.cognition.schemas.brain import ReflectionSchema
+    from phoenix.framework.agent.cognition.schema import ReflectionSchema
 
 class Reflector(BaseReflector):
     """

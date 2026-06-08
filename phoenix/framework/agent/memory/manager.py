@@ -5,6 +5,25 @@ from phoenix.framework.agent.memory.cell import MemoryCell
 from phoenix.framework.agent.cognition.utils.id import generate_unique_id
 
 
+class _SessionProxy:
+    """Lightweight key value store for session variables"""
+
+    def __init__(self):
+        self._vars: Dict[str, Any] = {}
+
+    def set(self, key: str, value: Any):
+        self._vars[key] = value
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._vars.get(key, default)
+
+    def get_all(self) -> Dict[str, Any]:
+        return dict(self._vars)
+
+    def clear(self):
+        self._vars.clear()
+
+
 class MemoryManager:
     """Central controller for the unified memory graph across the agent loop"""
 
@@ -16,11 +35,41 @@ class MemoryManager:
         self.global_context: Dict[str, Any] = {}
         self.completed_tasks: List[str] = []
         self.failed_tasks: List[str] = []
+        self.session = _SessionProxy()
+        self.interactions: List[Dict[str, Any]] = []
 
     def set_session(self, session_id: str, objective: str):
         """Bind a session and objective to this memory graph"""
         self.session_id = session_id
         self.objective = objective
+
+    async def add_interaction(self, session_id: str, role: str, content: str, metadata: Optional[dict] = None):
+        """Record an interaction in the conversation history"""
+        self.interactions.append({
+            "session_id": session_id,
+            "role": role,
+            "content": content,
+            "metadata": metadata,
+            "timestamp": time.time()
+        })
+
+    async def get_full_context(self, session_id: str = "", query: str = "") -> str:
+        """Build context from interaction history for the planner initial call"""
+        parts = []
+        if self.objective:
+            parts.append(f"OBJECTIVE: {self.objective}")
+
+        recent = self.interactions[-20:]
+        if recent:
+            parts.append("\nCONVERSATION HISTORY:")
+            for msg in recent:
+                parts.append(f"  [{msg['role']}]: {msg['content'][:500]}")
+
+        completed = self.get_completed_summary()
+        if completed != "No tasks completed yet.":
+            parts.append(f"\n{completed}")
+
+        return "\n".join(parts) if parts else ""
 
     def create_cell(self, task_id: str, description: str, task_type: str = "other",
                     priority: str = "medium", dependencies: Optional[List[str]] = None) -> MemoryCell:
@@ -91,7 +140,7 @@ class MemoryManager:
                 parts.append(f"  Rating: {last.get('rating', 'N/A')}/10")
         return "\n".join(parts) if parts else "No tasks completed yet."
 
-    def get_full_context(self, task_id: str) -> str:
+    def get_task_context(self, task_id: str) -> str:
         """Build full context string for the LLM including objective, completed work, and current cell"""
         parts = []
         parts.append(f"OBJECTIVE: {self.objective}")
@@ -152,7 +201,7 @@ class MemoryManager:
         parts.append(f"RETRY ATTEMPT {cell.attempts}/{cell.max_attempts}")
         parts.append("")
 
-        parts.append(self.get_full_context(task_id))
+        parts.append(self.get_task_context(task_id))
         parts.append("")
         parts.append(self.get_io_context(task_id))
         parts.append("")
@@ -172,6 +221,8 @@ class MemoryManager:
         self.failed_tasks.clear()
         self.objective = ""
         self.global_context.clear()
+        self.interactions.clear()
+        self.session.clear()
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the full memory graph"""

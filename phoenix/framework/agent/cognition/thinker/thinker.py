@@ -1,8 +1,8 @@
 import json
 from typing import Any
 from .base import BaseThinker
-from ..schemas.brain import PlanSchema, ProblemSchema, SolutionSchema, ActionSchema, ReflectionSchema
-from phoenix.framework.agent.cognition.planner.schema import (
+from phoenix.framework.agent.cognition.schema import PlanSchema, TaskExecutionSchema, ReflectionSchema
+from phoenix.framework.agent.cognition.schema import (
     TaskType,
     TaskPriority,
     TaskStatus,
@@ -52,71 +52,26 @@ class Thinker(BaseThinker):
         full_prompt = f"{system_prompt}\n\nContext:\n{context}\n\nUser Request: {prompt}"
         return await self.llm.generate_structured(full_prompt, PlanSchema, session_id=session_id, max_tokens=8192)
 
-    async def define_problems(self, task: Any, context: str = "") -> ProblemSchema:
-        """Brain Step 2: Break a task into distinct technical problems"""
+    async def solve_task(self, task: Any, context: str = "") -> TaskExecutionSchema:
+        """Brain Step 2: Reason about the task and generate the strict tools to call"""
+        tools_list = self._get_tools_list()
         task_desc = getattr(task, "description", str(task))
         task_id = getattr(task, "task_id", "unknown")
-        complexities = [e.value for e in ProblemComplexity]
 
         system_prompt = (
-            "You are the Thinker. Given the following task and its full context, define the explicit problems "
-            "that need to be solved. Break down the task into distinct technical problems.\n"
-            "IMPORTANT:\n"
-            f" - For complexity, use one of: {complexities}.\n"
-            " - ALL file paths must be ABSOLUTE full paths."
-        )
-
-        full_prompt = f"{system_prompt}\n\nTask ID: {task_id}\nTask Description: {task_desc}"
-        if context:
-            full_prompt += f"\n\nFull Context:\n{context}"
-
-        return await self.llm.generate_structured(full_prompt, ProblemSchema)
-
-    async def create_solutions(self, problems: ProblemSchema, context: str = "") -> SolutionSchema:
-        """Brain Step 3: Generate algorithmic solutions for each defined problem"""
-        tools_list = self._get_tools_list()
-        solution_types = [e.value for e in SolutionType]
-
-        system_prompt = (
-            "You are the Thinker. Given the following defined problems and the full task context, "
-            "generate an algorithmic or architectural solution for each problem, including the tools required.\n"
-            f"{tools_list}\n\n"
-            "IMPORTANT:\n"
-            "1. NEVER recommend using shell commands (mkdir, touch, rm, cat, echo) for file or directory operations.\n"
-            "2. ALWAYS use native io_operations for all file and directory creations or edits.\n"
-            "3. NEVER use bash brace expansions like {{css,js,assets}} anywhere.\n"
-            f"4. For solution_type, use one of: {solution_types}.\n"
-            "5. ALL file paths must be ABSOLUTE full paths. Never use relative paths.\n"
-            "6. Reference the problems by their problem_id when creating solutions."
-        )
-
-        problems_json = problems.json()
-        full_prompt = f"{system_prompt}\n\nContext:\n{context}\n\nProblems:\n{problems_json}"
-        return await self.llm.generate_structured(full_prompt, SolutionSchema, max_tokens=8192)
-
-    async def generate_action_payload(self, solution: SolutionSchema, context: str = "") -> ActionSchema:
-        """Brain Step 4: Generate exact tool calls and IO operations from solutions"""
-        tools_list = self._get_tools_list()
-        file_ops = [e.value for e in FileOperation]
-
-        system_prompt = (
-            "You are the Thinker. Given the following solutions and the full task context, "
-            "define the exact strict actions to take.\n"
-            "Include the precise tools to call with arguments, and strict file IO operations with file paths and contents.\n"
+            "You are the Thinker. Given the following task and its full context, analyze the problem, "
+            "formulate an architectural/algorithmic approach, and define the exact explicit tool calls required to solve it.\n"
             f"{tools_list}\n\n"
             "IMPORTANT:\n"
             "1. ALWAYS use ABSOLUTE file paths for any file_path or directory. Never use relative paths.\n"
             "2. When specifying tools_to_call, ONLY use the tool names provided in the Available Tools list.\n"
-            "3. Use io_operations natively for creating, reading, editing, or deleting files AND directories.\n"
-            f"   - You MUST use operations exactly from: {file_ops}.\n"
-            "4. NEVER use the execute_command tool for file or directory operations. ALWAYS use io_operations instead.\n"
-            "5. Do NOT use bash brace expansion in file paths or commands. Specify each absolute path explicitly as a separate operation.\n"
-            "6. If previous attempts failed, check the context for error details and adjust your approach."
+            "3. Use native tool schemas like `file_write`, `file_edit`, `file_update_multi` to edit files.\n"
+            "4. NEVER use shell commands (mkdir, touch, rm, cat, echo) for file operations. ALWAYS use file tools.\n"
+            "5. If previous attempts failed, check the context for error details and adjust your approach."
         )
 
-        solution_json = solution.json()
-        full_prompt = f"{system_prompt}\n\nContext:\n{context}\n\nSolutions:\n{solution_json}"
-        return await self.llm.generate_structured(full_prompt, ActionSchema, max_tokens=8192)
+        full_prompt = f"{system_prompt}\n\nTask ID: {task_id}\nTask Description: {task_desc}\n\nContext:\n{context}"
+        return await self.llm.generate_structured(full_prompt, TaskExecutionSchema, max_tokens=8192)
 
     async def generate_reflection(self, runtime_output: Any, context: str) -> ReflectionSchema:
         """Brain Step 5: Evaluate runtime execution results and judge task completion"""

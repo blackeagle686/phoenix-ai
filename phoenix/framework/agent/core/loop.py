@@ -6,7 +6,7 @@ from phoenix.framework.agent.cognition.planner import Planner
 from phoenix.framework.agent.cognition.reflector import Reflector
 from phoenix.framework.agent.cognition.analyzer import Analyzer
 from phoenix.framework.agent.cognition.actor import Actor
-from phoenix.framework.agent.cognition.reflector.schema import ReflectorInputSchema, ReflectorType
+from phoenix.framework.agent.cognition.schema import ReflectorInputSchema, ReflectorType
 from phoenix.framework.agent.memory.manager import MemoryManager
 
 
@@ -59,17 +59,12 @@ class AgentLoop:
             cell.task_status = "in_progress"
             task_complete = False
 
-            problems = await self.planner.define_task_problems(task)
-            if hasattr(problems, "problems"):
-                for p in problems.problems:
-                    cell.add_problem(p.dict() if hasattr(p, "dict") else dict(p))
-
             while not task_complete and iterations < max_iterations and not cell.is_exhausted():
                 cell.increment_attempt()
 
-                context = self.memory_manager.get_full_context(task.task_id)
+                context = self.memory_manager.get_task_context(task.task_id)
 
-                actor_output = await self.actor.generate_and_execute(problems, context=context)
+                actor_output = await self.actor.generate_and_execute(task, context=context)
 
                 result_data = actor_output.dict() if hasattr(actor_output, "dict") else {"output": str(actor_output)}
                 cell.add_runtime_result(result_data)
@@ -166,18 +161,12 @@ class AgentLoop:
             cell.task_status = "in_progress"
             task_complete = False
 
-            yield {"type": "status", "content": f"Defining problems for task {task.task_id}..."}
-            problems = await self.planner.define_task_problems(task)
-            if hasattr(problems, "problems"):
-                for p in problems.problems:
-                    cell.add_problem(p.dict() if hasattr(p, "dict") else dict(p))
-
             while not task_complete and iterations < max_iterations and not cell.is_exhausted():
                 cell.increment_attempt()
-                context = self.memory_manager.get_full_context(task.task_id)
+                context = self.memory_manager.get_task_context(task.task_id)
 
                 yield {"type": "status", "content": f"Executing task {task.task_id} attempt {cell.attempts}..."}
-                actor_output = await self.actor.generate_and_execute(problems, context=context)
+                actor_output = await self.actor.generate_and_execute(task, context=context)
 
                 result_data = actor_output.dict() if hasattr(actor_output, "dict") else {"output": str(actor_output)}
                 cell.add_runtime_result(result_data)
