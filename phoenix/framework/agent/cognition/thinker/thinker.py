@@ -44,6 +44,7 @@ class Thinker(BaseThinker):
             f" - For `status`, use one of: {task_statuses}."
         )
         
+        
         if self.profile:
             system_prompt += f"\n\n{self.profile.to_prompt_string()}"
             
