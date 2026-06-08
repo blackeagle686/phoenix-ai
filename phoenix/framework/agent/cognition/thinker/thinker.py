@@ -2,6 +2,14 @@ import json
 from typing import Any
 from .base import BaseThinker
 from ..schemas.brain import PlanSchema, ProblemSchema, SolutionSchema, ActionSchema, ReflectionSchema
+from phoenix.framework.agent.cognition.planner.schema import (
+    TaskType,
+    TaskPriority,
+    TaskStatus,
+    ProblemComplexity,
+    SolutionType,
+    FileOperation
+)
 
 class Thinker(BaseThinker):
     """
@@ -23,13 +31,17 @@ class Thinker(BaseThinker):
 
     async def generate_plan(self, prompt: str, memory: Any, session_id: str) -> PlanSchema:
         context = await memory.get_full_context(session_id, query=prompt)
+        task_types = [e.value for e in TaskType]
+        task_priorities = [e.value for e in TaskPriority]
+        task_statuses = [e.value for e in TaskStatus]
+        
         system_prompt = (
             "You are the master Thinker and Planner. Analyze the user request and project context.\n"
             "Create a strict plan containing a main objective and a list of step-by-step tasks to accomplish it.\n"
             "IMPORTANT:\n"
-            " - For `task_type`, use valid enum strings (e.g. 'read', 'write', 'search', 'update', 'delete', 'execute', 'other').\n"
-            " - For `priority`, use 'critical', 'high', 'medium', or 'low'.\n"
-            " - For `status`, use 'pending', 'in_progress', 'done', or 'skipped'."
+            f" - For `task_type`, use one of: {task_types}.\n"
+            f" - For `priority`, use one of: {task_priorities}.\n"
+            f" - For `status`, use one of: {task_statuses}."
         )
         if self.profile:
             system_prompt += f"\n\n{self.profile.to_prompt_string()}"
@@ -43,11 +55,12 @@ class Thinker(BaseThinker):
         task_desc = getattr(task, "description", str(task))
         task_id = getattr(task, "task_id", "unknown")
         
+        complexities = [e.value for e in ProblemComplexity]
         system_prompt = (
             "You are the Thinker. Given the following task, define the explicit problems "
             "that need to be solved. Break down the task into distinct technical problems.\n"
             "IMPORTANT:\n"
-            " - For `complexity`, use 'low', 'medium', 'high', or 'extreme'."
+            f" - For `complexity`, use one of: {complexities}."
         )
         full_prompt = f"{system_prompt}\n\nTask ID: {task_id}\nTask Description: {task_desc}"
         
@@ -60,6 +73,7 @@ class Thinker(BaseThinker):
             tools_info = self.tool_manager.registry.get_all_tools_info()
             tools_list = "\n\nAvailable Tools:\n" + json.dumps(tools_info, indent=2)
 
+        solution_types = [e.value for e in SolutionType]
         system_prompt = (
             "You are the Thinker. Given the following defined problems, generate an algorithmic "
             "or architectural solution for each problem, including the tools required.\n"
@@ -68,7 +82,7 @@ class Thinker(BaseThinker):
             "1. NEVER recommend using shell commands (mkdir, touch, rm, cat, echo) for file or directory operations.\n"
             "2. ALWAYS use native io_operations for all file and directory creations or edits.\n"
             "3. NEVER use bash brace expansions like {css,js,assets} anywhere.\n"
-            "4. For `solution_type`, use 'plan', 'code', 'terminal', 'network', 'mission', 'fastanswer', or 'other'."
+            f"4. For `solution_type`, use one of: {solution_types}."
         )
         problems_json = problems.json()
         full_prompt = f"{system_prompt}\n\nContext:\n{context}\n\nProblems:\n{problems_json}"
@@ -82,6 +96,7 @@ class Thinker(BaseThinker):
             tools_info = self.tool_manager.registry.get_all_tools_info()
             tools_list = "\n\nAvailable Tools:\n" + json.dumps(tools_info, indent=2)
 
+        file_ops = [e.value for e in FileOperation]
         system_prompt = (
             "You are the Thinker. Given the following solutions, define the exact strict actions to take.\n"
             "Include the precise tools to call with arguments, and strict file I/O operations (file paths and contents) to enact the solution."
@@ -90,8 +105,7 @@ class Thinker(BaseThinker):
             "1. ALWAYS use ABSOLUTE file paths for any file_path or directory, based on the directories mentioned in the context or user request.\n"
             "2. When specifying tools_to_call, ONLY use the tool names provided in the Available Tools list.\n"
             "3. Use `io_operations` natively for creating, reading, editing, or deleting files AND directories.\n"
-            "   - For files, use operations: `create`, `read`, `write`, `append`, `replace`, `delete`.\n"
-            "   - For directories, use operation: `create_dir`.\n"
+            f"   - You MUST use operations exactly from: {file_ops}.\n"
             "4. NEVER use the execute_command tool for file or directory operations (no mkdir, touch, rm, etc.). ALWAYS use io_operations instead.\n"
             "5. Do NOT use bash brace expansion like `{css,js,assets}` in file paths or commands. You MUST specify each absolute path explicitly as a separate operation."
         )
@@ -101,12 +115,13 @@ class Thinker(BaseThinker):
         return await self.llm.generate_structured(full_prompt, ActionSchema, max_tokens=8192)
 
     async def generate_reflection(self, runtime_output: Any, context: str) -> ReflectionSchema:
+        task_statuses = [e.value for e in TaskStatus]
         system_prompt = (
             "You are the Thinker reflecting on the output of the isolated runtime execution.\n"
             "Analyze the success, stdout, and stderr. Judge if the current task is complete.\n"
             "Provide detailed feedback and a rating.\n"
             "IMPORTANT:\n"
-            " - For `status`, use 'done', 'failed', or 'in_progress'."
+            f" - For `status`, use one of: {task_statuses}."
         )
         full_prompt = f"{system_prompt}\n\nContext/Objective: {context}\n\nRuntime Output:\n{runtime_output}"
         
