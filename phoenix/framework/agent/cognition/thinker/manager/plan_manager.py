@@ -10,7 +10,7 @@ class PlanManager:
     def get_task(self, task_id: str) -> TaskSchema:
         pass
 
-    def update_task(self, task: TaskSchema) -> None:
+    def update_task(self, task: TaskSchema, content) -> None:
         pass
 
     def delete_task(self, task_id: str) -> None:
