@@ -62,6 +62,174 @@ class TaskType(str, Enum):
     SENSOR_POLL = "sensor_poll"     # Aggregating data across high-frequency IMUs, Radar, and Sonar
     WATCHDOG_PING = "watchdog_ping" # Periodic heartbeat signal to clear safety timer circuits
     OTHER = "other"                 # Generic fallback for cognitive actions that do not fit into OS/System categories
+
+# =========================================================================
+# TASK TYPE SPECIFIC SCHEMAS
+# =========================================================================
+
+# 1. STANDARD CRUD & FILE SYSTEM I/O
+class ReadTaskSchema(BaseModel):
+    file_path: str = Field(..., description="Target file path to read")
+    offset: Optional[int] = Field(None, description="Byte offset to start reading from")
+    length: Optional[int] = Field(None, description="Number of bytes to read")
+
+class WriteTaskSchema(BaseModel):
+    file_path: str = Field(..., description="Target file path to write to")
+    content: Union[str, bytes] = Field(..., description="Content to write")
+    append: bool = Field(False, description="Whether to append to the file instead of overwriting")
+
+class SearchTaskSchema(BaseModel):
+    directory_path: str = Field(..., description="Directory to search in")
+    query: str = Field(..., description="Regex or string query to search for")
+    file_pattern: Optional[str] = Field(None, description="File glob pattern to restrict search")
+
+class UpdateTaskSchema(BaseModel):
+    file_path: str = Field(..., description="Target file path to update")
+    search_query: str = Field(..., description="Text or block to find")
+    replace_content: str = Field(..., description="Content to replace with")
+
+class DeleteTaskSchema(BaseModel):
+    target_path: str = Field(..., description="File or directory path to delete")
+    recursive: bool = Field(False, description="Whether to recursively delete directories")
+
+class BlockReadTaskSchema(BaseModel):
+    device_path: str = Field(..., description="Block device path (e.g., /dev/nvme0n1)")
+    sector_offset: int = Field(..., description="Starting sector")
+    num_sectors: int = Field(..., description="Number of sectors to read")
+
+class BlockWriteTaskSchema(BaseModel):
+    device_path: str = Field(..., description="Block device path")
+    sector_offset: int = Field(..., description="Starting sector")
+    data: bytes = Field(..., description="Raw bytes to write to sectors")
+
+class MmapIoTaskSchema(BaseModel):
+    file_path: str = Field(..., description="File to map into memory")
+    size: int = Field(..., description="Size of mapping")
+    offset: int = Field(0, description="Offset in file")
+
+# 2. NETWORK & COMMUNICATIONS I/O
+class NetSendTaskSchema(BaseModel):
+    destination: str = Field(..., description="IP or hostname to send to")
+    port: int = Field(..., description="Target port")
+    protocol: str = Field("TCP", description="Protocol to use (TCP/UDP)")
+    data: bytes = Field(..., description="Data to send")
+
+class NetRecvTaskSchema(BaseModel):
+    port: int = Field(..., description="Port to listen on")
+    protocol: str = Field("TCP", description="Protocol to use (TCP/UDP)")
+    timeout: float = Field(..., description="Timeout in seconds")
+
+class IpcPipeTaskSchema(BaseModel):
+    pipe_name: str = Field(..., description="Name or path of the named pipe")
+    data: Optional[bytes] = Field(None, description="Data to write (if writing)")
+    read_length: Optional[int] = Field(None, description="Bytes to read (if reading)")
+
+class IpcShareTaskSchema(BaseModel):
+    shm_name: str = Field(..., description="Shared memory segment name")
+    size: int = Field(..., description="Size of shared memory block")
+    write_data: Optional[bytes] = Field(None, description="Data to write to shared memory")
+
+class RpcCallTaskSchema(BaseModel):
+    endpoint: str = Field(..., description="RPC or REST endpoint URL")
+    method: str = Field(..., description="Method name to invoke")
+    params: Dict[str, Any] = Field(default_factory=dict, description="Parameters for the RPC call")
+
+# 3. AI, EMBEDDINGS & MACHINE LEARNING I/O
+class BatchLoadTaskSchema(BaseModel):
+    source_uri: str = Field(..., description="URI of the data source")
+    batch_size: int = Field(..., description="Number of items per batch")
+    destination_buffer: str = Field(..., description="Target buffer or memory segment")
+
+class TensorStreamTaskSchema(BaseModel):
+    model_id: str = Field(..., description="Identifier for the neural network model")
+    input_tensor: Any = Field(..., description="Input tensor data")
+    expected_shape: List[int] = Field(..., description="Expected shape of the output tensor")
+
+class VectorSearchTaskSchema(BaseModel):
+    collection_name: str = Field(..., description="Name of the vector collection")
+    query_vector: List[float] = Field(..., description="Vector to search for")
+    top_k: int = Field(10, description="Number of nearest neighbors to return")
+
+class VramShuttleTaskSchema(BaseModel):
+    direction: str = Field(..., description="'host_to_device' or 'device_to_host'")
+    size_bytes: int = Field(..., description="Amount of data to transfer")
+    memory_pointer: str = Field(..., description="Reference to the memory address")
+
+class TokenStreamTaskSchema(BaseModel):
+    prompt: str = Field(..., description="Text prompt for the LLM")
+    max_tokens: int = Field(..., description="Maximum tokens to generate")
+    stream: bool = Field(True, description="Whether to stream the response")
+
+# 4. HARDWARE-LEVEL & LOW-LEVEL BUS I/O
+class DmaTransferTaskSchema(BaseModel):
+    source_addr: str = Field(..., description="Physical source address")
+    dest_addr: str = Field(..., description="Physical destination address")
+    transfer_size: int = Field(..., description="Size in bytes to transfer")
+
+class InterruptReqTaskSchema(BaseModel):
+    irq_number: int = Field(..., description="IRQ line number")
+    handler_id: str = Field(..., description="Identifier of the ISR to trigger or register")
+
+class PortInTaskSchema(BaseModel):
+    port_address: str = Field(..., description="I/O port address")
+    read_size: int = Field(1, description="Number of bytes to read")
+
+class PortOutTaskSchema(BaseModel):
+    port_address: str = Field(..., description="I/O port address")
+    data: bytes = Field(..., description="Data to write to the port")
+
+class MemMappedInTaskSchema(BaseModel):
+    base_address: str = Field(..., description="Base physical address")
+    offset: int = Field(..., description="Offset from base address")
+    read_size: int = Field(..., description="Number of bytes to read")
+
+# 5. MISSION-CRITICAL & VEHICLE SYSTEMS I/O
+class BusBroadcastTaskSchema(BaseModel):
+    bus_type: str = Field(..., description="e.g., 'CAN', 'ARINC_429'")
+    message_id: str = Field(..., description="Identifier for the broadcast message")
+    payload: bytes = Field(..., description="Raw message payload")
+
+class BusListenTaskSchema(BaseModel):
+    bus_type: str = Field(..., description="e.g., 'CAN', 'ARINC_429'")
+    filter_id: Optional[str] = Field(None, description="Optional ID to filter on")
+    duration_sec: float = Field(..., description="Time to listen")
+
+class AdcSampleTaskSchema(BaseModel):
+    channel: int = Field(..., description="ADC channel number")
+    sample_rate: int = Field(..., description="Samples per second")
+    duration_sec: float = Field(..., description="Duration to sample")
+
+class DacActuateTaskSchema(BaseModel):
+    channel: int = Field(..., description="DAC channel number")
+    voltage_level: float = Field(..., description="Target voltage to output")
+
+class PwmOutputTaskSchema(BaseModel):
+    pin: int = Field(..., description="PWM pin number")
+    frequency_hz: float = Field(..., description="Frequency in Hertz")
+    duty_cycle: float = Field(..., description="Duty cycle percentage (0.0 to 1.0)")
+
+class SensorPollTaskSchema(BaseModel):
+    sensor_id: str = Field(..., description="Identifier for the sensor (e.g., IMU_1)")
+    poll_rate_hz: int = Field(..., description="Polling rate in Hertz")
+
+class WatchdogPingTaskSchema(BaseModel):
+    timer_id: str = Field(..., description="Identifier of the watchdog timer")
+    reset_value: Optional[int] = Field(None, description="Value to reset the timer to")
+
+class OtherTaskSchema(BaseModel):
+    action_name: str = Field(..., description="Name of the custom action")
+    custom_params: Dict[str, Any] = Field(default_factory=dict, description="Arbitrary parameters")
+
+TaskPayloadType = Union[
+    ReadTaskSchema, WriteTaskSchema, SearchTaskSchema, UpdateTaskSchema, DeleteTaskSchema,
+    BlockReadTaskSchema, BlockWriteTaskSchema, MmapIoTaskSchema,
+    NetSendTaskSchema, NetRecvTaskSchema, IpcPipeTaskSchema, IpcShareTaskSchema, RpcCallTaskSchema,
+    BatchLoadTaskSchema, TensorStreamTaskSchema, VectorSearchTaskSchema, VramShuttleTaskSchema, TokenStreamTaskSchema,
+    DmaTransferTaskSchema, InterruptReqTaskSchema, PortInTaskSchema, PortOutTaskSchema, MemMappedInTaskSchema,
+    BusBroadcastTaskSchema, BusListenTaskSchema, AdcSampleTaskSchema, DacActuateTaskSchema, PwmOutputTaskSchema,
+    SensorPollTaskSchema, WatchdogPingTaskSchema, OtherTaskSchema,
+    Dict[str, Any]
+]
     
 class TaskPriority(str, Enum):
     CRITICAL = "critical"  # Real-time systems / Watchdogs
@@ -150,7 +318,7 @@ class Task(BaseModel):
     complexity: ProblemComplexity = Field(..., description="complexity")
     problems: List[Problem] = Field(..., description="problems")
     repeat_count: int = Field(1, description="Number of times the task should be repeated")
-    payload: Dict[str, Any] = Field(default_factory=dict, description="Input parameters required by the driver")
+    payload: TaskPayloadType = Field(default_factory=dict, description="Input parameters required by the driver")
     result: Optional[Dict[str, Any]] = Field(None, description="Output returned by the executing module/driver")
     error: Optional[str] = Field(None, description="Error tracking message if status shifts to FAILED")
     created_by: str = Field(..., description="The identifier of the agent/orchestrator that generated this task")
