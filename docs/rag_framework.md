@@ -217,6 +217,7 @@ async def main():
     ans2 = await mmrag.query_with_image(
         question="Does this new flowchart match our ingested architecture guidelines?",
         image_path="./new_flowchart.png"
+    )
     print(ans2)
 ```
 
