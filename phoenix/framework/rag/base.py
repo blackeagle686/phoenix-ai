@@ -208,6 +208,387 @@ class BaseRAG:
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
+    async def ingest_sql(
+        self,
+        connection_string: str,
+        query: str,
+        text_columns: Union[str, List[str]] = None,
+        metadata_columns: List[str] = None,
+        table: str = None
+    ):
+        """Ingest rows from a SQL database.
+
+        Args:
+            connection_string: SQLAlchemy-compatible connection string.
+                Examples: "sqlite:///data.db", "postgresql://user:pass@host/db",
+                          "mysql+pymysql://user:pass@host/db"
+            query: Raw SQL query to execute. Ignored if `table` is provided.
+            text_columns: Column(s) whose content gets chunked and indexed.
+                If None, all columns are concatenated as key=value text.
+            metadata_columns: Columns to store as metadata alongside each chunk.
+            table: Shorthand to ingest an entire table (SELECT * FROM table).
+        """
+        await self._ensure_init()
+        try:
+            from sqlalchemy import create_engine, text as sql_text
+        except ImportError:
+            raise ImportError("sqlalchemy is required for SQL ingestion. pip install sqlalchemy")
+
+        if table and not query:
+            query = f"SELECT * FROM {table}"
+
+        engine = create_engine(connection_string)
+        with engine.connect() as conn:
+            result = conn.execute(sql_text(query))
+            columns = list(result.keys())
+            rows = [dict(zip(columns, row)) for row in result.fetchall()]
+
+        if not rows:
+            logger.info("SQL query returned 0 rows.")
+            return
+
+        if isinstance(text_columns, str):
+            text_columns = [text_columns]
+
+        all_chunks = []
+        all_meta = []
+
+        for row in rows:
+            if text_columns:
+                content = "\n".join(str(row.get(col, "")) for col in text_columns if row.get(col))
+            else:
+                content = "\n".join(f"{k}: {v}" for k, v in row.items() if v is not None)
+
+            if not content.strip():
+                continue
+
+            meta_base = {"source": "sql", "connection": connection_string.split("@")[-1] if "@" in connection_string else connection_string}
+            if metadata_columns:
+                for mc in metadata_columns:
+                    if mc in row:
+                        meta_base[mc] = str(row[mc])
+
+            chunks = self._chunk_text(content, self.config.chunk_size, self.config.chunk_overlap)
+            all_chunks.extend(chunks)
+            all_meta.extend([{**meta_base, "is_parent": False} for _ in chunks])
+
+        if all_chunks:
+            await self.vector_db.add(texts=all_chunks, metadatas=all_meta)
+            logger.info(f"SQL ingestion complete: {len(rows)} rows -> {len(all_chunks)} chunks.")
+
+    async def ingest_api(
+        self,
+        url: str,
+        method: str = "GET",
+        headers: Dict[str, str] = None,
+        body: Dict[str, Any] = None,
+        data_path: str = None,
+        text_field: str = None,
+        pagination: Dict[str, Any] = None
+    ):
+        """Ingest data from a REST API endpoint.
+
+        Args:
+            url: API endpoint URL.
+            method: HTTP method (GET or POST).
+            headers: Request headers (e.g. Authorization).
+            body: JSON body for POST requests.
+            data_path: Dot-notation path to drill into the response JSON.
+                Example: "results.items" drills response["results"]["items"]
+            text_field: Specific field in each item to use as text content.
+                If None, the entire item is serialized as text.
+            pagination: Auto-pagination config. Dict with keys:
+                "next_field": dot-path to the next page URL in the response
+                "max_pages": maximum number of pages to fetch (default 10)
+        """
+        await self._ensure_init()
+        try:
+            import httpx
+        except ImportError:
+            raise ImportError("httpx is required for API ingestion. pip install httpx")
+
+        max_pages = (pagination or {}).get("max_pages", 10) if pagination else 1
+        next_field = (pagination or {}).get("next_field") if pagination else None
+        current_url = url
+        page = 0
+        all_chunks = []
+        all_meta = []
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            while current_url and page < max_pages:
+                if method.upper() == "POST":
+                    resp = await client.post(current_url, headers=headers, json=body)
+                else:
+                    resp = await client.get(current_url, headers=headers)
+                resp.raise_for_status()
+                data = resp.json()
+
+                items = data
+                if data_path:
+                    for part in data_path.split("."):
+                        if isinstance(items, dict):
+                            items = items.get(part, [])
+                        elif isinstance(items, list) and part.isdigit():
+                            items = items[int(part)]
+                        else:
+                            items = []
+                            break
+
+                if not isinstance(items, list):
+                    items = [items]
+
+                for item in items:
+                    if text_field and isinstance(item, dict):
+                        content = str(item.get(text_field, ""))
+                    elif isinstance(item, dict):
+                        content = "\n".join(f"{k}: {v}" for k, v in item.items() if v is not None)
+                    else:
+                        content = str(item)
+
+                    if not content.strip():
+                        continue
+
+                    chunks = self._chunk_text(content, self.config.chunk_size, self.config.chunk_overlap)
+                    all_chunks.extend(chunks)
+                    all_meta.extend([{"source": url, "is_parent": False} for _ in chunks])
+
+                if next_field and isinstance(data, dict):
+                    next_url = data
+                    for part in next_field.split("."):
+                        next_url = next_url.get(part) if isinstance(next_url, dict) else None
+                        if next_url is None:
+                            break
+                    current_url = next_url
+                else:
+                    current_url = None
+                page += 1
+
+        if all_chunks:
+            await self.vector_db.add(texts=all_chunks, metadatas=all_meta)
+            logger.info(f"API ingestion complete: {len(all_chunks)} chunks from {url}.")
+
+    async def ingest_google_drive(
+        self,
+        folder_id: str = None,
+        file_ids: List[str] = None,
+        credentials_path: str = None,
+        credentials_json: Dict = None,
+        mime_filter: List[str] = None
+    ):
+        """Ingest files from Google Drive.
+
+        Requires google-api-python-client and google-auth.
+        pip install google-api-python-client google-auth-oauthlib
+
+        Args:
+            folder_id: Google Drive folder ID to ingest all files from.
+            file_ids: Specific file IDs to ingest.
+            credentials_path: Path to service account JSON key file.
+            credentials_json: Service account credentials as a dict (alternative to file).
+            mime_filter: List of MIME types to include.
+                Defaults to text, PDF, docs, sheets, CSV.
+        """
+        await self._ensure_init()
+        try:
+            from googleapiclient.discovery import build
+            from google.oauth2 import service_account
+        except ImportError:
+            raise ImportError(
+                "Google API client is required. "
+                "pip install google-api-python-client google-auth-oauthlib"
+            )
+
+        import tempfile
+        import io
+
+        scopes = ["https://www.googleapis.com/auth/drive.readonly"]
+        if credentials_json:
+            creds = service_account.Credentials.from_service_account_info(credentials_json, scopes=scopes)
+        elif credentials_path:
+            creds = service_account.Credentials.from_service_account_file(credentials_path, scopes=scopes)
+        else:
+            raise ValueError("Provide credentials_path or credentials_json for Google Drive access.")
+
+        service = build("drive", "v3", credentials=creds)
+
+        default_mimes = [
+            "text/plain",
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "text/csv",
+            "application/json",
+            "text/markdown",
+            "application/vnd.google-apps.document",
+            "application/vnd.google-apps.spreadsheet",
+        ]
+        allowed_mimes = mime_filter or default_mimes
+
+        target_files = []
+
+        if file_ids:
+            for fid in file_ids:
+                meta = service.files().get(fileId=fid, fields="id,name,mimeType").execute()
+                target_files.append(meta)
+
+        if folder_id:
+            query = f"'{folder_id}' in parents and trashed=false"
+            page_token = None
+            while True:
+                resp = service.files().list(
+                    q=query, fields="nextPageToken, files(id, name, mimeType)",
+                    pageToken=page_token, pageSize=100
+                ).execute()
+                for f in resp.get("files", []):
+                    if f["mimeType"] in allowed_mimes or not mime_filter:
+                        target_files.append(f)
+                page_token = resp.get("nextPageToken")
+                if not page_token:
+                    break
+
+        if not target_files:
+            logger.info("No files found in Google Drive.")
+            return
+
+        google_export_map = {
+            "application/vnd.google-apps.document": ("application/pdf", ".pdf"),
+            "application/vnd.google-apps.spreadsheet": ("text/csv", ".csv"),
+        }
+
+        tmp_dir = tempfile.mkdtemp()
+        downloaded = []
+
+        try:
+            for f in target_files:
+                fid = f["id"]
+                fname = f["name"]
+                mime = f["mimeType"]
+
+                if mime in google_export_map:
+                    export_mime, ext = google_export_map[mime]
+                    content = service.files().export(fileId=fid, mimeType=export_mime).execute()
+                    local_path = os.path.join(tmp_dir, fname + ext)
+                    with open(local_path, "wb") as out:
+                        out.write(content)
+                else:
+                    content = service.files().get_media(fileId=fid).execute()
+                    ext = os.path.splitext(fname)[1] or ".txt"
+                    local_path = os.path.join(tmp_dir, fname if ext else fname + ".txt")
+                    with open(local_path, "wb") as out:
+                        out.write(content)
+
+                downloaded.append(local_path)
+
+            if downloaded:
+                logger.info(f"Downloaded {len(downloaded)} files from Google Drive. Ingesting...")
+                await self.ingest(tmp_dir)
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    async def ingest_urls(self, urls: List[str]):
+        """Batch ingest multiple URLs concurrently."""
+        await self._ensure_init()
+        sem = asyncio.Semaphore(10)
+
+        async def _do(url):
+            async with sem:
+                try:
+                    await self.ingest_url(url)
+                except Exception as e:
+                    logger.error(f"Failed to ingest URL {url}: {e}")
+
+        await asyncio.gather(*[_do(u) for u in urls])
+        logger.info(f"Batch URL ingestion complete: {len(urls)} URLs.")
+
+    async def ingest_multi(self, sources: List[Dict[str, Any]]):
+        """Unified multi-source ingestion from a declarative source list.
+
+        Each source dict must have a "type" key. Supported types:
+            file, folder, url, urls, github, sql, api, google_drive, texts
+
+        Example:
+            await rag.ingest_multi([
+                {"type": "folder", "path": "/data/docs"},
+                {"type": "github", "repo_url": "https://github.com/user/repo"},
+                {"type": "sql", "connection_string": "sqlite:///app.db", "query": "SELECT * FROM articles", "text_columns": "body"},
+                {"type": "api", "url": "https://api.example.com/data", "data_path": "results", "text_field": "content"},
+                {"type": "google_drive", "folder_id": "1ABC...", "credentials_path": "/keys/sa.json"},
+                {"type": "urls", "urls": ["https://example.com/page1", "https://example.com/page2"]},
+                {"type": "texts", "texts": ["raw text 1", "raw text 2"]},
+            ])
+        """
+        await self._ensure_init()
+        results = {"success": [], "failed": []}
+
+        for src in sources:
+            src_type = src.get("type", "")
+            label = f"{src_type}:{src.get('path', src.get('url', src.get('repo_url', src.get('table', ''))))}"
+            try:
+                if src_type in ("file", "folder"):
+                    await self.ingest(src["path"])
+
+                elif src_type == "url":
+                    await self.ingest_url(src["url"])
+
+                elif src_type == "urls":
+                    await self.ingest_urls(src["urls"])
+
+                elif src_type == "github":
+                    await self.ingest_github(
+                        src["repo_url"],
+                        branch=src.get("branch", "main")
+                    )
+
+                elif src_type == "sql":
+                    await self.ingest_sql(
+                        connection_string=src["connection_string"],
+                        query=src.get("query", ""),
+                        text_columns=src.get("text_columns"),
+                        metadata_columns=src.get("metadata_columns"),
+                        table=src.get("table")
+                    )
+
+                elif src_type == "api":
+                    await self.ingest_api(
+                        url=src["url"],
+                        method=src.get("method", "GET"),
+                        headers=src.get("headers"),
+                        body=src.get("body"),
+                        data_path=src.get("data_path"),
+                        text_field=src.get("text_field"),
+                        pagination=src.get("pagination")
+                    )
+
+                elif src_type == "google_drive":
+                    await self.ingest_google_drive(
+                        folder_id=src.get("folder_id"),
+                        file_ids=src.get("file_ids"),
+                        credentials_path=src.get("credentials_path"),
+                        credentials_json=src.get("credentials_json"),
+                        mime_filter=src.get("mime_filter")
+                    )
+
+                elif src_type == "texts":
+                    await self.ingest_texts(
+                        texts=src["texts"],
+                        metadatas=src.get("metadatas")
+                    )
+                else:
+                    logger.warning(f"Unknown source type: {src_type}")
+                    results["failed"].append({"source": label, "error": f"Unknown type: {src_type}"})
+                    continue
+
+                results["success"].append(label)
+                logger.info(f"Ingested source: {label}")
+
+            except Exception as e:
+                results["failed"].append({"source": label, "error": str(e)})
+                logger.error(f"Failed to ingest {label}: {e}")
+
+        logger.info(f"Multi-source ingestion done. Success: {len(results['success'])}, Failed: {len(results['failed'])}")
+        return results
+
     # ---- RETRIEVAL ----
 
     async def retrieve(self, query: str, top_k: int = None) -> List[Dict]:
