@@ -217,6 +217,117 @@ async def main():
     ans2 = await mmrag.query_with_image(
         question="Does this new flowchart match our ingested architecture guidelines?",
         image_path="./new_flowchart.png"
-    )
     print(ans2)
+```
+
+---
+
+## 7. Using Custom Vector Databases (e.g., Qdrant, Pinecone)
+
+By default, the RAG framework uses Chroma DB. However, it is built on a clean `BaseVectorDB` interface, allowing you to easily drop in your own custom vector database implementation.
+
+To do this, create a class that inherits from `BaseVectorDB` and implement the required async methods (`add`, `search`, `delete`, `clear`, `get_by_metadata`). Then, pass an instance of this class to any of the RAG frameworks via the `vector_db` parameter.
+
+### Example: Integrating Qdrant
+
+```python
+from typing import List, Optional, Any
+import uuid
+from qdrant_client import AsyncQdrantClient
+from qdrant_client.models import Distance, VectorParams, PointStruct
+from phoenix.services.vector.base import BaseVectorDB
+from phoenix.framework.rag import RAG
+
+class QdrantVectorDB(BaseVectorDB):
+    def __init__(self, collection_name: str = "phoenix_rag", url: str = "http://localhost:6333"):
+        self.collection_name = collection_name
+        self.client = AsyncQdrantClient(url=url)
+        # Assuming you inject an embedding service later, or handle it in the RAG base
+        self.embedding_service = None 
+
+    async def init(self):
+        # Create collection if it doesn't exist
+        collections = await self.client.get_collections()
+        if not any(c.name == self.collection_name for c in collections.collections):
+            await self.client.create_collection(
+                collection_name=self.collection_name,
+                vectors_config=VectorParams(size=384, distance=Distance.COSINE), # Update size based on your model
+            )
+
+    async def add(self, texts: List[str], metadatas: Optional[List[dict]] = None, ids: Optional[List[str]] = None) -> None:
+        if not texts:
+            return
+            
+        embeddings = self.embedding_service.embed_documents(texts)
+        points = []
+        
+        for i, text in enumerate(texts):
+            point_id = ids[i] if ids else str(uuid.uuid4())
+            meta = metadatas[i] if metadatas else {}
+            meta["content"] = text
+            
+            points.append(PointStruct(
+                id=point_id,
+                vector=embeddings[i],
+                payload=meta
+            ))
+            
+        await self.client.upsert(
+            collection_name=self.collection_name,
+            points=points
+        )
+
+    async def search(self, query: str, limit: int = 5, where: dict = None) -> List[Any]:
+        query_vector = self.embedding_service.embed_query(query)
+        
+        # Build filter if 'where' is provided (simplified example)
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        q_filter = None
+        if where:
+            conditions = [FieldCondition(key=k, match=MatchValue(value=v)) for k, v in where.items()]
+            q_filter = Filter(must=conditions)
+            
+        results = await self.client.search(
+            collection_name=self.collection_name,
+            query_vector=query_vector,
+            limit=limit,
+            query_filter=q_filter
+        )
+        
+        # Map back to standard format expected by RAG: [{"content": "...", "metadata": {...}}]
+        formatted = []
+        for r in results:
+            payload = r.payload or {}
+            content = payload.pop("content", "")
+            formatted.append({"content": content, "metadata": payload})
+            
+        return formatted
+
+    async def delete(self, ids: List[str]) -> None:
+        await self.client.delete(self.collection_name, points_selector=ids)
+
+    async def clear(self) -> None:
+        await self.client.delete_collection(self.collection_name)
+        await self.init()
+        
+    async def get_by_metadata(self, where: dict) -> List[Any]:
+        # Implementation for finding chunks by exact metadata match (e.g. parent_id)
+        # Similar to search, but using client.scroll() with a filter
+        pass
+
+async def main():
+    # 1. Initialize custom DB
+    qdrant_db = QdrantVectorDB(url="http://localhost:6333")
+    
+    # 2. Pass into the RAG framework
+    rag = RAG(vector_db=qdrant_db)
+    
+    # The framework handles injecting the embeddings service into the vector DB if needed
+    qdrant_db.embedding_service = rag.embeddings
+    
+    await rag.init()
+    await rag.ingest("./knowledge_base")
+    
+    ans = await rag.query("How do I use a custom database?")
+    print(ans)
 ```
