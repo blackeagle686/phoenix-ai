@@ -45,6 +45,11 @@ pip install phx-ashborn
 # Installed Size on Disk: ~90 MB
 pip install "phx-ashborn[chatbot]"
 
+# Core + Advanced RAG Frameworks (Qdrant, ChromaDB, Web/API Ingestion)
+# Download Size: ~45 MB
+# Installed Size on Disk: ~110 MB
+pip install "phx-ashborn[rag]"
+
 # Core + Autonomous Agents & Planners
 # Download Size: ~107 MB (Verified)
 # Installed Size on Disk: ~200 MB
@@ -124,32 +129,31 @@ async def chatbot_demo():
 asyncio.run(chatbot_demo())
 ```
 
-### 3. RAG Pipeline (Retrieval-Augmented Generation)
-The `RAGPipeline` handles document extraction, intelligent chunking, and vector storage (ChromaDB/Qdrant) across PDFs, Code files, SQL, APIs, and GitHub repos.
+### 3. Advanced RAG Frameworks
+The new object-oriented RAG framework provides scalable `RAG`, `CAG` (Cache-Augmented Generation), `AgenticRAG`, and `MultiModalRAG` systems out of the box with unified multi-source ingestion.
 
 ```python
 import asyncio
-from phoenix import init_phoenix, startup_phoenix, get_rag_pipeline
+from phoenix.framework.rag import RAG, AgenticRAG
 
 async def rag_demo():
-    # Initialize the core framework services
-    init_phoenix()
-    await startup_phoenix()
-    
-    rag = get_rag_pipeline()
+    # Initialize standard RAG (ChromaDB is default)
+    rag = RAG()
 
-    # 1. Ingest local directories (supports .pdf, .docx, .py, .go, etc.)
-    await rag.ingest("./my_project")
+    # Unified Multi-Source Ingestion
+    await rag.ingest_multi([
+        {"type": "folder", "path": "./my_project"},
+        {"type": "github", "repo_url": "https://github.com/blackeagle686/phoenix-ai.git"},
+        {"type": "url", "url": "https://example.com/api-docs"},
+        {"type": "sql", "connection_string": "sqlite:///data.db", "table": "docs"}
+    ])
 
-    # 2. Ingest remote web pages
-    await rag.ingest_url("https://example.com/api-docs")
-    
-    # 3. Clone and index a GitHub repository on the fly
-    await rag.ingest_github("https://github.com/blackeagle686/phoenix-ai.git")
-
-    # 4. Query the knowledge base (Automatic Source Citations included!)
+    # Query with automatic context compression and MMR reranking
     answer = await rag.query("How do I extend the caching layer?")
     print(answer)
+    
+    # Or upgrade to AgenticRAG to let the AI verify its own answers and rewrite poor queries!
+    # agentic = AgenticRAG(max_retries=3, verify_answer=True)
 
 asyncio.run(rag_demo())
 ```
@@ -216,7 +220,9 @@ Ready to dive deeper? Explore our dedicated guides to master the Phoenix ecosyst
 
 ###  Core Architecture
 - **[Main Framework Guide](docs/GUIDE.md)** ([Arabic Version](docs/GUIDE.ar.md))
-- **[Data Pipelines & RAG](docs/PIPELINES.md)** ([Arabic Version](docs/PIPELINES.ar.md))
+###  Data & Retrieval
+- **[Advanced RAG Frameworks (CAG, Agentic, MultiModal)](docs/rag_framework.md)**
+- **[Data Pipelines & Legacy RAG](docs/PIPELINES.md)** ([Arabic Version](docs/PIPELINES.ar.md))
 - **[Model Training & Finetuning](docs/TRAINING.md)** ([Arabic Version](docs/TRAINING.ar.md))
 
 ###  Autonomous Agents
