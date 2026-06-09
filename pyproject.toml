@@ -101,7 +101,10 @@ full = [
     "sentence-transformers>=2.2.0",
     "gTTS",
     "SpeechRecognition",
-    "pydub"
+    "pydub",
+    "httpx>=0.24.0",
+    "google-api-python-client>=2.0.0",
+    "google-auth-oauthlib>=1.0.0"
 ]
 
 [tool.setuptools.packages.find]
