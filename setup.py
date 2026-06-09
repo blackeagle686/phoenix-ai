@@ -46,6 +46,7 @@ EXTRAS = {
     ],
     "rag": [
         "chromadb>=0.4.0",
+        "qdrant-client>=1.6.0",
         "sentence-transformers>=2.2.0",
         "pypdf>=3.10.0",
         "python-docx>=0.8.11",
