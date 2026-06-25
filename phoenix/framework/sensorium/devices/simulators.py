@@ -319,3 +319,47 @@ class DefenseBatterySimulator(BaseSimulator):
             self.mode = "armed"
         return True
 
+# ==========================================
+# 3. Medical / Healthcare Simulators
+# ==========================================
+
+class ICUMonitorSimulator(BaseSimulator):
+    """Simulates an Intensive Care Unit (ICU) Patient Monitor"""
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('event_type', SensorEvent.DATA_READY)
+        super().__init__(*args, **kwargs)
+        self.patient_id = self.metadata.get("patient_id", "UNKNOWN") if self.metadata else "UNKNOWN"
+        # Normal baselines
+        self.heart_rate = 75
+        self.spo2 = 98
+        self.sys_bp = 120
+        
+    def _generate_internal_state(self):
+        # 5% chance of a medical emergency per tick
+        is_emergency = random.random() < 0.05
+        
+        if is_emergency:
+            # Simulate a crisis (e.g., Tachycardia & Hypoxia)
+            self.heart_rate = random.randint(130, 180)
+            self.spo2 = random.randint(80, 88)
+            self.sys_bp = random.randint(70, 90)
+            status_msg = f"CRITICAL: Vitals unstable for Patient {self.patient_id}!"
+        else:
+            # Fluctuate normally
+            self.heart_rate = max(60, min(100, self.heart_rate + random.randint(-2, 2)))
+            self.spo2 = max(95, min(100, self.spo2 + random.randint(-1, 1)))
+            self.sys_bp = max(110, min(130, self.sys_bp + random.randint(-2, 2)))
+            status_msg = f"Stable. Patient {self.patient_id} resting."
+            
+        self.state = {
+            "type": "icu_monitor",
+            "value": status_msg,
+            "raw": {
+                "patient_id": self.patient_id,
+                "heart_rate_bpm": self.heart_rate,
+                "oxygen_saturation_pct": self.spo2,
+                "blood_pressure_sys": self.sys_bp,
+                "is_critical": is_emergency
+            }
+        }
+
