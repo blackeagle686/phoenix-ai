@@ -6,6 +6,7 @@ from .container import Container
 from .models import DeviceEvent
 from ..registry.device_registry import DeviceRegistry
 from ..events.event_bus import EventBus
+from ..events.types import DeviceLifecycleEvent
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +44,10 @@ class DeviceManager:
         
         if success:
             device.status = DeviceStatus.READY
-            self.event_bus.emit("device_connected", DeviceEvent("device_connected", name, {"status": "ready"}))
+            self.event_bus.emit(DeviceLifecycleEvent.CONNECTED, DeviceEvent(DeviceLifecycleEvent.CONNECTED, name, {"status": "ready"}))
         else:
             device.status = DeviceStatus.ERROR
-            self.event_bus.emit("device_error", DeviceEvent("device_error", name, {"reason": "connection_failed"}))
+            self.event_bus.emit(DeviceLifecycleEvent.ERROR, DeviceEvent(DeviceLifecycleEvent.ERROR, name, {"reason": "connection_failed"}))
             
         return success
 
@@ -59,7 +60,7 @@ class DeviceManager:
         success = await device.disconnect()
         if success:
             device.status = DeviceStatus.DISCONNECTED
-            self.event_bus.emit("device_disconnected", DeviceEvent("device_disconnected", name, {}))
+            self.event_bus.emit(DeviceLifecycleEvent.DISCONNECTED, DeviceEvent(DeviceLifecycleEvent.DISCONNECTED, name, {}))
         return success
 
     async def shutdown(self) -> None:
