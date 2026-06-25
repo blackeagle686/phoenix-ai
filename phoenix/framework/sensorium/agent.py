@@ -168,5 +168,5 @@ class SensoriumAgent(Agent):
             f"and formulate your response."
         )
         
-        # Pass the enriched prompt to the underlying Agent framework
-        return await super().run(prompt=enriched_prompt, session_id=session_id, max_iterations=max_iterations, mode="plan")
+        # Pass the enriched prompt to the underlying Agent framework with the specified mode
+        return await super().run(prompt=enriched_prompt, session_id=session_id, max_iterations=max_iterations, mode=mode)
