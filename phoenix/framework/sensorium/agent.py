@@ -131,8 +131,10 @@ class SensoriumAgent(Agent):
             "sonar": "No data yet"
         }
         
-        # Subscribe to EventBus to receive real-time sensor updates
-        self.device_manager.event_bus.subscribe("sensor_update", self._on_sensor_update)
+        from phoenix.framework.sensorium.events.types import SensorEvent, VehicleEvent
+        # Subscribe to EventBus to receive real-time sensor and telemetry updates
+        self.device_manager.event_bus.subscribe(SensorEvent.DATA_READY, self._on_sensor_update)
+        self.device_manager.event_bus.subscribe(VehicleEvent.TELEMETRY_UPDATE, self._on_sensor_update)
 
     def _on_sensor_update(self, event):
         """Callback to update internal state when new sensor data arrives."""

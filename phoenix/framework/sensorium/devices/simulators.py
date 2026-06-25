@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, Optional, Union, Awaitable
 from phoenix.framework.sensorium.core.interfaces import DeviceInterface, DeviceStatus
 from phoenix.framework.sensorium.events.event_bus import EventBus
 from phoenix.framework.sensorium.core.models import DeviceEvent
+from phoenix.framework.sensorium.events.types import SensorEvent, VehicleEvent
 
 
 class BaseSimulator(DeviceInterface):
@@ -21,11 +22,13 @@ class BaseSimulator(DeviceInterface):
         emit_interval: float = 2.0, 
         metadata: Optional[Dict[str, Any]] = None,
         state_callback: Optional[Callable[[], Union[Dict[str, Any], Awaitable[Dict[str, Any]]]]] = None,
-        command_callback: Optional[Callable[[Any], Union[bool, Awaitable[bool]]]] = None
+        command_callback: Optional[Callable[[Any], Union[bool, Awaitable[bool]]]] = None,
+        event_type: str = SensorEvent.DATA_READY
     ):
         super().__init__(device_id, metadata)
         self.event_bus = event_bus
         self.emit_interval = emit_interval
+        self.event_type = event_type
         self._running = False
         self._task: Optional[asyncio.Task] = None
         self.state: Dict[str, Any] = {}
@@ -72,8 +75,8 @@ class BaseSimulator(DeviceInterface):
         while self._running:
             await self._update_state()
             if self.event_bus and self.state:
-                event = DeviceEvent("sensor_update", self.device_id, self.state)
-                self.event_bus.emit("sensor_update", event)
+                event = DeviceEvent(self.event_type, self.device_id, self.state)
+                self.event_bus.emit(self.event_type, event)
             await asyncio.sleep(self.emit_interval)
 
     async def _update_state(self):
@@ -154,6 +157,7 @@ class SonarSimulator(BaseSimulator):
 class DroneSimulator(BaseSimulator):
     """Simulates a UAV / Drone telemetry and controls"""
     def __init__(self, *args, **kwargs):
+        kwargs.setdefault('event_type', VehicleEvent.TELEMETRY_UPDATE)
         super().__init__(*args, **kwargs)
         self.altitude = 0.0
         self.battery = 100.0
