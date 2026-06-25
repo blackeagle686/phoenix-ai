@@ -3,7 +3,7 @@ import os
 import sys
 
 # Ensure SDK is in path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from phoenix.framework.sensorium.core.manager import DeviceManager
 from phoenix.framework.sensorium.devices.simulators import RadarSimulator
