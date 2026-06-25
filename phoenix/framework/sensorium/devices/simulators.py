@@ -255,3 +255,4 @@ class BoatSimulator(BaseSimulator):
             self.heading = (self.heading + 15.0) % 360
             print("[BOAT SIM] Helm: Hard to Starboard")
         return True
+
