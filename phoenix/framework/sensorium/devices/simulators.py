@@ -260,3 +260,62 @@ class BoatSimulator(BaseSimulator):
             print("[BOAT SIM] Helm: Hard to Starboard")
         return True
 
+
+class DefenseBatterySimulator(BaseSimulator):
+    """Simulates an Air Defense Battery (e.g., Patriot / Iron Dome)"""
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('event_type', VehicleEvent.TELEMETRY_UPDATE)
+        
+        # Unifying devices: We pass metadata to define its capabilities!
+        default_metadata = {
+            "role": "actuator",
+            "class": "air_defense",
+            "ammo": 12,
+            "status": "safe"
+        }
+        if 'metadata' in kwargs and kwargs['metadata']:
+            default_metadata.update(kwargs['metadata'])
+        kwargs['metadata'] = default_metadata
+        
+        super().__init__(*args, **kwargs)
+        self.ammo = self.metadata["ammo"]
+        self.mode = "safe" # safe, armed, tracking
+        self.active_target = None
+        
+    def _generate_internal_state(self):
+        self.state = {
+            "type": "defense_battery", 
+            "value": f"Mode: {self.mode.upper()}, Ammo: {self.ammo}, Target: {self.active_target or 'None'}", 
+            "raw": {"mode": self.mode, "ammo": self.ammo, "target": self.active_target}
+        }
+
+    async def _handle_command(self, data: Any) -> bool:
+        action = data.get("command")
+        if action == "arm":
+            self.mode = "armed"
+            print(f"[DEFENSE BATTERY] ⚠️ SYSTEM ARMED!")
+        elif action == "safe":
+            self.mode = "safe"
+            self.active_target = None
+            print(f"[DEFENSE BATTERY] 🟢 System Safe.")
+        elif action == "track":
+            target = data.get("target_id", "UNKNOWN")
+            self.mode = "tracking"
+            self.active_target = target
+            print(f"[DEFENSE BATTERY] 🎯 Tracking target: {target}")
+        elif action == "fire":
+            if self.mode != "armed" and self.mode != "tracking":
+                print(f"[DEFENSE BATTERY] ❌ Cannot fire! System is in {self.mode} mode.")
+                return False
+            if self.ammo <= 0:
+                print(f"[DEFENSE BATTERY] ❌ Cannot fire! Out of ammo.")
+                return False
+                
+            self.ammo -= 1
+            print(f"[DEFENSE BATTERY] 🚀 MISSILE FIRED at {self.active_target or 'blind trajectory'}! (Ammo left: {self.ammo})")
+            
+            # Auto-safe after fire if no target remains
+            self.active_target = None
+            self.mode = "armed"
+        return True
+
