@@ -15,15 +15,20 @@ class DeviceManager:
     The central orchestrator for the Sensorium Hardware SDK.
     Manages device lifecycles, health, and event routing.
     """
-    def __init__(self, container: Optional[Container] = None):
+    def __init__(self, container: Optional[Container] = None, event_bus: Optional[EventBus] = None):
         self.container = container or Container()
         self.registry = DeviceRegistry()
-        self.event_bus = EventBus()
+        self.event_bus = event_bus if event_bus is not None else EventBus()
         
         # Register core services in the container
         self.container.register("registry", self.registry)
         self.container.register("event_bus", self.event_bus)
         self.container.register("device_manager", self)
+
+    async def start(self):
+        """Start internal services like distributed Event Buses."""
+        if hasattr(self.event_bus, "start") and asyncio.iscoroutinefunction(self.event_bus.start):
+            await self.event_bus.start()
 
     async def add_device(self, name: str, device: DeviceInterface, auto_connect: bool = True) -> bool:
         """Register and optionally connect a device."""
@@ -68,6 +73,11 @@ class DeviceManager:
         devices = self.registry.list_devices()
         tasks = [self.disconnect_device(name) for name in devices]
         await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Cleanly shutdown the event bus if it has a stop method (e.g., Kafka)
+        if hasattr(self.event_bus, "stop") and asyncio.iscoroutinefunction(self.event_bus.stop):
+            await self.event_bus.stop()
+            
         logger.info("Sensorium Hardware SDK shutdown complete.")
 
     def get_device(self, name: str) -> Optional[DeviceInterface]:
