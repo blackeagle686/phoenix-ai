@@ -6,6 +6,7 @@ from phoenix.framework.agent.core.loop import AgentLoop
 from phoenix.framework.agent.core.profile import AgentProfile
 from phoenix.framework.agent.cognition.schema import ReflectorInputSchema, ReflectorType
 from phoenix.framework.sensorium.core.manager import DeviceManager
+        from phoenix.framework.sensorium.events.types import SensorEvent, VehicleEvent
 
 
 class SensoriumLoop(AgentLoop):
@@ -131,7 +132,6 @@ class SensoriumAgent(Agent):
             "sonar": "No data yet"
         }
         
-        from phoenix.framework.sensorium.events.types import SensorEvent, VehicleEvent
         # Subscribe to EventBus to receive real-time sensor and telemetry updates
         self.device_manager.event_bus.subscribe(SensorEvent.DATA_READY, self._on_sensor_update)
         self.device_manager.event_bus.subscribe(VehicleEvent.TELEMETRY_UPDATE, self._on_sensor_update)
