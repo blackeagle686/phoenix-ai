@@ -6,7 +6,7 @@ from phoenix.framework.agent.core.loop import AgentLoop
 from phoenix.framework.agent.core.profile import AgentProfile
 from phoenix.framework.agent.cognition.schema import ReflectorInputSchema, ReflectorType
 from phoenix.framework.sensorium.core.manager import DeviceManager
-        from phoenix.framework.sensorium.events.types import SensorEvent, VehicleEvent
+from phoenix.framework.sensorium.events.types import SensorEvent, VehicleEvent
 
 
 class SensoriumLoop(AgentLoop):
