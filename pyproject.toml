@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "phx-ashborn"
-version = "0.3.4"
+version = "0.4.0"
 description = "Advanced AI Infrastructure SDK for Agentic Applications"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -71,6 +71,9 @@ rag = [
     "google-auth-oauthlib>=1.0.0",
     "redis>=4.5.0"
 ]
+brain = [
+    "maturin>=1.0.0"
+]
 full = [
     "pydantic",
     "redis>=4.5.0",
@@ -103,7 +106,8 @@ full = [
     "pydub",
     "httpx>=0.24.0",
     "google-api-python-client>=2.0.0",
-    "google-auth-oauthlib>=1.0.0"
+    "google-auth-oauthlib>=1.0.0",
+    "maturin>=1.0.0"
 ]
 
 [tool.setuptools.packages.find]

@@ -55,6 +55,9 @@ EXTRAS = {
         "google-api-python-client>=2.0.0",
         "google-auth-oauthlib>=1.0.0",
         "redis>=4.5.0"
+    ],
+    "brain": [
+        "maturin>=1.0.0"
     ]
 }
 
@@ -62,7 +65,7 @@ EXTRAS["full"] = list(set(dep for deps in EXTRAS.values() for dep in deps))
 
 setup(
     name="phx-ashborn",
-    version="0.3.4",
+    version="0.4.0",
     packages=find_packages(),
     install_requires=[
         "python-dotenv>=1.0.0",
