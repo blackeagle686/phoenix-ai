@@ -244,11 +244,24 @@ Ready to dive deeper? Explore our dedicated guides to master the Phoenix ecosyst
 Phoenix AI ships with an ultra-fast, lock-free memory engine written entirely in Rust, accessible seamlessly from Python. It features a custom-built, embedded Hierarchical Navigable Small World (HNSW) Vector Database for sub-millisecond multi-modal context retrieval.
 
 ### Performance Benchmarks
-*Tested via `cargo bench` on standard architecture.*
+
+#### Methodology
+*All benchmarks were executed using `cargo bench` in release mode. Each benchmark was warmed up before measurement and repeated multiple times by Criterion to reduce statistical noise. Reported values are the benchmark mean.*
+
+**Hardware Specifications & Parameters:**
+- **CPU:** Intel Core i5-1135G7
+- **RAM:** 12 GB
+- **OS:** Ubuntu 24.04 (Linux)
+- **Rust Version:** Stable (1.80+)
+- **Embedding Size:** 384 dimensions
+- **HNSW Configurations:** M = 16, ef_construction = 100, ef_search = 50
+
+#### Results
 
 - **Neural Bus (Event Ingestion):** `~4.39 ms` per event spike.
   - *What we benchmarked:* Pushing a memory spike through a lock-free `crossbeam` channel and actively inserting a 384-dimensional embedding directly into the HNSW graph collection.
 - **Fractal Compressor:** `~2.46 ms` per 1,000 events.
-  - *What we benchmarked:* Scanning an array of 1,000 artificially aged memory events, calculating their time-decay coefficients, and applying mathematical graph compression to prevent memory bloat.
-- **Retrieval Pipeline:** `~1.01 µs` (microseconds).
-  - *What we benchmarked:* Utilizing a `tokio` async runtime to safely acquire read-locks on the memory core, querying 3 distinct vector collections (Knowledge, Episodes, Events) simultaneously, and returning the aggregated `WorkingMemory` context.
+  - *What we benchmarked:* Scanning an array of 1,000 artificially aged memory events, calculating their Exponential Time-Decay coefficients (halflife factor = 0.5), and applying hierarchical compression to prevent memory bloat.
+- **Retrieval Pipeline Overhead:** `~1.01 µs` (microseconds).
+  - *What we benchmarked:* Utilizing a `tokio` async runtime to safely acquire read-locks on the memory core, querying 3 distinct vector collections simultaneously, and compiling the result. *(Note: This `1.01 µs` metric specifically captures the pipeline's async lock acquisition and traversal overhead on empty/cold collections, proving zero systemic bottleneck before the raw HNSW traversal phase).*
+  - **The Output (`WorkingMemory`):** A synthesis of *(Top Semantic Events + Recent Episodic Sequences + Relevant Knowledge Nodes)* passed directly to the LLM.
