@@ -1,0 +1,14 @@
+/home/tlk/Documents/Projects/my_AItools/IRYM_sdk/phoenix/brain_memory/target/release/deps/serde-9442bd7a50c76dc4.d: /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs /home/tlk/Documents/Projects/my_AItools/IRYM_sdk/phoenix/brain_memory/target/release/build/serde-1d62b6a52cc580df/out/private.rs
+
+/home/tlk/Documents/Projects/my_AItools/IRYM_sdk/phoenix/brain_memory/target/release/deps/libserde-9442bd7a50c76dc4.rlib: /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs /home/tlk/Documents/Projects/my_AItools/IRYM_sdk/phoenix/brain_memory/target/release/build/serde-1d62b6a52cc580df/out/private.rs
+
+/home/tlk/Documents/Projects/my_AItools/IRYM_sdk/phoenix/brain_memory/target/release/deps/libserde-9442bd7a50c76dc4.rmeta: /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs /home/tlk/Documents/Projects/my_AItools/IRYM_sdk/phoenix/brain_memory/target/release/build/serde-1d62b6a52cc580df/out/private.rs
+
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs:
+/home/tlk/Documents/Projects/my_AItools/IRYM_sdk/phoenix/brain_memory/target/release/build/serde-1d62b6a52cc580df/out/private.rs:
+
+# env-dep:OUT_DIR=/home/tlk/Documents/Projects/my_AItools/IRYM_sdk/phoenix/brain_memory/target/release/build/serde-1d62b6a52cc580df/out
