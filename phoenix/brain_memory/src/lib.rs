@@ -7,8 +7,8 @@ use crate::core::retrieval::WorkingMemory;
 
 #[pyclass]
 pub struct BrainMemoryClient {
-    // Internal retrieval pipeline, wrapped to be synchronous for now
-    pipeline: crate::core::retrieval::RetrievalPipeline,
+    // Wrap the full BrainMemory controller
+    memory: crate::core::memory::BrainMemory,
 }
 
 #[pymethods]
@@ -16,7 +16,7 @@ impl BrainMemoryClient {
     #[new]
     pub fn new() -> Self {
         Self {
-            pipeline: crate::core::retrieval::RetrievalPipeline::new(),
+            memory: crate::core::memory::BrainMemory::new(),
         }
     }
 
@@ -25,7 +25,8 @@ impl BrainMemoryClient {
         // Block on the async method
         let rt = tokio::runtime::Runtime::new().unwrap();
         let wm = rt.block_on(async {
-            self.pipeline.retrieve_working_memory(query, &[]).await
+            let query_embedding = vec![0.1f32; 384];
+            self.memory.retrieval.retrieve_working_memory(query, &query_embedding).await
         });
         
         // Serialize WorkingMemory to JSON String for easy consumption in Python
