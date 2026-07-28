@@ -247,8 +247,8 @@ Phoenix AI ships with an ultra-fast, lock-free memory engine written entirely in
 *Tested via `cargo bench` on standard architecture.*
 
 - **Neural Bus (Event Ingestion):** `~4.39 ms` per event spike.
-  - *Note: This includes the full pipeline of receiving the event lock-free via `crossbeam` and actively inserting a 384-dimensional embedding directly into the HNSW graph.*
+  - *What we benchmarked:* Pushing a memory spike through a lock-free `crossbeam` channel and actively inserting a 384-dimensional embedding directly into the HNSW graph collection.
 - **Fractal Compressor:** `~2.46 ms` per 1,000 events.
-  - *Rapid time-series decay and graph compression to prevent memory bloat over long sessions.*
+  - *What we benchmarked:* Scanning an array of 1,000 artificially aged memory events, calculating their time-decay coefficients, and applying mathematical graph compression to prevent memory bloat.
 - **Retrieval Pipeline:** `~1.01 µs` (microseconds).
-  - *Instantaneous context search across multiple collections (Knowledge, Episodes, Events) simultaneously, locking the memory core for barely 1 microsecond per query.*
+  - *What we benchmarked:* Utilizing a `tokio` async runtime to safely acquire read-locks on the memory core, querying 3 distinct vector collections (Knowledge, Episodes, Events) simultaneously, and returning the aggregated `WorkingMemory` context.
