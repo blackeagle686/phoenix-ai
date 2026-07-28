@@ -1,0 +1,11 @@
+/home/tlk/Documents/Projects/my_AItools/IRYM_sdk/phoenix/brain_memory/target/debug/deps/atoi_simd-7f0a5c4def8d6ad7.d: /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/lib.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/error.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/fallback.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/linker/mod.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/linker/fb_32.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/linker/fb_64.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/short.rs
+
+/home/tlk/Documents/Projects/my_AItools/IRYM_sdk/phoenix/brain_memory/target/debug/deps/libatoi_simd-7f0a5c4def8d6ad7.rmeta: /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/lib.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/error.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/fallback.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/linker/mod.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/linker/fb_32.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/linker/fb_64.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/short.rs
+
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/lib.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/error.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/fallback.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/linker/mod.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/linker/fb_32.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/linker/fb_64.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/atoi_simd-0.18.1/src/short.rs:

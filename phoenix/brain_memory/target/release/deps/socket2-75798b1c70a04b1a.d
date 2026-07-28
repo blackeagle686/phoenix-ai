@@ -1,0 +1,11 @@
+/home/tlk/Documents/Projects/my_AItools/IRYM_sdk/phoenix/brain_memory/target/release/deps/socket2-75798b1c70a04b1a.d: /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/lib.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/sockaddr.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/socket.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/sockref.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/sys/unix.rs
+
+/home/tlk/Documents/Projects/my_AItools/IRYM_sdk/phoenix/brain_memory/target/release/deps/libsocket2-75798b1c70a04b1a.rlib: /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/lib.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/sockaddr.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/socket.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/sockref.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/sys/unix.rs
+
+/home/tlk/Documents/Projects/my_AItools/IRYM_sdk/phoenix/brain_memory/target/release/deps/libsocket2-75798b1c70a04b1a.rmeta: /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/lib.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/sockaddr.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/socket.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/sockref.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/sys/unix.rs
+
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/lib.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/sockaddr.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/socket.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/sockref.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/socket2-0.6.5/src/sys/unix.rs:

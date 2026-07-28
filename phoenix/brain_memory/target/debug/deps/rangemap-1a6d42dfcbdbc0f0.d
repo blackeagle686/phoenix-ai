@@ -1,0 +1,12 @@
+/home/tlk/Documents/Projects/my_AItools/IRYM_sdk/phoenix/brain_memory/target/debug/deps/rangemap-1a6d42dfcbdbc0f0.d: /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/lib.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/inclusive_map.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/inclusive_set.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/map.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/operations.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/set.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/range_wrapper.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/std_ext.rs
+
+/home/tlk/Documents/Projects/my_AItools/IRYM_sdk/phoenix/brain_memory/target/debug/deps/librangemap-1a6d42dfcbdbc0f0.rmeta: /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/lib.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/inclusive_map.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/inclusive_set.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/map.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/operations.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/set.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/range_wrapper.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/std_ext.rs
+
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/lib.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/inclusive_map.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/inclusive_set.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/map.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/operations.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/set.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/range_wrapper.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rangemap-1.7.1/src/std_ext.rs:

@@ -1,0 +1,11 @@
+/home/tlk/Documents/Projects/my_AItools/IRYM_sdk/phoenix/brain_memory/target/debug/deps/rand_core-4f47707988ed67cc.d: /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/lib.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/block.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/utils.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/seedable_rng.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/unwrap_err.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/word.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/../README.md
+
+/home/tlk/Documents/Projects/my_AItools/IRYM_sdk/phoenix/brain_memory/target/debug/deps/librand_core-4f47707988ed67cc.rmeta: /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/lib.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/block.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/utils.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/seedable_rng.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/unwrap_err.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/word.rs /home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/../README.md
+
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/lib.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/block.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/utils.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/seedable_rng.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/unwrap_err.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/word.rs:
+/home/tlk/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rand_core-0.10.1/src/../README.md:
