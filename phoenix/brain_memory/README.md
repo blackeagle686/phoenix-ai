@@ -1,5 +1,9 @@
 # BrainMemory Engine Architecture
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/blackeagle686/phoenix-ai/master/docs/statics/images/brain_memory_cover.png" alt="Brain Memory Core" width="800">
+</p>
+
 This document outlines the architectural design of the **BrainMemory** system, an advanced memory engine developed in Rust and integrated with Python via PyO3. The primary objective of this engine is to transform static database-driven memory into a "living brain" that interacts in real-time, processes thoughts in the background, and distills wisdom over time.
 
 ---

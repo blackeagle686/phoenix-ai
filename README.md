@@ -241,6 +241,12 @@ Ready to dive deeper? Explore our dedicated guides to master the Phoenix ecosyst
 
 ## ⚡ BrainMemory Core (Rust Backend)
 
+<p align="center">
+  <a href="phoenix/brain_memory/README.md">
+    <img src="https://raw.githubusercontent.com/blackeagle686/phoenix-ai/master/docs/statics/images/brain_memory_cover.png" alt="Brain Memory Core" width="800">
+  </a>
+</p>
+
 Phoenix AI ships with an ultra-fast, lock-free memory engine written entirely in Rust, accessible seamlessly from Python. It features a custom-built, embedded Hierarchical Navigable Small World (HNSW) Vector Database for sub-millisecond multi-modal context retrieval.
 
 ### Performance Benchmarks
