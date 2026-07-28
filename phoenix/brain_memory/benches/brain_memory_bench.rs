@@ -1,5 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use brain_memory::core::{NeuralBus, Spike, FractalCompressor};
+use brain_memory::core::{NeuralBus, Spike, FractalCompressor, RetrievalPipeline};
+use tokio::runtime::Runtime;
 use brain_memory::models::{Event, Perception};
 use chrono::Utc;
 use serde_json::json;
@@ -57,5 +58,21 @@ fn bench_fractal_compressor(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_neural_bus, bench_fractal_compressor);
+fn bench_retrieval_pipeline(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Retrieval Pipeline (Vector Search)");
+    
+    let rt = Runtime::new().unwrap();
+    let pipeline = RetrievalPipeline::new();
+    let query_embedding = vec![0.1f32; 384]; // Standard MiniLM size
+
+    group.bench_function("retrieve_working_memory_empty", |b| {
+        b.to_async(&rt).iter(|| async {
+            pipeline.retrieve_working_memory(black_box("test query"), black_box(&query_embedding)).await;
+        })
+    });
+    
+    group.finish();
+}
+
+criterion_group!(benches, bench_neural_bus, bench_fractal_compressor, bench_retrieval_pipeline);
 criterion_main!(benches);
