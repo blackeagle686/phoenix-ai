@@ -67,7 +67,13 @@ fn bench_retrieval_pipeline(c: &mut Criterion) {
     let mut group = c.benchmark_group("Retrieval Pipeline (Vector Search)");
     
     let rt = Runtime::new().unwrap();
-    let pipeline = RetrievalPipeline::new();
+    let mut engine = Engine::new("bench_retrieval_engine");
+    let _ = engine.create_collection("knowledge", Some("HNSW"));
+    let _ = engine.create_collection("episodes", Some("HNSW"));
+    let _ = engine.create_collection("events", Some("HNSW"));
+    let engine_arc = Arc::new(RwLock::new(engine));
+    
+    let pipeline = RetrievalPipeline::new(engine_arc);
     let query_embedding = vec![0.1f32; 384]; // Standard MiniLM size
 
     group.bench_function("retrieve_working_memory_empty", |b| {
