@@ -1,5 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use brain_memory::core::{NeuralBus, Spike, FractalCompressor, RetrievalPipeline};
+use std::sync::{Arc, RwLock};
+use vdb_engine::domain::entities::{Engine, EngineTrait, CollectionTrait};
 use tokio::runtime::Runtime;
 use brain_memory::models::{Event, Perception};
 use chrono::Utc;
@@ -20,7 +22,10 @@ fn create_dummy_event(id_num: usize) -> Event {
 fn bench_neural_bus(c: &mut Criterion) {
     let mut group = c.benchmark_group("BrainMemory Neural Bus");
     
-    let bus = NeuralBus::new();
+    let mut engine = Engine::new("bench_engine");
+    let _ = engine.create_collection("events", Some("HNSW"));
+    let engine_arc = Arc::new(RwLock::new(engine));
+    let bus = NeuralBus::new(engine_arc);
     bus.start_listening(); // Starts the crossbeam thread
     
     group.bench_function("fire_1_event", |b| {
