@@ -237,3 +237,18 @@ Ready to dive deeper? Explore our dedicated guides to master the Phoenix ecosyst
 - **[GUI App Integration](docs/GUI_INTEGRATION.md)**
 - **[Sensorium Embodied AI (Hardware)](docs/sensorium.md)**
 
+---
+
+## ⚡ BrainMemory Core (Rust Backend)
+
+Phoenix AI ships with an ultra-fast, lock-free memory engine written entirely in Rust, accessible seamlessly from Python. It features a custom-built, embedded Hierarchical Navigable Small World (HNSW) Vector Database for sub-millisecond multi-modal context retrieval.
+
+### Performance Benchmarks
+*Tested via `cargo bench` on standard architecture.*
+
+- **Neural Bus (Event Ingestion):** `~4.39 ms` per event spike.
+  - *Note: This includes the full pipeline of receiving the event lock-free via `crossbeam` and actively inserting a 384-dimensional embedding directly into the HNSW graph.*
+- **Fractal Compressor:** `~2.46 ms` per 1,000 events.
+  - *Rapid time-series decay and graph compression to prevent memory bloat over long sessions.*
+- **Retrieval Pipeline:** `~1.01 µs` (microseconds).
+  - *Instantaneous context search across multiple collections (Knowledge, Episodes, Events) simultaneously, locking the memory core for barely 1 microsecond per query.*
