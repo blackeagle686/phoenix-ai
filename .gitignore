@@ -50,3 +50,7 @@ phoenix_engine/.vs/phoenix_engine/
 agent_venv/
 smart_git.py
 
+# Rust compilation artifacts
+target/
+**/*.rs.bk
+Cargo.lock
