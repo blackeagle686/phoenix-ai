@@ -22,10 +22,13 @@ class Analyzer(BaseAnalyzer):
         """
         if self._file_cache is None or self._last_root != root_dir:
             # Refresh cache
+            excluded_dirs = {".git", "__pycache__", "venv", ".venv", ".env", "node_modules", ".gemini", "agent_venv", "git_venv"}
             files = []
             for root, dirs, filenames in os.walk(root_dir):
-                if any(p in root for p in [".git", "__pycache__", "venv", ".env", "node_modules", ".gemini"]):
-                    continue
+                dirs[:] = [
+                    d for d in dirs
+                    if d not in excluded_dirs and not d.endswith("_venv")
+                ]
                 for f in filenames:
                     files.append(os.path.join(root, f))
                     if len(files) > 200: # Slightly higher limit for cache

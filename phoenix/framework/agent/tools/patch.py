@@ -2,6 +2,12 @@ from phoenix.framework.agent.tools.base import BaseTool, ToolResult
 from typing import List, Dict, Union
 from phoenix.framework.agent.cognition.schema import MultiBlockUpdateEdit, MultiBlockUpdateResult
 
+def _dump_model(model) -> dict:
+    if hasattr(model, "model_dump"):
+        return model.model_dump()
+    return model.dict()
+
+
 class MultiBlockUpdateTool(BaseTool):
     """
     Tool for updating multiple non-contiguous blocks of code in a single file.
@@ -27,7 +33,7 @@ class MultiBlockUpdateTool(BaseTool):
                     applied_count=0,
                     output=f"File not found: {file_path}"
                 )
-                return ToolResult(success=False, output=result.dict(), error=f"File not found: {file_path}")
+                return ToolResult(success=False, output=_dump_model(result), error=f"File not found: {file_path}")
 
             new_content = read_result.output or ""
             applied_count = 0
@@ -55,7 +61,7 @@ class MultiBlockUpdateTool(BaseTool):
                     )
                     return ToolResult(
                         success=False, 
-                        output=result.dict(), 
+                        output=_dump_model(result), 
                         error=f"Target content not found in file: {target[:100]}..."
                     )
                 
@@ -69,7 +75,7 @@ class MultiBlockUpdateTool(BaseTool):
                     )
                     return ToolResult(
                         success=False, 
-                        output=result.dict(), 
+                        output=_dump_model(result), 
                         error=f"Target content is not unique in file (found {new_content.count(target)} occurrences): {target[:100]}..."
                     )
 
@@ -86,7 +92,7 @@ class MultiBlockUpdateTool(BaseTool):
                 applied_count=applied_count,
                 output=f"Successfully applied {applied_count} block updates."
             )
-            return ToolResult(success=True, output=result.dict())
+            return ToolResult(success=True, output=_dump_model(result))
             
         except Exception as e:
             result = MultiBlockUpdateResult(
@@ -95,4 +101,4 @@ class MultiBlockUpdateTool(BaseTool):
                 applied_count=0,
                 output=str(e)
             )
-            return ToolResult(success=False, output=result.dict(), error=str(e))
+            return ToolResult(success=False, output=_dump_model(result), error=str(e))

@@ -1,6 +1,6 @@
 import uuid
-from typing import Any, Callable, Dict, Optional, Type
 import inspect
+from typing import Any, Callable, Dict, Optional, Type, Union
 from phoenix.services.llm.openai import OpenAILLM
 from phoenix.framework.agent.memory.manager import MemoryManager
 from phoenix.framework.agent.memory.adapter import InteractiveMemoryAdapter
@@ -11,12 +11,13 @@ from phoenix.framework.agent.cognition.reflector import Reflector
 from phoenix.framework.agent.cognition.analyzer import Analyzer
 from phoenix.framework.agent.cognition.actor import Actor
 from phoenix.framework.agent.execution.tool_manager import ToolManager
+from phoenix.framework.agent.runtime.restricted_python import RestrictedPythonRuntime
 from phoenix.framework.agent.core.loop import AgentLoop
 from phoenix.framework.agent.core.profile import AgentProfile
-from typing import Union
+
 
 class Agent:
-    """The main Agent class that integrates LLM, memory, tools, and cognition modules."""
+    """The main Agent class that integrates LLM, memory, tools, runtime, and cognition modules."""
     def __init__(
         self,
         llm=None,
@@ -34,28 +35,39 @@ class Agent:
         loop_cls: Optional[Type[AgentLoop]] = None,
         component_factories: Optional[Dict[str, Callable[..., Any]]] = None,
     ):
-        # Default LLM to OpenAILLM (using LongCat-Flash-Chat by default via its config fallback)
         self.llm = llm if llm is not None else OpenAILLM()
         self.memory = self._prepare_memory(memory)
+        self.runtime = runtime if runtime is not None else RestrictedPythonRuntime()
+
         # Support passing a list of tools directly or a ToolRegistry
         if isinstance(tools, list):
             registry = ToolRegistry()
             for t in tools:
+                if getattr(t, "runtime", None) is None and hasattr(t, "set_runtime"):
+                    t.set_runtime(self.runtime)
                 registry.register(t)
             self.tools = registry
+        elif tools is None:
+            self.tools = ToolRegistry.load_default(runtime=self.runtime)
         else:
-            self.tools = tools if tools is not None else ToolRegistry.load_default()
-            
+            self.tools = tools
+            if isinstance(self.tools, ToolRegistry):
+                self.tools.set_runtime(self.runtime)
+
         self._factories = component_factories or {}
         self._dynamic_components: Dict[str, Any] = {}
         self.loop_cls = loop_cls or AgentLoop
-        
+
         self.profile = self._prepare_profile(profile)
 
         # Setup framework with explicit override -> factory -> default precedence
         self.tool_manager = tool_manager or self._build_component("tool_manager")
         if self.tool_manager is None:
-            self.tool_manager = ToolManager(self.tools)
+            self.tool_manager = ToolManager(
+                self.tools,
+                profile=self.profile,
+                runtime=self.runtime,
+            )
 
         self.thinker = thinker or self._build_component("thinker")
         if self.thinker is None:
@@ -69,11 +81,14 @@ class Agent:
         if self.reflector is None:
             self.reflector = Reflector(self.thinker, profile=self.profile)
 
-        # We assume a default runtime if none provided, or we initialize without one and set later.
-        # But we need to import RestrictedPythonRuntime or BaseRuntime. For now, Actor accepts runtime=None.
         self.actor = actor or self._build_component("actor")
         if self.actor is None:
-            self.actor = Actor(self.tool_manager, thinker=self.thinker, runtime=runtime, reflector=self.reflector)
+            self.actor = Actor(
+                self.tool_manager,
+                thinker=self.thinker,
+                runtime=self.runtime,
+                reflector=self.reflector,
+            )
 
         self.analyzer = analyzer or self._build_component("analyzer")
         if self.analyzer is None:
@@ -114,7 +129,7 @@ class Agent:
         Optional construction hook for framework extensibility.
         Factory signature can accept any subset of:
         llm, memory, tools, thinker, planner, analyzer, actor, reflector, tool_manager,
-        loop_cls, profile, plus any custom components built from other factories.
+        runtime, loop_cls, profile, plus any custom components built from other factories.
         """
         factory = self._factories.get(name)
         if not callable(factory):
@@ -126,6 +141,7 @@ class Agent:
             "llm": self.llm,
             "memory": self.memory,
             "tools": self.tools,
+            "runtime": self.runtime,
             "thinker": getattr(self, "thinker", None),
             "planner": getattr(self, "planner", None),
             "analyzer": getattr(self, "analyzer", None),
@@ -166,12 +182,15 @@ class Agent:
             "actor": self.actor,
             "reflector": self.reflector,
             "analyzer": self.analyzer,
+            "memory_manager": self.memory if isinstance(self.memory, MemoryManager) else getattr(self.memory, "backing_memory", None),
         }
         loop_kwargs.update(self._dynamic_components)
         return self._call_with_supported_kwargs(self.loop_cls, loop_kwargs)
 
     def register_tool(self, tool):
         """Helper to register a new tool to the agent's ToolRegistry."""
+        if getattr(tool, "runtime", None) is None and hasattr(tool, "set_runtime"):
+            tool.set_runtime(self.runtime)
         self.tools.register(tool)
 
     def set_component(self, name: str, component: Any, rebuild_loop: bool = True):
@@ -195,32 +214,35 @@ class Agent:
             self.loop_cls = loop_cls
         self.loop = self._construct_loop()
 
-    def set_cognition_pipeline(self, bootstrap_pipeline_path: Optional[str] = None):
+    def set_cognition_pipeline(
+        self,
+        bootstrap_pipeline_path: Optional[str] = None,
+        loop_pipeline_path: Optional[str] = None,
+    ):
         """
         Replace default cognition JSON pipelines with custom specs.
-        Only the bootstrap pipeline is supported in the parallel async architecture.
         """
         if not hasattr(self.loop, "set_pipeline_specs"):
             raise ValueError("Current loop does not support pipeline specs.")
-        self.loop.set_pipeline_specs(bootstrap_pipeline_path=bootstrap_pipeline_path)
+        self.loop.set_pipeline_specs(
+            bootstrap_pipeline_path=bootstrap_pipeline_path,
+            loop_pipeline_path=loop_pipeline_path,
+        )
 
     async def run(self, prompt: str, session_id: str = None, max_iterations: int = 15, mode: str = "auto") -> str:
         """
         Run the agent with the given prompt.
-        mode can be "auto", "plan", or "fast_ans".
+        mode can be "auto", "plan", "react", or "fast_ans".
         """
-        # Auto-initialize LLM if it's our OpenAILLM and hasn't been initialized
         if hasattr(self.llm, "client") and self.llm.client is None:
             if hasattr(self.llm, "init"):
                 await self.llm.init()
 
         if session_id is None:
             session_id = str(uuid.uuid4())
-            
-        # Add user prompt to memory
+
         await self.memory.add_interaction(session_id, "user", prompt)
-        
-        # Decide mode if auto
+
         actual_mode = mode
         if mode == "auto":
             classification_prompt = (
@@ -230,20 +252,18 @@ class Agent:
                 f"Respond with exactly one word: 'PLAN' or 'FAST'."
             )
             classification = await self.llm.generate(classification_prompt, session_id=None, max_tokens=10)
-            if "PLAN" in classification.upper():
+            if "PLAN" in str(classification).upper():
                 actual_mode = "plan"
             else:
                 actual_mode = "fast_ans"
-                
+
         if actual_mode == "fast_ans":
-            # Fast answer mode: bypass the agent loop and just use the LLM directly with memory context
             context = await self.memory.get_full_context(session_id, query=prompt)
             fast_prompt = f"Context:\n{context}\n\nUser: {prompt}\nAnswer directly:"
             fast_answer = await self.llm.generate(fast_prompt, session_id=None)
             await self.memory.add_interaction(session_id, "assistant", fast_answer)
             return fast_answer
         else:
-            # Start execution loop
             return await self.loop.run(prompt, self.memory, session_id, max_iterations=max_iterations)
 
     async def run_stream(self, prompt: str, session_id: str = None, max_iterations: int = 15, mode: str = "auto"):
@@ -268,7 +288,7 @@ class Agent:
                 f"Respond with exactly one word: 'PLAN' or 'FAST'."
             )
             classification = await self.llm.generate(classification_prompt, session_id=None, max_tokens=10)
-            actual_mode = "plan" if "PLAN" in classification.upper() else "fast_ans"
+            actual_mode = "plan" if "PLAN" in str(classification).upper() else "fast_ans"
 
         if actual_mode == "fast_ans":
             context = await self.memory.get_full_context(session_id, query=prompt)
@@ -289,4 +309,5 @@ class Agent:
         yield {"type": "status", "content": "Preparing final response..."}
         for line in final.splitlines() or [final]:
             yield {"type": "chunk", "content": f"{line}\n"}
+
 

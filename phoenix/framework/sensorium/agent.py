@@ -16,13 +16,15 @@ class SensoriumLoop(AgentLoop):
     or tools on physical hardware, ensuring safe interactions.
     """
     async def run(self, prompt: str, memory, session_id: str, max_iterations: int = 15) -> str:
+        mem_mgr = self._resolve_memory_manager(memory)
         # Step 1: Think & Plan based on sensor data and user prompt
         plan = await self.planner.generate_initial_plan(prompt, memory, session_id)
-        self.memory_manager.set_session(session_id, plan.objective)
-        memory.session.set("current_objective", plan.objective)
+        mem_mgr.set_session(session_id, plan.objective)
+        if hasattr(memory, "session") and hasattr(memory.session, "set"):
+            memory.session.set("current_objective", plan.objective)
 
         for task in plan.tasks:
-            self.memory_manager.create_cell(
+            mem_mgr.create_cell(
                 task_id=task.task_id,
                 description=task.description,
                 task_type=getattr(task, "task_type", "other"),
@@ -37,9 +39,9 @@ class SensoriumLoop(AgentLoop):
             if task.status == "done":
                 continue
 
-            cell = self.memory_manager.get_cell(task.task_id)
+            cell = mem_mgr.get_cell(task.task_id)
 
-            if not self.memory_manager.are_dependencies_met(task.task_id):
+            if not mem_mgr.are_dependencies_met(task.task_id):
                 cell.log_error("Dependencies not met, skipping")
                 continue
 
@@ -48,7 +50,7 @@ class SensoriumLoop(AgentLoop):
 
             while not task_complete and iterations < max_iterations and not cell.is_exhausted():
                 cell.increment_attempt()
-                context = self.memory_manager.get_task_context(task.task_id)
+                context = mem_mgr.get_task_context(task.task_id)
 
                 # --- HUMAN APPROVAL STEP (The Core of Sensorium Safe Execution) ---
                 print(f"\n[SENSORIUM AGENT] 🧠 Planned Action: {task.description}")
@@ -77,11 +79,11 @@ class SensoriumLoop(AgentLoop):
                 print("[SENSORIUM AGENT] ✅ Action approved. Executing...")
                 actor_output = await self.actor.generate_and_execute(task, context=context)
 
-                result_data = actor_output.dict() if hasattr(actor_output, "dict") else {"output": str(actor_output)}
+                result_data = self._model_to_dict(actor_output)
                 cell.add_runtime_result(result_data)
 
                 # --- REFLECTION ---
-                ref_context = self.memory_manager.build_retry_context(task.task_id)
+                ref_context = mem_mgr.build_retry_context(task.task_id)
                 ref_input = ReflectorInputSchema(
                     reflector_type=ReflectorType.TASK,
                     target_id=task.task_id,
@@ -90,14 +92,14 @@ class SensoriumLoop(AgentLoop):
                 )
                 
                 reflection = await self.reflector.reflect(ref_input)
-                cell.add_reflection(reflection.dict() if hasattr(reflection, "dict") else {"feedback": str(reflection)})
+                cell.add_reflection(self._model_to_dict(reflection))
 
                 iterations += 1
 
                 if reflection.is_task_complete:
                     task_complete = True
                     task.status = "done"
-                    self.memory_manager.mark_complete(task.task_id)
+                    mem_mgr.mark_complete(task.task_id)
                     final_answer += f"Task {task.task_id} completed. Rating: {reflection.rating}/10.\n"
 
             if not task_complete and cell.is_exhausted():

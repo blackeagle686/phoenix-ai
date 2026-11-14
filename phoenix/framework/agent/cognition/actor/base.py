@@ -1,34 +1,38 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional
-from phoenix.framework.agent.cognition.schema import ActorInputSchema, ActorOutputSchema
-from phoenix.framework.agent.cognition.schema import Task
 from enum import Enum
+from phoenix.framework.agent.cognition.schema import ActorInputSchema, ActorOutputSchema, Task
 from phoenix.framework.agent.runtime.base import BaseRuntime
+
 
 class Execution_type(str, Enum):
     COMPILE = "compile"
     RUN = "run"
-        
+
 
 class BaseActor(ABC):
-    def __init__(self, tool_manager: Any, thinker: Any, runtime: Optional[BaseRuntime] = None, reflector: Optional[Any] = None):
+    def __init__(
+        self,
+        tool_manager: Any,
+        thinker: Optional[Any] = None,
+        runtime: Optional[BaseRuntime] = None,
+        reflector: Optional[Any] = None,
+    ):
         self.tool_manager = tool_manager
         self.thinker = thinker
         self.reflector = reflector
         self.runtime = runtime
 
     @abstractmethod
-    async def execute(self, task_input: ActorInputSchema, task_context: Optional[Task] = None) -> ActorOutputSchema:
+    async def execute(self, task_input: Any, task_context: Optional[Task] = None) -> Any:
         """
-        Executes a task using the tool manager based on strict input schemas.
-        Optionally takes a full Task context to generate reflections via the Reflector.
+        Executes a task or action batch using the tool manager.
         """
         pass
 
     @abstractmethod
-    async def generate_and_execute(self, task: Task, previous_results: str = "") -> ActorOutputSchema:
+    async def generate_and_execute(self, task: Any, previous_results: str = "", context: str = "") -> ActorOutputSchema:
         """
-        Dynamically generates the required code and tool payload based on the Task's high-level strategy,
-        then executes the tool immediately.
+        Dynamically generates the required tool calls via Thinker and executes them.
         """
         pass

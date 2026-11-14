@@ -277,9 +277,11 @@ class OpenAILLM(BaseLLM):
         max_tokens: Optional[int] = None
     ) -> Any:
         if not self.client:
-            raise RuntimeError("OpenAILLM is not initialized.")
+            await self.init()
 
         import json
+        from phoenix.services.llm.base import _extract_json_dict
+
         # Handle pydantic v1 vs v2 schema extraction
         schema_json = schema.model_json_schema() if hasattr(schema, "model_json_schema") else (schema.schema_json() if hasattr(schema, "schema_json") else str(schema))
         if isinstance(schema_json, dict):
@@ -298,27 +300,29 @@ class OpenAILLM(BaseLLM):
 
         span_id = tracer.start_span("OpenAILLM.generate_structured", {"model": self.model})
         try:
-            # We try using response_format, if it fails due to API compatibility, we could fallback, 
-            # but LongCat supports json_object.
-            resp = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                max_tokens=max_tokens or config.SECURITY_MAX_OUTPUT_LENGTH,
-                response_format={"type": "json_object"}
-            )
+            try:
+                resp = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    max_tokens=max_tokens or config.SECURITY_MAX_OUTPUT_LENGTH,
+                    response_format={"type": "json_object"}
+                )
+            except Exception:
+                # Fallback for OpenAI-compatible providers that do not support response_format
+                resp = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    max_tokens=max_tokens or config.SECURITY_MAX_OUTPUT_LENGTH,
+                )
 
-            content = resp.choices[0].message.content.strip()
+            content = (resp.choices[0].message.content or "").strip()
             tracer.end_span(span_id, status="success")
 
-            # Remove potential markdown formatting if the model ignored instructions
-            if content.startswith("```json"):
-                content = content[7:]
-            if content.startswith("```"):
-                content = content[3:]
-            if content.endswith("```"):
-                content = content[:-3]
-
-            parsed_data = json.loads(content.strip())
+            parsed_data = _extract_json_dict(content)
+            if not parsed_data:
+                parsed_data = json.loads(content)
+            if hasattr(schema, "model_validate"):
+                return schema.model_validate(parsed_data)
             return schema(**parsed_data)
         except Exception as e:
             tracer.end_span(span_id, status="error", error=str(e))

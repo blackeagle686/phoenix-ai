@@ -17,6 +17,12 @@ from phoenix.framework.agent.cognition.schema import (
 )
 from phoenix.framework.agent.runtime.restricted_python import RestrictedPythonRuntime
 
+def _dump_model(model) -> dict:
+    if hasattr(model, "model_dump"):
+        return model.model_dump()
+    return model.dict()
+
+
 class CodeExecutionTool(BaseTool):
     name = "python_repl"
     description = "Executes safe python code to perform calculations or logic. Input: 'code' (str)."
@@ -33,7 +39,7 @@ class CodeExecutionTool(BaseTool):
                 output=exe_result.output,
                 error=exe_result.error
             )
-            return ToolResult(success=exe_result.success, output=result.dict(), error=exe_result.error)
+            return ToolResult(success=exe_result.success, output=_dump_model(result), error=exe_result.error)
         except Exception as e:
             return ToolResult(success=False, output=None, error=str(e))
 
@@ -89,7 +95,7 @@ class PythonAnalyzerTool(BaseTool):
                 functions=functions_list,
                 imports=imports_list
             )
-            return ToolResult(success=True, output=result.dict())
+            return ToolResult(success=True, output=_dump_model(result))
 
         except SyntaxError as e:
             return ToolResult(success=False, output=None, error=f"Syntax error in Python file: {e}")
@@ -114,7 +120,7 @@ class CommandExecutionTool(BaseTool):
                 stderr=exe_result.error or "",
                 exit_code=exe_result.exit_code
             )
-            return ToolResult(success=exe_result.success, output=result.dict(), error=exe_result.error)
+            return ToolResult(success=exe_result.success, output=_dump_model(result), error=exe_result.error)
         except Exception as e:
             return ToolResult(success=False, output=None, error=str(e))
 
@@ -140,7 +146,7 @@ class CodeCompileTool(BaseTool):
                 success=success,
                 error=error_msg
             )
-            return ToolResult(success=success, output=result.dict(), error=error_msg)
+            return ToolResult(success=success, output=_dump_model(result), error=error_msg)
         except Exception as e:
             return ToolResult(success=False, output=None, error=str(e))
 

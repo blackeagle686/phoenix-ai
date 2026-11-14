@@ -80,7 +80,7 @@ class MemoryCell:
             "tool_name": tool_name,
             "arguments": arguments,
             "success": success,
-            "output": str(output)[:2000] if output else None,
+            "output": str(output)[:4000] if output is not None else None,
             "error": error,
             "timestamp": time.time()
         })
@@ -116,6 +116,10 @@ class MemoryCell:
         """Return all tool executions that failed"""
         return [r for r in self.tool_history if not r["success"]]
 
+    def get_successful_tools(self) -> List[Dict[str, Any]]:
+        """Return all tool executions that succeeded"""
+        return [r for r in self.tool_history if r["success"]]
+
     def to_context_string(self) -> str:
         """Serialize the full cell state into a string for LLM context injection"""
         parts = []
@@ -140,9 +144,19 @@ class MemoryCell:
             for i, a in enumerate(self.actions):
                 parts.append(f"  [{i+1}] {a.get('action_plan', str(a))}")
 
+        if self.tool_history:
+            parts.append(f"\nTool Execution Outputs ({len(self.tool_history)}):")
+            for t_rec in self.tool_history[-5:]:
+                status = "OK" if t_rec["success"] else "FAIL"
+                parts.append(f"  [{status}] {t_rec['tool_name']}({t_rec.get('arguments', {})})")
+                if t_rec.get("output"):
+                    parts.append(f"    Output: {str(t_rec['output'])[:1500]}")
+                if t_rec.get("error"):
+                    parts.append(f"    Error: {t_rec['error']}")
+
         if self.reflections:
             last = self.reflections[-1]
-            parts.append(f"\nLatest Reflection:")
+            parts.append("\nLatest Reflection:")
             parts.append(f"  Status: {last.get('status', 'unknown')}")
             parts.append(f"  Feedback: {last.get('feedback', 'none')}")
             parts.append(f"  Rating: {last.get('rating', 'N/A')}/10")
@@ -160,7 +174,7 @@ class MemoryCell:
                 parts.append(f"  {ft['tool_name']}: {ft.get('error', 'unknown')}")
 
         if self.error_log:
-            parts.append(f"\nError Log:")
+            parts.append("\nError Log:")
             for err in self.error_log[-5:]:
                 parts.append(f"  {err}")
 

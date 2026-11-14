@@ -214,15 +214,30 @@ class ToolCall(BaseModel):
     tool_name: str = Field(..., description="Name of the tool to execute")
     arguments: Dict[str, Any] = Field(default_factory=dict, description="Arguments to pass to the tool")
 
+ToolCallSchema = ToolCall
+
 class TaskExecutionSchema(BaseModel):
-    thought_process: str = Field(..., description="Detailed analysis of the problem and the step-by-step approach to solve it")
+    thought_process: str = Field(default="", description="Detailed analysis of the problem and the step-by-step approach to solve it")
     tools_to_call: List[ToolCall] = Field(default_factory=list, description="Specific tool calls required to enact the solution")
+    direct_response: Optional[str] = Field(default=None, description="Direct answer or finding when no further tool calls are needed")
+    is_complete: bool = Field(default=False, description="Whether the task objective is satisfied by this step")
+
+class ActionSchema(BaseModel):
+    action_id: str = Field(default_factory=generate_unique_id, description="Unique ID for the action")
+    task_id: str = Field(default="", description="Associated task ID")
+    thought_process: str = Field(default="", description="Reasoning behind the action")
+    action_plan: Optional[str] = Field(default=None, description="Summary of the action plan")
+    tools_to_call: List[ToolCall] = Field(default_factory=list, description="Tools to execute")
 
 class ReflectionSchema(BaseModel):
-    status: TaskStatus = Field(..., description="The evaluation status: 'done', 'failed', or 'in_progress'")
-    feedback: str = Field(..., description="Detailed feedback on the runtime output and what needs to happen next")
-    rating: int = Field(..., ge=1, le=10, description="Rating of the execution from 1 to 10")
-    is_task_complete: bool = Field(..., description="Whether the entire task is now fully complete")
+    status: TaskStatus = Field(default=TaskStatus.DONE, description="The evaluation status: 'done', 'failed', or 'in_progress'")
+    feedback: str = Field(default="", description="Detailed feedback on the runtime output and what needs to happen next")
+    rating: int = Field(default=8, ge=1, le=10, description="Rating of the execution from 1 to 10")
+    is_task_complete: bool = Field(default=True, description="Whether the entire task is now fully complete")
+    summary: Optional[str] = Field(default=None, description="Concise summary of what this task accomplished")
+    needs_replan: bool = Field(default=False, description="Whether remaining tasks in the plan need adjustment")
+    confidence: float = Field(default=0.8, ge=0.0, le=1.0, description="Confidence score of evaluation")
+    reasoning: str = Field(default="", description="Detailed reasoning for the evaluation")
 
 class TaskSchema(BaseModel):
     task_id: str = Field(default_factory=generate_unique_id, description="Unique ID for the task")
@@ -230,10 +245,14 @@ class TaskSchema(BaseModel):
     priority: TaskPriority = Field(default=TaskPriority.MEDIUM, description="Execution priority")
     description: str = Field(..., description="What the task requires")
     status: TaskStatus = Field(default=TaskStatus.PENDING, description="Task workflow status")
+    dependencies: List[str] = Field(default_factory=list, description="List of task_ids that must complete before this task")
 
 class PlanSchema(BaseModel):
     objective: str = Field(..., description="The main overall objective")
     tasks: List[TaskSchema] = Field(default_factory=list, description="List of ordered tasks to complete the objective")
+
+ProblemSchema = Problem
+SolutionSchema = Solution
 
 # =========================================================================
 # ACTOR SCHEMAS
@@ -241,10 +260,10 @@ class PlanSchema(BaseModel):
 
 class ActorInputSchema(BaseModel):
     """Strict input schema for the Actor module to execute a task."""
-    task_id: str = Field(..., description="Unique ID of the task being executed")
-    task_type: TaskType = Field(..., description="The type of the task")
+    task_id: str = Field(default_factory=generate_unique_id, description="Unique ID of the task being executed")
+    task_type: TaskType = Field(default=TaskType.OTHER, description="The type of the task")
     tool_name: str = Field(..., description="Name of the tool to execute")
-    payload: Dict[str, Any] = Field(..., description="Arguments for the tool")
+    payload: Dict[str, Any] = Field(default_factory=dict, description="Arguments for the tool")
 
 class ActorOutputSchema(BaseModel):
     """Strict output schema for the Actor module returning a task execution."""
@@ -262,9 +281,14 @@ class ActorToReflectorSchema(BaseModel):
 
 # Base Tool Schemas
 class BaseTaskInputSchema(BaseModel):
-    pass
+    task_id: Optional[str] = Field(default=None, description="Optional task ID")
+    task_description: Optional[str] = Field(default=None, description="Optional task description")
+    task_type: Optional[TaskType] = Field(default=None, description="Optional task type")
+
 class BaseTaskOutputSchema(BaseModel):
-    pass
+    task_id: Optional[str] = Field(default=None, description="Optional task ID")
+    success: bool = Field(default=True, description="Whether the task execution was successful")
+    error: Optional[str] = Field(default=None, description="Error message if the task failed")
 class BaseFileTaskInputSchema(BaseTaskInputSchema):
     file_meta: BaseFileMeta = Field(..., description="Meta information of the file")
 class BaseFileTaskOutputSchema(BaseTaskOutputSchema):

@@ -17,8 +17,15 @@ from phoenix.framework.agent.cognition.schema import BaseReflectorMeta
 from phoenix.framework.agent.cognition.utils import parse_llm_json
 
 class TaskCreator:
-    def __init__(self, thinker:Any, tools: Optional[Any] = None, cache: Optional[Any] = None ):
+    def __init__(
+        self,
+        thinker: Optional[Any] = None,
+        tools: Optional[Any] = None,
+        cache: Optional[Any] = None,
+        llm: Optional[Any] = None,
+    ):
         self.thinker = thinker
+        self.llm = llm or getattr(thinker, "llm", thinker)
         self.tools = tools
         self.cache = cache
         self.problems = []
@@ -99,9 +106,6 @@ class TaskCreator:
         """
         response = await self.llm.generate(prompt, max_tokens=500)
         data = parse_llm_json(response) or {}
-        
-        print(f"DEBUG - LLM Raw Response for create_solution (Variant {variant_index}):\n{response}\n")
-        print(f"DEBUG - Parsed Data:\n{data}\n")
 
         stype_str = data.get("solution_type", "other").lower()
         try:
@@ -220,19 +224,10 @@ class TaskCreator:
 
 
 if __name__ == "__main__":
-    import sys
-    import os
     import asyncio
-    
-    # Add the project root to sys.path so 'phoenix' can be imported
-    
     from phoenix.services.llm.openai import OpenAILLM
 
-    llm = OpenAILLM(
-        api_key="ak_2yp3Xw1Ny7ky2pF7er9x93ZO9jj6G",
-        model="LongCat-2.0-Preview",
-        base_url="https://api.longcat.chat/openai"
-    )
+    llm = OpenAILLM()
 
     class MockTools:
         def __init__(self):

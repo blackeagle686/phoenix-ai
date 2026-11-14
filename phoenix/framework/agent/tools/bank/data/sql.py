@@ -43,56 +43,54 @@ class SQLDatabaseTool(BaseTool):
                 error="SQLAlchemy is not installed. Please install it using: pip install sqlalchemy"
             )
 
-        try:
-            engine = create_engine(uri)
-            
-            if action == "get_schema":
-                metadata = MetaData()
-                metadata.reflect(bind=engine)
-                schema_info = []
-                for table in metadata.sorted_tables:
-                    cols = [f"{c.name} ({c.type})" for c in table.columns]
-                    schema_info.append(f"Table: {table.name} | Columns: {', '.join(cols)}")
-                
-                output = "\n".join(schema_info)
-                return ToolResult(success=True, output=output if output else "Database has no tables.")
+        def _sync_db() -> ToolResult:
+            try:
+                engine = create_engine(uri)
+                if action == "get_schema":
+                    metadata = MetaData()
+                    metadata.reflect(bind=engine)
+                    schema_info = []
+                    for table in metadata.sorted_tables:
+                        cols = [f"{c.name} ({c.type})" for c in table.columns]
+                        schema_info.append(f"Table: {table.name} | Columns: {', '.join(cols)}")
 
-            elif action == "execute_query":
-                if not query:
-                    return ToolResult(success=False, output=None, error="Missing 'query' for execute_query.")
-                
-                if self.read_only:
-                    q_lower = query.lower().strip()
-                    # A basic safety net. To be truly safe, a read-only DB user should be used.
-                    if not (q_lower.startswith("select") or q_lower.startswith("pragma") or q_lower.startswith("explain")):
-                        return ToolResult(
-                            success=False, 
-                            output=None, 
-                            error="Tool is configured as read-only. Only SELECT queries are allowed."
-                        )
-                
-                with engine.connect() as conn:
-                    result = conn.execute(text(query))
-                    
-                    # For non-returning queries
-                    if not result.returns_rows:
-                        conn.commit()
-                        return ToolResult(success=True, output="Query executed successfully. No results returned.")
-                        
-                    rows = result.fetchall()
-                    if not rows:
-                        return ToolResult(success=True, output="Query executed successfully. No rows found.")
-                    
-                    columns = list(result.keys())
-                    header = " | ".join(str(c) for c in columns)
-                    row_strs = [" | ".join(str(val) for val in row) for row in rows]
-                    
-                    output = header + "\n" + "-" * len(header) + "\n" + "\n".join(row_strs)
-                    return ToolResult(success=True, output=output[:10000]) # Cap output length
-                    
-            else:
-                return ToolResult(success=False, output=None, error=f"Unknown action: {action}")
+                    output = "\n".join(schema_info)
+                    return ToolResult(success=True, output=output if output else "Database has no tables.")
 
-        except Exception as e:
-            return ToolResult(success=False, output=None, error=f"Database Error: {str(e)}")
+                elif action == "execute_query":
+                    if not query:
+                        return ToolResult(success=False, output=None, error="Missing 'query' for execute_query.")
+
+                    if self.read_only:
+                        q_lower = query.lower().strip()
+                        if not (q_lower.startswith("select") or q_lower.startswith("pragma") or q_lower.startswith("explain")):
+                            return ToolResult(
+                                success=False,
+                                output=None,
+                                error="Tool is configured as read-only. Only SELECT queries are allowed."
+                            )
+
+                    with engine.connect() as conn:
+                        result = conn.execute(text(query))
+                        if not result.returns_rows:
+                            conn.commit()
+                            return ToolResult(success=True, output="Query executed successfully. No results returned.")
+
+                        rows = result.fetchall()
+                        if not rows:
+                            return ToolResult(success=True, output="Query executed successfully. No rows found.")
+
+                        columns = list(result.keys())
+                        header = " | ".join(str(c) for c in columns)
+                        row_strs = [" | ".join(str(val) for val in row) for row in rows]
+
+                        output = header + "\n" + "-" * len(header) + "\n" + "\n".join(row_strs)
+                        return ToolResult(success=True, output=output[:10000])
+                else:
+                    return ToolResult(success=False, output=None, error=f"Unknown action: {action}")
+            except Exception as e:
+                return ToolResult(success=False, output=None, error=f"Database Error: {str(e)}")
+
+        import asyncio
+        return await asyncio.to_thread(_sync_db)
 
