@@ -239,6 +239,8 @@ class OpenAILLM(BaseLLM):
     async def init(self):
         if not self.api_key:
             logger.warning("OPENAI_API_KEY is missing. Operating in mock mode.")
+            self.client = None
+            return
 
         base_url = self.base_url
         if base_url and base_url.endswith("/"):
