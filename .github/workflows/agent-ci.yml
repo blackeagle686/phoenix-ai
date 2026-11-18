@@ -1,0 +1,55 @@
+name: Agent Framework CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  agent-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ "3.11", "3.12" ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package and core dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run Agent Unit & E2E Mock-LLM Tests
+        run: |
+          python -m unittest \
+            tests/agent/test_ci_e2e_mock_llm.py \
+            tests/agent/test_custom_tools_workflow.py \
+            tests/agent/test_optimized_context_memory.py \
+            tests/agent/test_v2_architecture_upgrade.py \
+            tests/agent/test_io_tools.py \
+            tests/agent/test_engineering_tools.py \
+            tests/agent/test_execution.py \
+            tests/agent/test_cognition.py \
+            tests/agent/test_agent_loop.py \
+            tests/agent/test_extensibility.py \
+            tests/agent/test_custom_memory.py \
+            tests/agent/test_custom_user_model.py \
+            tests/agent/test_memory_system.py \
+            tests/agent/test_profile.py \
+            tests/agent/test_latest_updates.py \
+            tests/agent/agent_new_arch/test_restricted_runtime.py
+
+      - name: Run Architecture Verification Suite
+        run: |
+          python tests/arch_test/run_all.py
+          python tests/arch_test/test_ltm_cell.py
+          python tests/arch_test/test_memory_adapter.py
+          python tests/agent/verify_last_updates_flow.py
