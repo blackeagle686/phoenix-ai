@@ -72,7 +72,8 @@ setup(
         "requests>=2.28.0",
         "openai>=1.0.0",
         "pydantic",
-        "httpx>=0.24.0"
+        "httpx>=0.24.0",
+        "numpy"
     ],
     extras_require=EXTRAS,
     author="blackeagle686",
