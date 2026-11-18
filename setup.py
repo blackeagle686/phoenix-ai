@@ -71,7 +71,8 @@ setup(
         "python-dotenv>=1.0.0",
         "requests>=2.28.0",
         "openai>=1.0.0",
-        "pydantic"
+        "pydantic",
+        "httpx>=0.24.0"
     ],
     extras_require=EXTRAS,
     author="blackeagle686",
