@@ -162,12 +162,45 @@ class Thinker(BaseThinker):
         full_prompt = f"{system_prompt}{workspace_section}\n\nContext:\n{context}\n\nUser Request: {prompt}"
         return await self._call_structured(full_prompt, PlanSchema, session_id=session_id, max_tokens=8192)
 
+    def _supports_native_tool_calling(self) -> bool:
+        from phoenix.services.llm.base import BaseLLM
+
+        gen_tools = getattr(self.llm, "generate_with_tools", None)
+        if gen_tools is None or not callable(gen_tools):
+            return False
+        # Avoid intercepting subclasses/mocks that only use BaseLLM's structured fallback
+        cls_method = getattr(type(self.llm), "generate_with_tools", None)
+        if cls_method is BaseLLM.generate_with_tools and "generate_with_tools" not in getattr(self.llm, "__dict__", {}):
+            return False
+        return True
+
     async def solve_task(self, task: Any, context: str = "") -> TaskExecutionSchema:
-        """Brain Step 2: Reason about the task and generate the strict tools to call or direct response."""
-        tools_list = self._get_tools_list()
+        """Brain Step 2: Reason about the task using native tool calling when supported, else structured JSON."""
         task_desc = getattr(task, "description", str(task))
         task_id = getattr(task, "task_id", "unknown")
 
+        use_native = (
+            self._supports_native_tool_calling()
+            and self.tool_manager is not None
+            and hasattr(self.tool_manager, "get_openai_tools")
+        )
+        openai_tools = self.tool_manager.get_openai_tools() if use_native else []
+
+        if use_native and openai_tools:
+            system_prompt = (
+                "You are the Thinker. Given the following task and its context, call the exact tool(s) needed to complete the task, "
+                "or reply directly once the task objective is already satisfied by previous tool outputs.\n"
+                "IMPORTANT:\n"
+                "1. ALWAYS use ABSOLUTE file paths for any file_path or directory whenever possible.\n"
+                "2. Prioritize specific registered/custom tools matching the task objective.\n"
+                "3. Use native file tools (`file_read`, `file_write`, `file_edit`, `file_update_multi`, `file_search`) rather than shell commands.\n"
+                "4. If the task is already answered in context or needs no further tool calls, respond directly with your findings."
+            )
+            system_prompt += self._get_profile_string()
+            full_prompt = f"{system_prompt}\n\nTask ID: {task_id}\nTask Description: {task_desc}\n\nContext:\n{context}"
+            return await self.llm.generate_with_tools(full_prompt, openai_tools, max_tokens=8192)
+
+        tools_list = self._get_tools_list()
         system_prompt = (
             "You are the Thinker. Given the following task and its full context (including any previous tool outputs in this task), "
             "analyze the problem, formulate your approach, and define the exact explicit tool calls required for the next step.\n"

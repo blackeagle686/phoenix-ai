@@ -1,3 +1,5 @@
+import json
+import os
 from typing import Any, Dict, List, Optional
 
 from phoenix.framework.agent.memory.budget import (
@@ -501,6 +503,64 @@ class MemoryManager:
             "global_context": self.global_context,
             "stats": self.get_stats(),
         }
+
+    def save_checkpoint(self, checkpoint_path: str, plan_data: Optional[Dict[str, Any]] = None, prompt: str = "") -> str:
+        """Persist current run state (plan, cells, session vars, STM turns) atomically as JSON."""
+        parent = os.path.dirname(os.path.abspath(checkpoint_path))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+
+        stm_bucket = self.short_term._sessions.get(self.session_id, ())
+        payload = {
+            "session_id": self.session_id,
+            "prompt": prompt,
+            "objective": self.objective,
+            "plan": plan_data,
+            "task_order": list(self.task_order),
+            "completed_tasks": list(self.completed_tasks),
+            "failed_tasks": list(self.failed_tasks),
+            "cells": {tid: cell.to_dict() for tid, cell in self.cells.items()},
+            "session_vars": self.session.get_all(),
+            "reflections": list(self.reflection.reflections),
+            "stm_summary": self.short_term.get_summary(self.session_id),
+            "stm_turns": [
+                {"role": c.role, "content": c.content, "metadata": c.metadata}
+                for c in stm_bucket
+            ],
+        }
+        tmp_path = checkpoint_path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, default=str, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, checkpoint_path)
+        return checkpoint_path
+
+    async def load_checkpoint(self, checkpoint_path: str) -> Dict[str, Any]:
+        """Load a previously saved run checkpoint and restore working + session + STM state."""
+        with open(checkpoint_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+
+        self.session_id = str(payload.get("session_id", ""))
+        self.objective = str(payload.get("objective", ""))
+        self.task_order = list(payload.get("task_order") or [])
+        self.completed_tasks = list(payload.get("completed_tasks") or [])
+        self.failed_tasks = list(payload.get("failed_tasks") or [])
+        self.cells = {
+            tid: MemoryCell.from_dict(cdata)
+            for tid, cdata in (payload.get("cells") or {}).items()
+        }
+        for k, v in (payload.get("session_vars") or {}).items():
+            self.session.set(k, v)
+        for ref in payload.get("reflections") or []:
+            self.reflection.add_reflection(ref)
+
+        if self.session_id:
+            if payload.get("stm_summary"):
+                self.short_term._summaries[self.session_id] = str(payload["stm_summary"])
+            if not self.short_term.count(self.session_id):
+                for turn in payload.get("stm_turns") or []:
+                    await self.short_term.add(self.session_id, turn)
+
+        return payload
 
 
 ContextMemory = MemoryManager

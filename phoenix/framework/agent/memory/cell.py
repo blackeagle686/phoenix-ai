@@ -277,6 +277,33 @@ class MemoryCell:
             "tool_history": self.tool_history,
             "error_log": self.error_log,
             "attempts": self.attempts,
+            "max_attempts": self.max_attempts,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "MemoryCell":
+        """Reconstruct a MemoryCell from a checkpoint dictionary."""
+        return cls(
+            cell_id=str(data.get("cell_id") or generate_unique_id()),
+            task_id=str(data.get("task_id", "")),
+            task_description=str(data.get("task_description", "")),
+            task_type=str(data.get("task_type", "other")),
+            task_status=str(data.get("task_status", "pending")),
+            task_priority=str(data.get("task_priority", "medium")),
+            objective=str(data.get("objective", "")),
+            dependencies=list(data.get("dependencies") or []),
+            problems=list(data.get("problems") or []),
+            solutions=list(data.get("solutions") or []),
+            actions=list(data.get("actions") or []),
+            reflections=list(data.get("reflections") or []),
+            runtime_results=list(data.get("runtime_results") or []),
+            io_history=list(data.get("io_history") or []),
+            tool_history=list(data.get("tool_history") or []),
+            error_log=list(data.get("error_log") or []),
+            attempts=int(data.get("attempts", 0)),
+            max_attempts=int(data.get("max_attempts", 5)),
+            created_at=float(data.get("created_at", time.time())),
+            updated_at=float(data.get("updated_at", time.time())),
+        )

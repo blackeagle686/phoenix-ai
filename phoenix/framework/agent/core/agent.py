@@ -2,6 +2,8 @@ import uuid
 import inspect
 from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
 from phoenix.services.llm.openai import OpenAILLM
+from phoenix.services.llm.router import LLMRouter
+from phoenix.services.observability.tracing import tracer
 from phoenix.framework.agent.memory.manager import MemoryManager
 from phoenix.framework.agent.memory.adapter import InteractiveMemoryAdapter
 from phoenix.framework.agent.tools.base import BaseTool, create_tool
@@ -18,10 +20,13 @@ from phoenix.framework.agent.core.profile import AgentProfile
 
 
 class Agent:
-    """The main Agent class that integrates LLM, memory, tools, runtime, and cognition modules."""
+    """The main Agent class that integrates LLM(s), memory, tools, runtime, telemetry, and cognition modules."""
     def __init__(
         self,
         llm=None,
+        llms: Optional[Iterable[Any]] = None,
+        fallback_llm: Optional[Any] = None,
+        fallback_llms: Optional[Iterable[Any]] = None,
         memory=None,
         tools=None,
         custom_tools: Optional[Iterable[Any]] = None,
@@ -37,11 +42,16 @@ class Agent:
         profile: Optional[Union[AgentProfile, str, dict]] = None,
         loop_cls: Optional[Type[AgentLoop]] = None,
         component_factories: Optional[Dict[str, Callable[..., Any]]] = None,
+        checkpoint_dir: Optional[str] = None,
+        on_event: Optional[Callable[[Dict[str, Any]], Any]] = None,
     ):
-        self.llm = llm if llm is not None else OpenAILLM()
+        self.llm = self._prepare_llm(llm, llms=llms, fallback_llm=fallback_llm, fallback_llms=fallback_llms)
         self.memory = self._prepare_memory(memory)
         self.runtime = runtime if runtime is not None else RestrictedPythonRuntime()
         self.profile = self._prepare_profile(profile)
+        self.checkpoint_dir = checkpoint_dir
+        self.on_event = on_event
+        self.last_run_metrics: Optional[Dict[str, Any]] = None
 
         # Support passing a list/iterable of tools/functions, a single BaseTool/function, or a ToolRegistry
         if isinstance(tools, (list, tuple, set)):
@@ -135,6 +145,29 @@ class Agent:
         if self.loop is None:
             self.loop = self._construct_loop()
 
+    def _prepare_llm(
+        self,
+        llm: Any,
+        llms: Optional[Iterable[Any]] = None,
+        fallback_llm: Optional[Any] = None,
+        fallback_llms: Optional[Iterable[Any]] = None,
+    ) -> Any:
+        candidates: List[Any] = []
+        if llm is not None:
+            candidates.append(llm)
+        if llms is not None:
+            candidates.extend(list(llms))
+        if fallback_llm is not None:
+            candidates.append(fallback_llm)
+        if fallback_llms is not None:
+            candidates.extend(list(fallback_llms))
+
+        if not candidates:
+            return OpenAILLM()
+        if len(candidates) == 1:
+            return OpenAILLM(**candidates[0]) if isinstance(candidates[0], dict) else candidates[0]
+        return LLMRouter(candidates)
+
     def _prepare_memory(self, memory):
         if memory is None:
             return MemoryManager()
@@ -217,6 +250,7 @@ class Agent:
             "reflector": self.reflector,
             "analyzer": self.analyzer,
             "memory_manager": self.memory if isinstance(self.memory, MemoryManager) else getattr(self.memory, "backing_memory", None),
+            "checkpoint_dir": self.checkpoint_dir,
         }
         loop_kwargs.update(self._dynamic_components)
         return self._call_with_supported_kwargs(self.loop_cls, loop_kwargs)
@@ -349,6 +383,10 @@ class Agent:
             f"Respond with exactly one word: 'PLAN' or 'FAST'."
         )
 
+    def get_last_run_metrics(self) -> Optional[Dict[str, Any]]:
+        """Return token usage, latency, retries, failovers, and tool stats for the last run."""
+        return dict(self.last_run_metrics) if self.last_run_metrics is not None else None
+
     async def run(self, prompt: str, session_id: str = None, max_iterations: int = 15, mode: str = "auto") -> str:
         """
         Run the agent with the given prompt.
@@ -361,25 +399,47 @@ class Agent:
         if session_id is None:
             session_id = str(uuid.uuid4())
 
-        await self.memory.add_interaction(session_id, "user", prompt)
+        tracer.begin_run(session_id=session_id, on_event=self.on_event)
+        run_status = "success"
+        try:
+            await self.memory.add_interaction(session_id, "user", prompt)
 
-        actual_mode = mode
-        if mode == "auto":
-            classification_prompt = self._build_auto_classification_prompt(prompt)
-            classification = await self.llm.generate(classification_prompt, session_id=None, max_tokens=10)
-            if "PLAN" in str(classification).upper():
-                actual_mode = "plan"
-            else:
-                actual_mode = "fast_ans"
+            actual_mode = mode
+            if mode == "auto":
+                classification_prompt = self._build_auto_classification_prompt(prompt)
+                classification = await self.llm.generate(classification_prompt, session_id=None, max_tokens=10)
+                actual_mode = "plan" if "PLAN" in str(classification).upper() else "fast_ans"
 
-        if actual_mode == "fast_ans":
-            context = await self.memory.get_full_context(session_id, query=prompt)
-            fast_prompt = f"Context:\n{context}\n\nUser: {prompt}\nAnswer directly:"
-            fast_answer = await self.llm.generate(fast_prompt, session_id=None)
-            await self.memory.add_interaction(session_id, "assistant", fast_answer)
-            return fast_answer
-        else:
+            if actual_mode == "fast_ans":
+                context = await self.memory.get_full_context(session_id, query=prompt)
+                fast_prompt = f"Context:\n{context}\n\nUser: {prompt}\nAnswer directly:"
+                fast_answer = await self.llm.generate(fast_prompt, session_id=None)
+                await self.memory.add_interaction(session_id, "assistant", fast_answer)
+                return fast_answer
             return await self.loop.run(prompt, self.memory, session_id, max_iterations=max_iterations)
+        except Exception:
+            run_status = "error"
+            raise
+        finally:
+            self.last_run_metrics = tracer.end_run(status=run_status)
+
+    async def resume(self, session_id: str, max_iterations: int = 15) -> str:
+        """Resume an interrupted or checkpointed agent run from `checkpoint_dir`."""
+        if not hasattr(self.loop, "resume"):
+            raise ValueError("Current loop does not support resume.")
+        if hasattr(self.llm, "client") and self.llm.client is None:
+            if hasattr(self.llm, "init"):
+                await self.llm.init()
+
+        tracer.begin_run(session_id=session_id, on_event=self.on_event)
+        run_status = "success"
+        try:
+            return await self.loop.resume(self.memory, session_id, max_iterations=max_iterations)
+        except Exception:
+            run_status = "error"
+            raise
+        finally:
+            self.last_run_metrics = tracer.end_run(status=run_status)
 
     async def run_stream(self, prompt: str, session_id: str = None, max_iterations: int = 15, mode: str = "auto"):
         """
@@ -392,32 +452,40 @@ class Agent:
         if session_id is None:
             session_id = str(uuid.uuid4())
 
-        await self.memory.add_interaction(session_id, "user", prompt)
+        tracer.begin_run(session_id=session_id, on_event=self.on_event)
+        run_status = "success"
+        try:
+            await self.memory.add_interaction(session_id, "user", prompt)
 
-        actual_mode = mode
-        if mode == "auto":
-            classification_prompt = self._build_auto_classification_prompt(prompt)
-            classification = await self.llm.generate(classification_prompt, session_id=None, max_tokens=10)
-            actual_mode = "plan" if "PLAN" in str(classification).upper() else "fast_ans"
+            actual_mode = mode
+            if mode == "auto":
+                classification_prompt = self._build_auto_classification_prompt(prompt)
+                classification = await self.llm.generate(classification_prompt, session_id=None, max_tokens=10)
+                actual_mode = "plan" if "PLAN" in str(classification).upper() else "fast_ans"
 
-        if actual_mode == "fast_ans":
-            context = await self.memory.get_full_context(session_id, query=prompt)
-            fast_prompt = f"Context:\n{context}\n\nUser: {prompt}\nAnswer directly:"
-            fast_answer = await self.llm.generate(fast_prompt, session_id=None)
-            await self.memory.add_interaction(session_id, "assistant", fast_answer)
-            yield {"type": "status", "content": "Fast answer mode"}
-            for line in fast_answer.splitlines() or [fast_answer]:
+            if actual_mode == "fast_ans":
+                context = await self.memory.get_full_context(session_id, query=prompt)
+                fast_prompt = f"Context:\n{context}\n\nUser: {prompt}\nAnswer directly:"
+                fast_answer = await self.llm.generate(fast_prompt, session_id=None)
+                await self.memory.add_interaction(session_id, "assistant", fast_answer)
+                yield {"type": "status", "content": "Fast answer mode"}
+                for line in fast_answer.splitlines() or [fast_answer]:
+                    yield {"type": "chunk", "content": f"{line}\n"}
+                return
+
+            if hasattr(self.loop, "run_stream"):
+                async for event in self.loop.run_stream(prompt, self.memory, session_id, max_iterations=max_iterations):
+                    yield event
+                return
+
+            final = await self.loop.run(prompt, self.memory, session_id, max_iterations=max_iterations)
+            yield {"type": "status", "content": "Preparing final response..."}
+            for line in final.splitlines() or [final]:
                 yield {"type": "chunk", "content": f"{line}\n"}
-            return
-
-        if hasattr(self.loop, "run_stream"):
-            async for event in self.loop.run_stream(prompt, self.memory, session_id, max_iterations=max_iterations):
-                yield event
-            return
-
-        final = await self.loop.run(prompt, self.memory, session_id, max_iterations=max_iterations)
-        yield {"type": "status", "content": "Preparing final response..."}
-        for line in final.splitlines() or [final]:
-            yield {"type": "chunk", "content": f"{line}\n"}
+        except Exception:
+            run_status = "error"
+            raise
+        finally:
+            self.last_run_metrics = tracer.end_run(status=run_status)
 
 

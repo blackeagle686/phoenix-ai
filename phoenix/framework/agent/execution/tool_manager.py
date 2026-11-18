@@ -1,8 +1,10 @@
 import asyncio
 import inspect
+import time
 from typing import Any, Callable, Dict, List, Optional
 from phoenix.framework.agent.tools.registry import ToolRegistry
 from phoenix.framework.agent.tools.base import BaseTool, ToolResult, _normalize_tool_output
+from phoenix.services.observability.tracing import tracer
 
 
 class ToolManager:
@@ -63,6 +65,31 @@ class ToolManager:
             if isinstance(info, dict) and self.is_tool_allowed(info.get("name", ""))
         ]
 
+    def get_openai_tools(self) -> List[Dict[str, Any]]:
+        """Return OpenAI-format `tools` schemas filtered by agent profile access."""
+        if not self.registry:
+            return []
+        if hasattr(self.registry, "to_openai_tools"):
+            raw = self.registry.to_openai_tools()
+            if not isinstance(raw, list):
+                return []
+            return [
+                item for item in raw
+                if isinstance(item, dict)
+                and self.is_tool_allowed(item.get("function", {}).get("name", ""))
+            ]
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": info.get("name", ""),
+                    "description": info.get("description", ""),
+                    "parameters": info.get("parameters", {"type": "object", "properties": {}}),
+                },
+            }
+            for info in self.get_available_tools_info()
+        ]
+
     async def _call_tool_instance(self, tool: Any, payload: Dict[str, Any]) -> ToolResult:
         if isinstance(tool, BaseTool):
             return await tool.invoke(**payload)
@@ -108,6 +135,7 @@ class ToolManager:
             if isinstance(hook_res, ToolResult):
                 return hook_res
 
+        t0 = time.perf_counter()
         try:
             tool = self.registry.get_tool(tool_name)
             result = await self._call_tool_instance(tool, payload)
@@ -115,6 +143,9 @@ class ToolManager:
             result = ToolResult(success=False, output=None, error=str(e))
         except Exception as e:
             result = ToolResult(success=False, output=None, error=f"Unexpected error during tool execution: {e}")
+
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        tracer.record_tool(tool_name, elapsed_ms, bool(getattr(result, "success", False)))
 
         for hook in self.after_tool_hooks:
             hook_res = hook(tool_name, payload, result)

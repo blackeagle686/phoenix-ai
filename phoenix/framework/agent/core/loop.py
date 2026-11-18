@@ -1,6 +1,9 @@
 import asyncio
 import inspect
+import os
 from typing import Dict, Any, Optional, Callable, List
+
+from phoenix.services.observability.tracing import tracer
 
 from phoenix.framework.agent.cognition.thinker import Thinker
 from phoenix.framework.agent.cognition.planner import Planner
@@ -59,6 +62,7 @@ class AgentLoop:
         synthesize_answer: bool = True,
         enable_workspace_analysis: bool = False,
         approval_callback: Optional[Callable[..., Any]] = None,
+        checkpoint_dir: Optional[str] = None,
     ):
         self.thinker = thinker
         self.planner = planner
@@ -72,8 +76,24 @@ class AgentLoop:
         self.synthesize_answer = synthesize_answer
         self.enable_workspace_analysis = enable_workspace_analysis
         self.approval_callback = approval_callback
+        self.checkpoint_dir = checkpoint_dir
         self._bootstrap_pipeline: Optional[CognitionPipeline] = None
         self._background_tasks = set()
+
+    def _checkpoint_path(self, session_id: str) -> Optional[str]:
+        if not self.checkpoint_dir or not session_id:
+            return None
+        safe_sid = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in session_id)
+        return os.path.join(self.checkpoint_dir, f"{safe_sid}.json")
+
+    def _save_checkpoint_safe(self, active_memory: MemoryManager, session_id: str, plan: PlanSchema, prompt: str) -> None:
+        cp_path = self._checkpoint_path(session_id)
+        if not cp_path or not hasattr(active_memory, "save_checkpoint"):
+            return
+        try:
+            active_memory.save_checkpoint(cp_path, plan_data=_model_to_dict(plan), prompt=prompt)
+        except Exception:
+            pass
 
     def set_pipeline_specs(
         self,
@@ -294,44 +314,16 @@ class AgentLoop:
 
         return task_complete, "", last_reflection
 
-    async def run(self, prompt: str, memory: Any, session_id: str, max_iterations: int = 15) -> str:
-        """Execute the full brain loop with unified memory graph, DAG execution, and synthesis."""
-        if not self._uses_plan_schema_mode():
-            return await self._run_iterative_action_loop(prompt, memory, session_id, max_iterations=max_iterations)
-
-        workspace_analysis = None
-        if self.enable_workspace_analysis and self.analyzer and hasattr(self.analyzer, "analyze_workspace"):
-            try:
-                workspace_analysis = await self.analyzer.analyze_workspace(prompt)
-            except Exception:
-                workspace_analysis = None
-
-        sig = inspect.signature(self.planner.generate_initial_plan)
-        if "workspace_analysis" in sig.parameters:
-            plan = await self.planner.generate_initial_plan(
-                prompt,
-                memory,
-                session_id,
-                workspace_analysis=workspace_analysis,
-            )
-        else:
-            plan = await self.planner.generate_initial_plan(prompt, memory, session_id)
-
-        active_memory = self._resolve_memory_manager(memory)
-        active_memory.set_session(session_id, plan.objective)
-        if hasattr(memory, "session") and hasattr(memory.session, "set"):
-            memory.session.set("current_objective", plan.objective)
-
-        pending_tasks = list(plan.tasks)
-        for task in pending_tasks:
-            active_memory.create_cell(
-                task_id=task.task_id,
-                description=task.description,
-                task_type=getattr(task, "task_type", "other"),
-                priority=getattr(task, "priority", "medium"),
-                dependencies=getattr(task, "dependencies", []),
-            )
-
+    async def _run_plan_dag_execution(
+        self,
+        prompt: str,
+        plan: PlanSchema,
+        active_memory: MemoryManager,
+        memory: Any,
+        session_id: str,
+        max_iterations: int = 15,
+    ) -> str:
+        """Shared DAG execution, adaptive replanning, checkpointing, and answer synthesis."""
         status_log = ""
         iterations = 0
 
@@ -342,12 +334,17 @@ class AgentLoop:
             nonlocal iterations
             iterations += 1
 
-        remaining = [t for t in pending_tasks if getattr(t, "status", "pending") != "done"]
+        remaining = [
+            t for t in plan.tasks
+            if str(getattr(t, "status", "pending")).lower() != "done" and t.task_id not in active_memory.completed_tasks
+        ]
+
+        await tracer.emit_event("plan", {"session_id": session_id, "objective": plan.objective, "tasks": len(remaining)})
+        self._save_checkpoint_safe(active_memory, session_id, plan, prompt)
 
         while remaining and iterations < max_iterations:
             ready = [t for t in remaining if active_memory.are_dependencies_met(t.task_id)]
             if not ready:
-                # Break dependency cycle or unmet failed dependency by picking the next task in order
                 ready = [remaining[0]]
 
             can_parallelize = (
@@ -355,6 +352,9 @@ class AgentLoop:
                 and len(ready) > 1
                 and self.approval_callback is None
             )
+
+            for r_task in (ready if can_parallelize else [ready[0]]):
+                await tracer.emit_event("task_start", {"task_id": r_task.task_id, "description": r_task.description})
 
             if can_parallelize:
                 sem = asyncio.Semaphore(self.max_concurrency)
@@ -387,13 +387,15 @@ class AgentLoop:
             for task_obj, (completed, msg, reflection_obj) in batch_results:
                 executed_ids.add(task_obj.task_id)
                 status_log += msg
+                await tracer.emit_event("task_done", {"task_id": task_obj.task_id, "completed": completed})
+
                 if reflection_obj == "REJECTED":
+                    self._save_checkpoint_safe(active_memory, session_id, plan, prompt)
                     await self._flush_background()
                     if hasattr(memory, "add_interaction"):
                         await memory.add_interaction(session_id, "assistant", status_log)
                     return status_log
 
-                # Dynamic adaptive replanning if needed
                 if (
                     self.replan_on_failure
                     and (not completed or getattr(reflection_obj, "needs_replan", False))
@@ -418,10 +420,13 @@ class AgentLoop:
                                         priority=getattr(new_t, "priority", "medium"),
                                         dependencies=getattr(new_t, "dependencies", []),
                                     )
+                                    plan.tasks.append(new_t)
                                     remaining.append(new_t)
+                            await tracer.emit_event("replan", {"added_tasks": len(recovery_plan.tasks)})
                     except Exception:
                         pass
 
+            self._save_checkpoint_safe(active_memory, session_id, plan, prompt)
             remaining = [t for t in remaining if t.task_id not in executed_ids and getattr(t, "status", "pending") != "done"]
 
         if iterations >= max_iterations and remaining:
@@ -457,7 +462,89 @@ class AgentLoop:
                 )
             )
         await self._flush_background()
+        await tracer.emit_event("complete", {"session_id": session_id})
         return final_answer
+
+    async def resume(self, memory: Any, session_id: str, max_iterations: int = 15) -> str:
+        """Resume a previously checkpointed run for `session_id`."""
+        cp_path = self._checkpoint_path(session_id)
+        if not cp_path or not os.path.exists(cp_path):
+            raise FileNotFoundError(f"No checkpoint found for session '{session_id}'.")
+
+        active_memory = self._resolve_memory_manager(memory)
+        payload = await active_memory.load_checkpoint(cp_path)
+        plan_dict = payload.get("plan") or {
+            "objective": payload.get("objective", ""),
+            "tasks": [],
+        }
+        plan = PlanSchema.model_validate(plan_dict) if hasattr(PlanSchema, "model_validate") else PlanSchema(**plan_dict)
+        for task in plan.tasks:
+            if not active_memory.has_cell(task.task_id):
+                active_memory.create_cell(
+                    task_id=task.task_id,
+                    description=task.description,
+                    task_type=getattr(task, "task_type", "other"),
+                    priority=getattr(task, "priority", "medium"),
+                    dependencies=getattr(task, "dependencies", []),
+                )
+            elif task.task_id in active_memory.completed_tasks:
+                task.status = "done"
+
+        prompt = str(payload.get("prompt") or plan.objective)
+        return await self._run_plan_dag_execution(
+            prompt=prompt,
+            plan=plan,
+            active_memory=active_memory,
+            memory=memory,
+            session_id=session_id,
+            max_iterations=max_iterations,
+        )
+
+    async def run(self, prompt: str, memory: Any, session_id: str, max_iterations: int = 15) -> str:
+        """Execute the full brain loop with unified memory graph, DAG execution, and synthesis."""
+        if not self._uses_plan_schema_mode():
+            return await self._run_iterative_action_loop(prompt, memory, session_id, max_iterations=max_iterations)
+
+        workspace_analysis = None
+        if self.enable_workspace_analysis and self.analyzer and hasattr(self.analyzer, "analyze_workspace"):
+            try:
+                workspace_analysis = await self.analyzer.analyze_workspace(prompt)
+            except Exception:
+                workspace_analysis = None
+
+        sig = inspect.signature(self.planner.generate_initial_plan)
+        if "workspace_analysis" in sig.parameters:
+            plan = await self.planner.generate_initial_plan(
+                prompt,
+                memory,
+                session_id,
+                workspace_analysis=workspace_analysis,
+            )
+        else:
+            plan = await self.planner.generate_initial_plan(prompt, memory, session_id)
+
+        active_memory = self._resolve_memory_manager(memory)
+        active_memory.set_session(session_id, plan.objective)
+        if hasattr(memory, "session") and hasattr(memory.session, "set"):
+            memory.session.set("current_objective", plan.objective)
+
+        for task in list(plan.tasks):
+            active_memory.create_cell(
+                task_id=task.task_id,
+                description=task.description,
+                task_type=getattr(task, "task_type", "other"),
+                priority=getattr(task, "priority", "medium"),
+                dependencies=getattr(task, "dependencies", []),
+            )
+
+        return await self._run_plan_dag_execution(
+            prompt=prompt,
+            plan=plan,
+            active_memory=active_memory,
+            memory=memory,
+            session_id=session_id,
+            max_iterations=max_iterations,
+        )
 
     async def run_stream(self, prompt: str, memory: Any, session_id: str, max_iterations: int = 15):
         """Streaming version of the brain loop with unified memory graph."""

@@ -91,6 +91,21 @@ class ToolRegistry:
     def get_all_tools_info(self) -> List[Dict]:
         return [t.to_dict() for t in self.tools.values()]
 
+    def to_openai_tools(self) -> List[Dict[str, Any]]:
+        return [
+            t.to_openai_tool()
+            if hasattr(t, "to_openai_tool")
+            else {
+                "type": "function",
+                "function": {
+                    "name": t.name,
+                    "description": getattr(t, "description", ""),
+                    "parameters": t.get_parameters_schema() if hasattr(t, "get_parameters_schema") else {"type": "object", "properties": {}},
+                },
+            }
+            for t in self.tools.values()
+        ]
+
     @classmethod
     def load_default(
         cls,

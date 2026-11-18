@@ -68,6 +68,26 @@ class BaseLLM(BaseService):
             return schema.model_validate(parsed)
         return schema(**parsed)
 
+    async def generate_with_tools(
+        self,
+        prompt: str,
+        tools: Any,
+        session_id: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+    ) -> Any:
+        """
+        Default tool-calling fallback using `generate_structured` against `TaskExecutionSchema`.
+        Subclasses supporting native API function calling override this method.
+        """
+        from phoenix.framework.agent.cognition.schema import TaskExecutionSchema
+
+        return await self.generate_structured(
+            prompt,
+            TaskExecutionSchema,
+            session_id=session_id,
+            max_tokens=max_tokens,
+        )
+
 
 class BaseVLM(BaseService):
     def is_available(self) -> bool:

@@ -331,6 +331,17 @@ class BaseTool:
             info["return_direct"] = True
         return info
 
+    def to_openai_tool(self) -> Dict[str, Any]:
+        """Convert this tool into OpenAI Chat Completions `tools` function schema."""
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description or f"Executes {self.name}",
+                "parameters": self.get_parameters_schema(),
+            },
+        }
+
 
 class FunctionTool(BaseTool):
     """

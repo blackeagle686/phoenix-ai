@@ -31,6 +31,7 @@ jobs:
         run: |
           python -m unittest \
             tests/agent/test_ci_e2e_mock_llm.py \
+            tests/agent/test_resilience_tools_telemetry_checkpoint.py \
             tests/agent/test_custom_tools_workflow.py \
             tests/agent/test_optimized_context_memory.py \
             tests/agent/test_v2_architecture_upgrade.py \
