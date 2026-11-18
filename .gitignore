@@ -54,3 +54,4 @@ smart_git.py
 target/
 **/*.rs.bk
 Cargo.lock
+tests/

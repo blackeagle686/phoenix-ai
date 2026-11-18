@@ -79,12 +79,32 @@ class Actor(BaseActor):
                 "error": str(e),
             }
 
+    def _get_registered_tool(self, tool_name: str) -> Optional[Any]:
+        if self.tool_manager:
+            if hasattr(self.tool_manager, "get_tool") and callable(self.tool_manager.get_tool):
+                return self.tool_manager.get_tool(tool_name)
+            if hasattr(self.tool_manager, "registry") and hasattr(self.tool_manager.registry, "tools"):
+                tools_map = self.tool_manager.registry.tools
+                if isinstance(tools_map, dict):
+                    return tools_map.get(tool_name)
+        return None
+
+    def _is_read_only_tool(self, tool_name: str) -> bool:
+        if tool_name in READ_ONLY_TOOLS:
+            return True
+        tool_obj = self._get_registered_tool(tool_name)
+        return bool(getattr(tool_obj, "read_only", False)) if tool_obj is not None else False
+
+    def _is_return_direct_tool(self, tool_name: str) -> bool:
+        tool_obj = self._get_registered_tool(tool_name)
+        return bool(getattr(tool_obj, "return_direct", False)) if tool_obj is not None else False
+
     def _needs_followup_action_step(self, task: Any, step_tools: List[str], is_complete: bool = False) -> bool:
         """
         Returns True if the current step only executed read/inspection tools
         and either the step was marked `is_complete=False` or the task requires modifying/writing files.
         """
-        if not step_tools or not all(t in READ_ONLY_TOOLS for t in step_tools):
+        if not step_tools or not all(self._is_read_only_tool(t) for t in step_tools):
             return False
         if not is_complete:
             return True
@@ -127,6 +147,7 @@ class Actor(BaseActor):
 
             step_results: List[Dict[str, Any]] = []
             step_tool_names: List[str] = []
+            returned_direct = False
 
             for tool_call in tool_calls:
                 t_name = tool_call.tool_name
@@ -137,11 +158,18 @@ class Actor(BaseActor):
                 all_results.append(rec)
                 if not rec.get("success", False):
                     overall_success = False
+                elif self._is_return_direct_tool(t_name):
+                    if rec.get("output") is not None:
+                        direct_responses.append(str(rec["output"]))
+                    returned_direct = True
 
-            if getattr(task_execution, "is_complete", False) or not overall_success:
+            is_step_complete = bool(getattr(task_execution, "is_complete", False)) or returned_direct
+            if is_step_complete or not overall_success:
                 break
 
-            if step_idx + 1 < max_tool_steps and self._needs_followup_action_step(task, step_tool_names):
+            if step_idx + 1 < max_tool_steps and self._needs_followup_action_step(
+                task, step_tool_names, is_complete=is_step_complete
+            ):
                 obs_str = json.dumps(step_results, indent=2, default=str)[:6000]
                 current_context = (
                     f"{current_context}\n\n"

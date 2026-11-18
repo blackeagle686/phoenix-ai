@@ -20,12 +20,43 @@ class Thinker(BaseThinker):
     def __init__(self, llm, profile=None, tool_manager=None):
         super().__init__(llm, profile=profile, tool_manager=tool_manager)
 
-    def _get_tools_list(self) -> str:
-        """Build available tools string (with parameter schemas) for prompt injection."""
-        if self.tool_manager and hasattr(self.tool_manager, "registry"):
-            tools_info = self.tool_manager.registry.get_all_tools_info()
-            return "\n\nAvailable Tools:\n" + json.dumps(tools_info, indent=2)
-        return ""
+    def _get_tools_list(self, compact_signatures: bool = False) -> str:
+        """
+        Build token-efficient available tools string for prompt injection.
+        When `compact_signatures=True` (for high-level planning), formats crisp 1-line tool signatures.
+        When `False` (for exact execution calls), emits compact min-whitespace JSON schemas.
+        """
+        tools_info = []
+        if self.tool_manager:
+            if hasattr(self.tool_manager, "get_available_tools_info"):
+                tools_info = self.tool_manager.get_available_tools_info()
+            elif hasattr(self.tool_manager, "registry") and hasattr(self.tool_manager.registry, "get_all_tools_info"):
+                tools_info = self.tool_manager.registry.get_all_tools_info()
+        elif getattr(self, "tools", None) and hasattr(self.tools, "get_all_tools_info"):
+            tools_info = self.tools.get_all_tools_info()
+
+        if not tools_info:
+            return ""
+
+        if compact_signatures:
+            lines = []
+            for t in tools_info:
+                if not isinstance(t, dict):
+                    continue
+                name = t.get("name", "")
+                desc = str(t.get("description", "")).replace("\n", " ").strip()
+                params = t.get("parameters") or {}
+                props = params.get("properties", {}) if isinstance(params, dict) else {}
+                req = set(params.get("required", []) if isinstance(params, dict) else ())
+                sig_parts = []
+                for p_name, p_meta in props.items():
+                    p_type = p_meta.get("type", "any") if isinstance(p_meta, dict) else "any"
+                    suffix = "" if p_name in req else "?"
+                    sig_parts.append(f"{p_name}{suffix}:{p_type}")
+                lines.append(f"- {name}({', '.join(sig_parts)}): {desc}")
+            return "\n\nAvailable Tools:\n" + "\n".join(lines)
+
+        return "\n\nAvailable Tools:\n" + json.dumps(tools_info, separators=(",", ":"), ensure_ascii=False)
 
     def _get_profile_string(self) -> str:
         """Get the agent profile prompt string."""
@@ -107,7 +138,7 @@ class Thinker(BaseThinker):
         task_types = [e.value for e in TaskType]
         task_priorities = [e.value for e in TaskPriority]
         task_statuses = [e.value for e in TaskStatus]
-        tools_list = self._get_tools_list()
+        tools_list = self._get_tools_list(compact_signatures=True)
 
         workspace_section = ""
         if workspace_analysis:
@@ -121,6 +152,7 @@ class Thinker(BaseThinker):
             f" - For task_type, use one of: {task_types}.\n"
             f" - For priority, use one of: {task_priorities}.\n"
             f" - For status, use one of: {task_statuses} (new tasks should be 'pending').\n"
+            " - Design tasks around the Available Tools (including any custom user-defined tools). If a specific tool matches the user's request, create a task to execute it.\n"
             " - Use `dependencies` (list of task_ids from earlier tasks in this plan) ONLY when a task strictly depends on another task finishing first. Independent tasks should have `dependencies: []` so they can run in parallel.\n"
             " - Prefer fewer, cohesive tasks over excessive micro-tasks.\n"
             " - ALL file paths must be ABSOLUTE full paths whenever possible."
@@ -142,11 +174,12 @@ class Thinker(BaseThinker):
             f"{tools_list}\n\n"
             "IMPORTANT:\n"
             "1. ALWAYS use ABSOLUTE file paths for any file_path or directory whenever possible.\n"
-            "2. When specifying tools_to_call, ONLY use the tool names and exact parameter names provided in the Available Tools list.\n"
-            "3. Use native file tools (`file_read`, `file_write`, `file_edit`, `file_update_multi`, `file_search`) for file operations rather than shell commands.\n"
-            "4. If you need to inspect a file before editing it, call `file_read` or `file_search` first.\n"
-            "5. If the task is already answered by the context/tool outputs or requires no further tool calls, leave `tools_to_call` empty, provide the answer/findings in `direct_response`, and set `is_complete: true`.\n"
-            "6. If previous attempts failed, check the context for error details and adjust your approach."
+            "2. When specifying tools_to_call, ONLY use the tool names and exact parameter names/types provided in the Available Tools list.\n"
+            "3. Always prioritize calling a specific tool from Available Tools (including custom user-created tools) when it matches the task objective.\n"
+            "4. Use native file tools (`file_read`, `file_write`, `file_edit`, `file_update_multi`, `file_search`) for file operations rather than shell commands.\n"
+            "5. If you need to inspect a file before editing it, call `file_read` or `file_search` first.\n"
+            "6. If the task is already answered by the context/tool outputs or requires no further tool calls, leave `tools_to_call` empty, provide the answer/findings in `direct_response`, and set `is_complete: true`.\n"
+            "7. If previous attempts failed, check the context for error details and adjust your approach."
         )
         system_prompt += self._get_profile_string()
 
@@ -183,7 +216,7 @@ class Thinker(BaseThinker):
         """Dynamically generate recovery tasks when a task fails or triggers a replan."""
         task_types = [e.value for e in TaskType]
         task_priorities = [e.value for e in TaskPriority]
-        tools_list = self._get_tools_list()
+        tools_list = self._get_tools_list(compact_signatures=True)
         failed_desc = getattr(failed_task, "description", str(failed_task))
 
         system_prompt = (

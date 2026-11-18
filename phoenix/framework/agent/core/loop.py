@@ -52,6 +52,7 @@ class AgentLoop:
         actor: Actor,
         reflector: Reflector,
         analyzer: Optional[Analyzer] = None,
+        memory_manager: Optional[MemoryManager] = None,
         parallel_tasks: bool = True,
         max_concurrency: int = 3,
         replan_on_failure: bool = True,
@@ -64,7 +65,7 @@ class AgentLoop:
         self.actor = actor
         self.reflector = reflector
         self.analyzer = analyzer
-        self.memory_manager = MemoryManager()
+        self.memory_manager = memory_manager if isinstance(memory_manager, MemoryManager) else MemoryManager()
         self.parallel_tasks = parallel_tasks
         self.max_concurrency = max(1, max_concurrency)
         self.replan_on_failure = replan_on_failure
@@ -261,10 +262,11 @@ class AgentLoop:
                 cell.log_error(getattr(actor_output, "error_context", "Actor execution failed") or "Actor execution failed")
 
             ref_context = active_memory.build_retry_context(task.task_id)
+            compact_target = cell.get_last_runtime_result() or result_data
             ref_input = ReflectorInputSchema(
                 reflector_type=ReflectorType.TASK,
                 target_id=task.task_id,
-                target_content=result_data,
+                target_content=compact_target,
                 context=ref_context,
             )
 
@@ -276,15 +278,6 @@ class AgentLoop:
             feedback_text = getattr(reflection, "feedback", None) or ref_dict.get("feedback")
             if feedback_text and hasattr(memory, "reflection") and hasattr(memory.reflection, "add_reflection"):
                 memory.reflection.add_reflection(f"[{task.task_id}] {feedback_text}")
-
-            if hasattr(memory, "add_interaction"):
-                self._schedule_background(
-                    memory.add_interaction(
-                        session_id,
-                        "system",
-                        f"Task {task.task_id} attempt {cell.attempts}. Success: {getattr(actor_output, 'success', False)}",
-                    )
-                )
 
             increment_iteration_fn()
 
@@ -452,9 +445,18 @@ class AgentLoop:
             except Exception:
                 pass
 
-        await self._flush_background()
         if hasattr(memory, "add_interaction"):
             await memory.add_interaction(session_id, "assistant", final_answer)
+        if hasattr(active_memory, "finalize_run"):
+            self._schedule_background(
+                active_memory.finalize_run(
+                    session_id,
+                    objective=plan.objective,
+                    final_answer=final_answer,
+                    llm=getattr(self.reflector, "llm", None),
+                )
+            )
+        await self._flush_background()
         return final_answer
 
     async def run_stream(self, prompt: str, memory: Any, session_id: str, max_iterations: int = 15):
@@ -562,10 +564,11 @@ class AgentLoop:
 
                 yield {"type": "status", "content": f"Reflecting on task {task.task_id}..."}
                 ref_context = active_memory.build_retry_context(task.task_id)
+                compact_target = cell.get_last_runtime_result() or result_data
                 ref_input = ReflectorInputSchema(
                     reflector_type=ReflectorType.TASK,
                     target_id=task.task_id,
-                    target_content=result_data,
+                    target_content=compact_target,
                     context=ref_context,
                 )
 
@@ -576,15 +579,6 @@ class AgentLoop:
                 feedback_text = getattr(reflection, "feedback", None) or ref_dict.get("feedback")
                 if feedback_text and hasattr(memory, "reflection") and hasattr(memory.reflection, "add_reflection"):
                     memory.reflection.add_reflection(f"[{task.task_id}] {feedback_text}")
-
-                if hasattr(memory, "add_interaction"):
-                    self._schedule_background(
-                        memory.add_interaction(
-                            session_id,
-                            "system",
-                            f"Task {task.task_id} attempt {cell.attempts}. Success: {getattr(actor_output, 'success', False)}",
-                        )
-                    )
 
                 iterations += 1
 
@@ -623,8 +617,17 @@ class AgentLoop:
             except Exception:
                 pass
 
-        await self._flush_background()
         if hasattr(memory, "add_interaction"):
             await memory.add_interaction(session_id, "assistant", final_answer)
+        if hasattr(active_memory, "finalize_run"):
+            self._schedule_background(
+                active_memory.finalize_run(
+                    session_id,
+                    objective=plan.objective,
+                    final_answer=final_answer,
+                    llm=getattr(self.reflector, "llm", None),
+                )
+            )
+        await self._flush_background()
         yield {"type": "status", "content": "Brain loop finished."}
         yield {"type": "chunk", "content": final_answer}

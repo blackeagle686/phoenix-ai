@@ -37,6 +37,9 @@ class Planner(BasePlanner):
                 raw_llm = getattr(actual_thinker, "llm", None)
 
         super().__init__(actual_thinker, tools=tools, memory=memory, task_store=task_store, profile=profile)
+        if actual_thinker is not None and tools is not None:
+            if getattr(actual_thinker, "tool_manager", None) is None and getattr(actual_thinker, "tools", None) is None:
+                actual_thinker.tools = tools
         self.llm = raw_llm
         self._local_plan_cache: Dict[str, Any] = {}
 

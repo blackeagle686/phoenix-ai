@@ -1,5 +1,8 @@
+import asyncio
 import inspect
-from typing import Any, Callable, Dict, Optional, get_origin, get_args, Union
+import re
+from enum import Enum
+from typing import Any, Callable, Dict, List, Optional, Type, Union, get_args, get_origin
 from pydantic import BaseModel
 
 
@@ -9,39 +12,128 @@ class ToolResult(BaseModel):
     error: Optional[str] = None
 
 
-def _python_type_to_json_type(annotation: Any) -> str:
+def _python_type_to_json_schema(annotation: Any) -> Dict[str, Any]:
     if annotation is inspect.Parameter.empty or annotation is Any:
-        return "string"
+        return {"type": "string"}
+
     origin = get_origin(annotation)
+    args = get_args(annotation)
+
+    # Handle typing.Annotated[T, "description" / FieldInfo]
+    if origin is not None and getattr(origin, "__name__", "") == "Annotated" or str(origin) == "typing.Annotated":
+        if args:
+            base_schema = _python_type_to_json_schema(args[0])
+            for meta in args[1:]:
+                if isinstance(meta, str) and "description" not in base_schema:
+                    base_schema["description"] = meta
+                elif hasattr(meta, "description") and getattr(meta, "description"):
+                    base_schema["description"] = getattr(meta, "description")
+            return base_schema
+
+    # Handle Optional / Union
     if origin is Union:
-        non_none = [a for a in get_args(annotation) if a is not type(None)]
+        non_none = [a for a in args if a is not type(None)]
         if non_none:
-            return _python_type_to_json_type(non_none[0])
+            return _python_type_to_json_schema(non_none[0])
+
+    # Handle Literal[...]
+    if getattr(origin, "__name__", "") == "Literal" or str(origin) == "typing.Literal":
+        enum_vals = list(args)
+        val_type = _python_type_to_json_schema(type(enum_vals[0]))["type"] if enum_vals else "string"
+        return {"type": val_type, "enum": enum_vals}
+
+    # Handle Enum subclasses
+    if inspect.isclass(annotation) and issubclass(annotation, Enum):
+        enum_vals = [e.value for e in annotation]
+        val_type = _python_type_to_json_schema(type(enum_vals[0]))["type"] if enum_vals else "string"
+        return {"type": val_type, "enum": enum_vals}
+
+    # Handle containers
     if origin in (list, tuple, set):
-        return "array"
+        schema: Dict[str, Any] = {"type": "array"}
+        if args:
+            schema["items"] = _python_type_to_json_schema(args[0])
+        return schema
     if origin is dict:
-        return "object"
-    if annotation in (int,):
-        return "integer"
-    if annotation in (float,):
-        return "number"
-    if annotation in (bool,):
-        return "boolean"
+        return {"type": "object"}
+
+    # Handle primitives
+    if annotation is bool:
+        return {"type": "boolean"}
+    if annotation is int:
+        return {"type": "integer"}
+    if annotation is float:
+        return {"type": "number"}
     if annotation in (list, tuple, set):
-        return "array"
-    if annotation in (dict,):
-        return "object"
-    return "string"
+        return {"type": "array"}
+    if annotation is dict:
+        return {"type": "object"}
+    if inspect.isclass(annotation) and issubclass(annotation, BaseModel):
+        if hasattr(annotation, "model_json_schema"):
+            return annotation.model_json_schema()
+        if hasattr(annotation, "schema"):
+            return annotation.schema()
+        return {"type": "object"}
+    return {"type": "string"}
 
 
-def _extract_parameters_schema(fn: Callable) -> Dict[str, Any]:
+def _python_type_to_json_type(annotation: Any) -> str:
+    return _python_type_to_json_schema(annotation).get("type", "string")
+
+
+def _parse_docstring_param_descriptions(doc: Optional[str]) -> Dict[str, str]:
+    """Extract parameter descriptions from Google, Sphinx, or NumPy style docstrings."""
+    if not doc:
+        return {}
+    descriptions: Dict[str, str] = {}
+    lines = doc.splitlines()
+    in_args_section = False
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        # Sphinx/reST style: :param name: description
+        sphinx_match = re.match(r"^:param\s+(?:\w+\s+)?(\w+):\s*(.+)$", line)
+        if sphinx_match:
+            descriptions[sphinx_match.group(1)] = sphinx_match.group(2).strip()
+            continue
+
+        if re.match(r"^(Args|Arguments|Parameters|Inputs):?$", line, re.IGNORECASE):
+            in_args_section = True
+            continue
+        if re.match(r"^(Returns|Raises|Yields|Examples|Notes):?$", line, re.IGNORECASE):
+            in_args_section = False
+            continue
+
+        if in_args_section:
+            # Google style: name (type): description OR name: description
+            arg_match = re.match(r"^(\w+)\s*(?:\([^)]*\))?\s*:\s*(.+)$", line)
+            if arg_match:
+                descriptions[arg_match.group(1)] = arg_match.group(2).strip()
+    return descriptions
+
+
+def _extract_parameters_schema(fn: Callable, args_schema: Optional[Type[BaseModel]] = None) -> Dict[str, Any]:
+    if args_schema is not None and inspect.isclass(args_schema) and issubclass(args_schema, BaseModel):
+        raw_schema = (
+            args_schema.model_json_schema()
+            if hasattr(args_schema, "model_json_schema")
+            else args_schema.schema()
+        )
+        return {
+            "type": "object",
+            "properties": raw_schema.get("properties", {}),
+            "required": raw_schema.get("required", []),
+        }
+
     try:
         sig = inspect.signature(fn)
     except (ValueError, TypeError):
         return {"type": "object", "properties": {}, "required": []}
 
+    doc_descriptions = _parse_docstring_param_descriptions(inspect.getdoc(fn))
     properties: Dict[str, Any] = {}
-    required = []
+    required: List[str] = []
 
     for param_name, param in sig.parameters.items():
         if param_name in ("self", "cls"):
@@ -49,8 +141,10 @@ def _extract_parameters_schema(fn: Callable) -> Dict[str, Any]:
         if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
             continue
 
-        json_type = _python_type_to_json_type(param.annotation)
-        prop_info: Dict[str, Any] = {"type": json_type}
+        prop_info = dict(_python_type_to_json_schema(param.annotation))
+        if param_name in doc_descriptions and "description" not in prop_info:
+            prop_info["description"] = doc_descriptions[param_name]
+
         if param.default is not inspect.Parameter.empty:
             if param.default is not None:
                 prop_info["default"] = param.default
@@ -65,53 +159,366 @@ def _extract_parameters_schema(fn: Callable) -> Dict[str, Any]:
     }
 
 
-class BaseTool:
-    name: str
-    description: str
+def _coerce_value(value: Any, annotation: Any) -> Any:
+    """Lightweight safe type coercion for LLM tool call arguments."""
+    if value is None or annotation is inspect.Parameter.empty or annotation is Any:
+        return value
 
-    async def execute(self, **kwargs) -> ToolResult:
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+
+    if origin is not None and (getattr(origin, "__name__", "") == "Annotated" or str(origin) == "typing.Annotated"):
+        if args:
+            return _coerce_value(value, args[0])
+
+    if origin is Union:
+        non_none = [a for a in args if a is not type(None)]
+        if len(non_none) == 1:
+            return _coerce_value(value, non_none[0])
+        return value
+
+    try:
+        if annotation is int and isinstance(value, str) and value.strip().lstrip("-").isdigit():
+            return int(value.strip())
+        if annotation is float and isinstance(value, (str, int)) and not isinstance(value, bool):
+            return float(value)
+        if annotation is bool and isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in ("true", "1", "yes"):
+                return True
+            if lowered in ("false", "0", "no"):
+                return False
+        if inspect.isclass(annotation) and issubclass(annotation, BaseModel) and isinstance(value, dict):
+            return annotation.model_validate(value) if hasattr(annotation, "model_validate") else annotation(**value)
+    except Exception:
+        return value
+    return value
+
+
+def _prepare_call_kwargs(
+    fn: Callable,
+    raw_kwargs: Dict[str, Any],
+    args_schema: Optional[Type[BaseModel]] = None,
+) -> Dict[str, Any]:
+    """Validate and bind kwargs to a callable's signature, filtering unexpected keys when **kwargs is absent."""
+    kwargs = dict(raw_kwargs or {})
+
+    if args_schema is not None and inspect.isclass(args_schema) and issubclass(args_schema, BaseModel):
+        validated = (
+            args_schema.model_validate(kwargs)
+            if hasattr(args_schema, "model_validate")
+            else args_schema(**kwargs)
+        )
+        kwargs = (
+            validated.model_dump()
+            if hasattr(validated, "model_dump")
+            else validated.dict()
+        )
+
+    try:
+        sig = inspect.signature(fn)
+    except (ValueError, TypeError):
+        return kwargs
+
+    accepts_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+    bound: Dict[str, Any] = {}
+    for k, v in kwargs.items():
+        if k in sig.parameters:
+            param = sig.parameters[k]
+            bound[k] = _coerce_value(v, param.annotation)
+        elif accepts_var_kw:
+            bound[k] = v
+
+    return bound
+
+
+def _normalize_tool_output(result: Any) -> ToolResult:
+    """Normalize any return value from a custom tool into a standard ToolResult."""
+    if isinstance(result, ToolResult):
+        return result
+    if isinstance(result, dict) and "success" in result and ("output" in result or "error" in result):
+        return ToolResult(
+            success=bool(result.get("success", True)),
+            output=result.get("output"),
+            error=result.get("error"),
+        )
+    if isinstance(result, BaseModel):
+        dumped = result.model_dump() if hasattr(result, "model_dump") else result.dict()
+        return ToolResult(success=True, output=dumped)
+    return ToolResult(success=True, output=result)
+
+
+class BaseTool:
+    name: str = ""
+    description: str = ""
+    args_schema: Optional[Type[BaseModel]] = None
+    read_only: bool = False
+    return_direct: bool = False
+    runtime: Optional[Any] = None
+
+    def __init__(
+        self,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        args_schema: Optional[Type[BaseModel]] = None,
+        read_only: Optional[bool] = None,
+        return_direct: Optional[bool] = None,
+        runtime: Optional[Any] = None,
+    ):
+        if name is not None:
+            self.name = name
+        elif not getattr(self, "name", None):
+            self.name = self.__class__.__name__.lower()
+
+        if description is not None:
+            self.description = description
+        elif not getattr(self, "description", None):
+            self.description = inspect.getdoc(self) or f"Executes the {self.name} tool."
+
+        if args_schema is not None:
+            self.args_schema = args_schema
+        if read_only is not None:
+            self.read_only = read_only
+        if return_direct is not None:
+            self.return_direct = return_direct
+        if runtime is not None:
+            self.runtime = runtime
+
+    def set_runtime(self, runtime: Any) -> None:
+        self.runtime = runtime
+
+    async def execute(self, **kwargs) -> Union[ToolResult, Any]:
         raise NotImplementedError("Tool must implement execute method")
 
+    async def invoke(self, **kwargs) -> ToolResult:
+        """
+        Safe execution entry point that supports both async and sync `execute` implementations,
+        validates/coerces parameters, and normalizes any return value into `ToolResult`.
+        """
+        target_fn = getattr(self, "func", self.execute)
+        try:
+            call_kwargs = _prepare_call_kwargs(target_fn, kwargs, args_schema=getattr(self, "args_schema", None))
+            exec_method = self.execute
+            if inspect.iscoroutinefunction(exec_method):
+                raw_res = await exec_method(**call_kwargs)
+            else:
+                maybe_coro = await asyncio.to_thread(exec_method, **call_kwargs)
+                raw_res = await maybe_coro if inspect.isawaitable(maybe_coro) else maybe_coro
+            return _normalize_tool_output(raw_res)
+        except Exception as e:
+            return ToolResult(success=False, output=None, error=str(e))
+
     async def run(self, **kwargs) -> Any:
-        result = await self.execute(**kwargs)
+        result = await self.invoke(**kwargs)
         return result.output if result.success else result.error
 
     def get_parameters_schema(self) -> Dict[str, Any]:
         target_fn = getattr(self, "func", self.execute)
-        return _extract_parameters_schema(target_fn)
+        return _extract_parameters_schema(target_fn, args_schema=getattr(self, "args_schema", None))
 
     def schema(self) -> Dict[str, Any]:
         return self.to_dict()
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        info: Dict[str, Any] = {
             "name": self.name,
             "description": self.description,
             "parameters": self.get_parameters_schema(),
         }
+        if getattr(self, "read_only", False):
+            info["read_only"] = True
+        if getattr(self, "return_direct", False):
+            info["return_direct"] = True
+        return info
 
 
-def tool(name: str, description: str):
+class FunctionTool(BaseTool):
     """
-    Decorator to easily convert a python function into a BaseTool.
+    A BaseTool backed by any synchronous or asynchronous Python function.
     """
-    def decorator(func: Callable):
-        class FunctionTool(BaseTool):
-            def __init__(self):
-                self.name = name
-                self.description = description
-                self.func = func
 
-            async def execute(self, **kwargs) -> ToolResult:
-                try:
-                    if inspect.iscoroutinefunction(self.func):
-                        result = await self.func(**kwargs)
-                    else:
-                        result = self.func(**kwargs)
-                    return ToolResult(success=True, output=result)
-                except Exception as e:
-                    return ToolResult(success=False, output="", error=str(e))
+    def __init__(
+        self,
+        func: Callable,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        args_schema: Optional[Type[BaseModel]] = None,
+        read_only: bool = False,
+        return_direct: bool = False,
+        runtime: Optional[Any] = None,
+    ):
+        resolved_name = (name or getattr(func, "__name__", "custom_tool")).strip()
+        resolved_desc = (
+            description
+            or inspect.getdoc(func)
+            or f"Custom tool '{resolved_name}'."
+        ).strip()
+        super().__init__(
+            name=resolved_name,
+            description=resolved_desc,
+            args_schema=args_schema,
+            read_only=read_only,
+            return_direct=return_direct,
+            runtime=runtime,
+        )
+        self.func = func
 
-        return FunctionTool()
+    @classmethod
+    def from_function(
+        cls,
+        func: Callable,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        args_schema: Optional[Type[BaseModel]] = None,
+        read_only: bool = False,
+        return_direct: bool = False,
+        runtime: Optional[Any] = None,
+    ) -> "FunctionTool":
+        return cls(
+            func=func,
+            name=name,
+            description=description,
+            args_schema=args_schema,
+            read_only=read_only,
+            return_direct=return_direct,
+            runtime=runtime,
+        )
+
+    async def execute(self, **kwargs) -> ToolResult:
+        try:
+            call_kwargs = _prepare_call_kwargs(self.func, kwargs, args_schema=self.args_schema)
+            if inspect.iscoroutinefunction(self.func):
+                result = await self.func(**call_kwargs)
+            else:
+                maybe_coro = await asyncio.to_thread(self.func, **call_kwargs)
+                result = await maybe_coro if inspect.isawaitable(maybe_coro) else maybe_coro
+            return _normalize_tool_output(result)
+        except Exception as e:
+            return ToolResult(success=False, output="", error=str(e))
+
+    def __call__(self, *args, **kwargs):
+        """Allow the decorated function to still be called directly in Python."""
+        return self.func(*args, **kwargs)
+
+
+CustomTool = FunctionTool
+
+
+def tool(
+    name_or_func: Optional[Union[str, Callable]] = None,
+    description: Optional[str] = None,
+    *,
+    name: Optional[str] = None,
+    args_schema: Optional[Type[BaseModel]] = None,
+    read_only: bool = False,
+    return_direct: bool = False,
+):
+    """
+    Flexible decorator to convert any sync or async Python function into a BaseTool.
+
+    Supported usages:
+      1. @tool("say_hello", "Greets a user by name")
+      2. @tool("say_hello")  # description inferred from docstring
+      3. @tool               # name & description inferred from function name and docstring
+      4. @tool(name="say_hello", description="...", args_schema=..., read_only=True)
+    """
+    # Case 3: @tool without parentheses
+    if callable(name_or_func):
+        fn = name_or_func
+        return FunctionTool(
+            func=fn,
+            name=name,
+            description=description,
+            args_schema=args_schema,
+            read_only=read_only,
+            return_direct=return_direct,
+        )
+
+    resolved_name = name or (name_or_func if isinstance(name_or_func, str) else None)
+
+    def decorator(func: Callable) -> FunctionTool:
+        return FunctionTool(
+            func=func,
+            name=resolved_name,
+            description=description,
+            args_schema=args_schema,
+            read_only=read_only,
+            return_direct=return_direct,
+        )
 
     return decorator
+
+
+def create_tool(
+    func: Callable,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    args_schema: Optional[Type[BaseModel]] = None,
+    read_only: bool = False,
+    return_direct: bool = False,
+) -> FunctionTool:
+    """Create a BaseTool programmatically from any sync or async callable."""
+    return FunctionTool(
+        func=func,
+        name=name,
+        description=description,
+        args_schema=args_schema,
+        read_only=read_only,
+        return_direct=return_direct,
+    )
+
+
+def ensure_tool(
+    item: Any,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    **kwargs: Any,
+) -> BaseTool:
+    """
+    Normalize any user-provided tool specification into a `BaseTool` instance.
+    Accepts:
+      - A `BaseTool` instance
+      - A `BaseTool` subclass (auto-instantiated)
+      - A plain Python function / callable (sync or async)
+      - A dict with `{"func": callable, "name": "...", "description": "..."}`
+    """
+    if isinstance(item, BaseTool):
+        if name:
+            item.name = name
+        if description:
+            item.description = description
+        return item
+
+    if inspect.isclass(item) and issubclass(item, BaseTool):
+        inst = item()
+        if name:
+            inst.name = name
+        if description:
+            inst.description = description
+        return inst
+
+    if isinstance(item, dict) and callable(item.get("func")):
+        return FunctionTool(
+            func=item["func"],
+            name=name or item.get("name"),
+            description=description or item.get("description"),
+            args_schema=kwargs.get("args_schema") or item.get("args_schema"),
+            read_only=bool(kwargs.get("read_only", item.get("read_only", False))),
+            return_direct=bool(kwargs.get("return_direct", item.get("return_direct", False))),
+        )
+
+    if callable(item):
+        return FunctionTool(
+            func=item,
+            name=name,
+            description=description,
+            args_schema=kwargs.get("args_schema"),
+            read_only=bool(kwargs.get("read_only", False)),
+            return_direct=bool(kwargs.get("return_direct", False)),
+        )
+
+    raise TypeError(
+        f"Cannot convert {type(item).__name__} to BaseTool. "
+        "Provide a BaseTool instance/subclass, a @tool function, a Python callable, or a tool dict."
+    )
+

@@ -1,9 +1,10 @@
 import uuid
 import inspect
-from typing import Any, Callable, Dict, Optional, Type, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
 from phoenix.services.llm.openai import OpenAILLM
 from phoenix.framework.agent.memory.manager import MemoryManager
 from phoenix.framework.agent.memory.adapter import InteractiveMemoryAdapter
+from phoenix.framework.agent.tools.base import BaseTool, create_tool
 from phoenix.framework.agent.tools.registry import ToolRegistry
 from phoenix.framework.agent.cognition.thinker import Thinker
 from phoenix.framework.agent.cognition.planner import Planner
@@ -23,6 +24,8 @@ class Agent:
         llm=None,
         memory=None,
         tools=None,
+        custom_tools: Optional[Iterable[Any]] = None,
+        include_default_tools: bool = False,
         thinker=None,
         planner=None,
         analyzer=None,
@@ -38,27 +41,58 @@ class Agent:
         self.llm = llm if llm is not None else OpenAILLM()
         self.memory = self._prepare_memory(memory)
         self.runtime = runtime if runtime is not None else RestrictedPythonRuntime()
+        self.profile = self._prepare_profile(profile)
 
-        # Support passing a list of tools directly or a ToolRegistry
-        if isinstance(tools, list):
-            registry = ToolRegistry()
+        # Support passing a list/iterable of tools/functions, a single BaseTool/function, or a ToolRegistry
+        if isinstance(tools, (list, tuple, set)):
+            registry = (
+                ToolRegistry.load_default(runtime=self.runtime)
+                if include_default_tools
+                else ToolRegistry(runtime=self.runtime)
+            )
             for t in tools:
-                if getattr(t, "runtime", None) is None and hasattr(t, "set_runtime"):
-                    t.set_runtime(self.runtime)
-                registry.register(t)
+                registered = registry.register(t)
+                self._allow_tool_in_profile(registered.name)
+            if custom_tools:
+                for t in custom_tools:
+                    registered = registry.register(t)
+                    self._allow_tool_in_profile(registered.name)
             self.tools = registry
         elif tools is None:
             self.tools = ToolRegistry.load_default(runtime=self.runtime)
+            if custom_tools:
+                for t in custom_tools:
+                    registered = self.tools.register(t)
+                    self._allow_tool_in_profile(registered.name)
+        elif (
+            isinstance(tools, BaseTool)
+            or inspect.isfunction(tools)
+            or (inspect.isclass(tools) and issubclass(tools, BaseTool))
+        ):
+            registry = (
+                ToolRegistry.load_default(runtime=self.runtime)
+                if include_default_tools
+                else ToolRegistry(runtime=self.runtime)
+            )
+            registered = registry.register(tools)
+            self._allow_tool_in_profile(registered.name)
+            if custom_tools:
+                for t in custom_tools:
+                    reg_custom = registry.register(t)
+                    self._allow_tool_in_profile(reg_custom.name)
+            self.tools = registry
         else:
             self.tools = tools
             if isinstance(self.tools, ToolRegistry):
                 self.tools.set_runtime(self.runtime)
+                if custom_tools:
+                    for t in custom_tools:
+                        registered = self.tools.register(t)
+                        self._allow_tool_in_profile(registered.name)
 
         self._factories = component_factories or {}
         self._dynamic_components: Dict[str, Any] = {}
         self.loop_cls = loop_cls or AgentLoop
-
-        self.profile = self._prepare_profile(profile)
 
         # Setup framework with explicit override -> factory -> default precedence
         self.tool_manager = tool_manager or self._build_component("tool_manager")
@@ -187,11 +221,81 @@ class Agent:
         loop_kwargs.update(self._dynamic_components)
         return self._call_with_supported_kwargs(self.loop_cls, loop_kwargs)
 
-    def register_tool(self, tool):
-        """Helper to register a new tool to the agent's ToolRegistry."""
-        if getattr(tool, "runtime", None) is None and hasattr(tool, "set_runtime"):
-            tool.set_runtime(self.runtime)
-        self.tools.register(tool)
+    def _allow_tool_in_profile(self, tool_name: str) -> None:
+        if self.profile and getattr(self.profile, "tool_access", None):
+            if "*" not in self.profile.tool_access and tool_name not in self.profile.tool_access:
+                self.profile.tool_access.append(tool_name)
+
+    def register_tool(
+        self,
+        tool_or_func: Any,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        allow_in_profile: bool = True,
+        **kwargs: Any,
+    ) -> BaseTool:
+        """
+        Register a new custom tool (BaseTool instance/subclass, @tool function, or plain Python function)
+        into the agent's ToolRegistry and ensure the agent can execute it.
+        """
+        registered = self.tools.register(tool_or_func, name=name, description=description, **kwargs)
+        if isinstance(registered, BaseTool) and getattr(registered, "runtime", None) is None:
+            registered.set_runtime(self.runtime)
+        if allow_in_profile and hasattr(registered, "name"):
+            self._allow_tool_in_profile(registered.name)
+        return registered
+
+    def register_tools(self, tools: Iterable[Any], allow_in_profile: bool = True) -> List[BaseTool]:
+        """Register multiple custom tools or functions at once."""
+        return [self.register_tool(t, allow_in_profile=allow_in_profile) for t in tools]
+
+    def unregister_tool(self, name: str) -> bool:
+        """Remove a tool by name from the agent's ToolRegistry."""
+        if hasattr(self.tools, "unregister"):
+            return self.tools.unregister(name)
+        return False
+
+    def get_tools_info(self) -> List[Dict[str, Any]]:
+        """Return parameter schemas and descriptions for all tools available to this agent."""
+        if self.tool_manager and hasattr(self.tool_manager, "get_available_tools_info"):
+            return self.tool_manager.get_available_tools_info()
+        if hasattr(self.tools, "get_all_tools_info"):
+            return self.tools.get_all_tools_info()
+        return []
+
+    def tool(
+        self,
+        name_or_func: Optional[Union[str, Callable]] = None,
+        description: Optional[str] = None,
+        *,
+        name: Optional[str] = None,
+        allow_in_profile: bool = True,
+        **kwargs: Any,
+    ):
+        """
+        Decorator to define and immediately register a custom tool on this Agent instance.
+
+        Usage:
+            @agent.tool
+            def my_tool(x: int) -> int:
+                '''Doubles x.'''
+                return x * 2
+
+            @agent.tool("my_tool", "Doubles x")
+            def my_tool(x: int) -> int:
+                return x * 2
+        """
+        if callable(name_or_func):
+            t_obj = create_tool(name_or_func, name=name, description=description, **kwargs)
+            return self.register_tool(t_obj, allow_in_profile=allow_in_profile)
+
+        resolved_name = name or (name_or_func if isinstance(name_or_func, str) else None)
+
+        def decorator(func: Callable) -> BaseTool:
+            t_obj = create_tool(func, name=resolved_name, description=description, **kwargs)
+            return self.register_tool(t_obj, allow_in_profile=allow_in_profile)
+
+        return decorator
 
     def set_component(self, name: str, component: Any, rebuild_loop: bool = True):
         """
@@ -229,6 +333,22 @@ class Agent:
             loop_pipeline_path=loop_pipeline_path,
         )
 
+    def _build_auto_classification_prompt(self, prompt: str) -> str:
+        tools_summary = ""
+        tools_info = self.get_tools_info()
+        if tools_info:
+            lines = [f"- {t.get('name')}: {t.get('description', '')}" for t in tools_info if isinstance(t, dict)]
+            if lines:
+                tools_summary = "\nAvailable Tools:\n" + "\n".join(lines) + "\n"
+        return (
+            f"Analyze the following user prompt and decide if it requires using any of the Available Tools or multi-step planning "
+            f"(like calling a custom tool, writing files, searching the web, or complex logic), "
+            f"or if it is a simple question that can be answered immediately without tools.\n"
+            f"{tools_summary}\n"
+            f"Prompt: {prompt}\n\n"
+            f"Respond with exactly one word: 'PLAN' or 'FAST'."
+        )
+
     async def run(self, prompt: str, session_id: str = None, max_iterations: int = 15, mode: str = "auto") -> str:
         """
         Run the agent with the given prompt.
@@ -245,12 +365,7 @@ class Agent:
 
         actual_mode = mode
         if mode == "auto":
-            classification_prompt = (
-                f"Analyze the following user prompt and decide if it requires using tools and multi-step planning (like writing files, searching the web, or complex logic), "
-                f"or if it is a simple question that can be answered immediately.\n\n"
-                f"Prompt: {prompt}\n\n"
-                f"Respond with exactly one word: 'PLAN' or 'FAST'."
-            )
+            classification_prompt = self._build_auto_classification_prompt(prompt)
             classification = await self.llm.generate(classification_prompt, session_id=None, max_tokens=10)
             if "PLAN" in str(classification).upper():
                 actual_mode = "plan"
@@ -281,12 +396,7 @@ class Agent:
 
         actual_mode = mode
         if mode == "auto":
-            classification_prompt = (
-                f"Analyze the following user prompt and decide if it requires using tools and multi-step planning (like writing files, searching the web, or complex logic), "
-                f"or if it is a simple question that can be answered immediately.\n\n"
-                f"Prompt: {prompt}\n\n"
-                f"Respond with exactly one word: 'PLAN' or 'FAST'."
-            )
+            classification_prompt = self._build_auto_classification_prompt(prompt)
             classification = await self.llm.generate(classification_prompt, session_id=None, max_tokens=10)
             actual_mode = "plan" if "PLAN" in str(classification).upper() else "fast_ans"
 

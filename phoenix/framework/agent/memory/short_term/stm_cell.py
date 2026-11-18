@@ -12,5 +12,6 @@ class ShortMemoryCell:
     role: str = "user"
     step: int = 0
     relevance_score: float = 1.0
+    pinned: bool = False
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     metadata: Dict[str, Any] = field(default_factory=dict)
