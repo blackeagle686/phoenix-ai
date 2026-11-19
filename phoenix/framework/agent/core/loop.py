@@ -599,6 +599,7 @@ class AgentLoop:
 
         observations: List[str] = []
         final_answer = ""
+        executed_signatures: set = set()
 
         await tracer.emit_event("react_start", {"session_id": session_id, "prompt": prompt[:120]})
 
@@ -608,8 +609,11 @@ class AgentLoop:
             if base_context:
                 ctx_parts.append(base_context)
             if observations:
-                ctx_parts.append("TOOL OBSERVATIONS SO FAR:\n" + "\n".join(observations[-6:]))
-                ctx_parts.append("If these observations fully answer the user request, reply directly with `direct_response` and empty `tools_to_call`.")
+                ctx_parts.append("TOOL OBSERVATIONS SO FAR:\n" + "\n".join(observations[-8:]))
+                ctx_parts.append(
+                    "IMPORTANT: Do NOT repeat tool calls you already ran above. "
+                    "If you have all needed results (including any rejections/errors), reply NOW with `direct_response` and empty `tools_to_call`."
+                )
             step_context = "\n\n".join(ctx_parts)
 
             task_exec = await self.thinker.solve_task(react_task, context=step_context)
@@ -620,6 +624,29 @@ class AgentLoop:
                 final_answer = direct_resp or (getattr(task_exec, "thought_process", "") or "").strip() or "\n".join(observations)
                 active_memory.mark_complete("react_main")
                 break
+
+            # Loop guard: if every tool call in this step was already executed with identical args, stop repeating!
+            step_sigs = [
+                (tc.tool_name, compact_value(tc.arguments or {}, max_chars=300))
+                for tc in tool_calls
+            ]
+            if step > 1 and all(sig in executed_signatures for sig in step_sigs):
+                if direct_resp:
+                    final_answer = direct_resp
+                elif hasattr(self.thinker, "synthesize_final_answer") and _is_async_callable(self.thinker.synthesize_final_answer):
+                    try:
+                        final_answer = await self.thinker.synthesize_final_answer(
+                            prompt=prompt,
+                            objective=prompt,
+                            execution_digest="\n".join(observations),
+                        )
+                    except Exception:
+                        final_answer = "\n".join(observations)
+                else:
+                    final_answer = "\n".join(observations)
+                active_memory.mark_complete("react_main")
+                break
+            executed_signatures.update(step_sigs)
 
             if self.approval_callback is not None:
                 decision = self.approval_callback(react_task, step_context)
