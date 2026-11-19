@@ -2,6 +2,7 @@ import uuid
 import inspect
 from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
 from phoenix.services.llm.openai import OpenAILLM
+from phoenix.services.llm.local import LocalLLM
 from phoenix.services.llm.router import LLMRouter
 from phoenix.services.observability.tracing import tracer
 from phoenix.framework.agent.memory.manager import MemoryManager
@@ -44,6 +45,7 @@ class Agent:
         component_factories: Optional[Dict[str, Callable[..., Any]]] = None,
         checkpoint_dir: Optional[str] = None,
         on_event: Optional[Callable[[Dict[str, Any]], Any]] = None,
+        fast_mode: Optional[bool] = None,
     ):
         self.llm = self._prepare_llm(llm, llms=llms, fallback_llm=fallback_llm, fallback_llms=fallback_llms)
         self.memory = self._prepare_memory(memory)
@@ -51,6 +53,7 @@ class Agent:
         self.profile = self._prepare_profile(profile)
         self.checkpoint_dir = checkpoint_dir
         self.on_event = on_event
+        self.fast_mode = self._is_local_llm(self.llm) if fast_mode is None else bool(fast_mode)
         self.last_run_metrics: Optional[Dict[str, Any]] = None
 
         # Support passing a list/iterable of tools/functions, a single BaseTool/function, or a ToolRegistry
@@ -144,6 +147,14 @@ class Agent:
         self.loop = loop or self._build_component("loop")
         if self.loop is None:
             self.loop = self._construct_loop()
+
+    @staticmethod
+    def _is_local_llm(llm_obj: Any) -> bool:
+        if isinstance(llm_obj, LocalLLM):
+            return True
+        if isinstance(llm_obj, LLMRouter):
+            return bool(llm_obj.providers) and all(isinstance(p, LocalLLM) for p in llm_obj.providers)
+        return False
 
     def _prepare_llm(
         self,
@@ -251,6 +262,7 @@ class Agent:
             "analyzer": self.analyzer,
             "memory_manager": self.memory if isinstance(self.memory, MemoryManager) else getattr(self.memory, "backing_memory", None),
             "checkpoint_dir": self.checkpoint_dir,
+            "fast_reflect": self.fast_mode,
         }
         loop_kwargs.update(self._dynamic_components)
         return self._call_with_supported_kwargs(self.loop_cls, loop_kwargs)
@@ -406,9 +418,14 @@ class Agent:
 
             actual_mode = mode
             if mode == "auto":
-                classification_prompt = self._build_auto_classification_prompt(prompt)
-                classification = await self.llm.generate(classification_prompt, session_id=None, max_tokens=10)
-                actual_mode = "plan" if "PLAN" in str(classification).upper() else "fast_ans"
+                if self.fast_mode:
+                    # Zero-LLM fast heuristic for Local LLM / ERP speed:
+                    # Route directly to ReAct (1-2 calls total) when tools exist, avoiding extra classifier call.
+                    actual_mode = "react" if self.get_tools_info() else "fast_ans"
+                else:
+                    classification_prompt = self._build_auto_classification_prompt(prompt)
+                    classification = await self.llm.generate(classification_prompt, session_id=None, max_tokens=10)
+                    actual_mode = "plan" if "PLAN" in str(classification).upper() else "fast_ans"
 
             if actual_mode == "fast_ans":
                 context = await self.memory.get_full_context(session_id, query=prompt)
@@ -416,6 +433,8 @@ class Agent:
                 fast_answer = await self.llm.generate(fast_prompt, session_id=None)
                 await self.memory.add_interaction(session_id, "assistant", fast_answer)
                 return fast_answer
+            if actual_mode == "react" and hasattr(self.loop, "run_react"):
+                return await self.loop.run_react(prompt, self.memory, session_id, max_iterations=max_iterations)
             return await self.loop.run(prompt, self.memory, session_id, max_iterations=max_iterations)
         except Exception:
             run_status = "error"
@@ -459,9 +478,12 @@ class Agent:
 
             actual_mode = mode
             if mode == "auto":
-                classification_prompt = self._build_auto_classification_prompt(prompt)
-                classification = await self.llm.generate(classification_prompt, session_id=None, max_tokens=10)
-                actual_mode = "plan" if "PLAN" in str(classification).upper() else "fast_ans"
+                if self.fast_mode:
+                    actual_mode = "react" if self.get_tools_info() else "fast_ans"
+                else:
+                    classification_prompt = self._build_auto_classification_prompt(prompt)
+                    classification = await self.llm.generate(classification_prompt, session_id=None, max_tokens=10)
+                    actual_mode = "plan" if "PLAN" in str(classification).upper() else "fast_ans"
 
             if actual_mode == "fast_ans":
                 context = await self.memory.get_full_context(session_id, query=prompt)
@@ -471,6 +493,11 @@ class Agent:
                 yield {"type": "status", "content": "Fast answer mode"}
                 for line in fast_answer.splitlines() or [fast_answer]:
                     yield {"type": "chunk", "content": f"{line}\n"}
+                return
+
+            if actual_mode == "react" and hasattr(self.loop, "run_react_stream"):
+                async for event in self.loop.run_react_stream(prompt, self.memory, session_id, max_iterations=max_iterations):
+                    yield event
                 return
 
             if hasattr(self.loop, "run_stream"):

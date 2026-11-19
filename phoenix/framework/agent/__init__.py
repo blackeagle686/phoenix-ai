@@ -1,6 +1,7 @@
 from .core.agent import Agent
 from .tools.base import BaseTool, ToolResult, FunctionTool, CustomTool, tool, create_tool, ensure_tool
 from .tools.registry import ToolRegistry
+from phoenix.services.llm.local import LocalLLM
 from phoenix.services.llm.router import LLMRouter, MultiLLM, FallbackLLM
 
 __all__ = [
@@ -13,6 +14,7 @@ __all__ = [
     "create_tool",
     "ensure_tool",
     "ToolRegistry",
+    "LocalLLM",
     "LLMRouter",
     "MultiLLM",
     "FallbackLLM",

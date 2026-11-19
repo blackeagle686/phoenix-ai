@@ -13,9 +13,13 @@ from phoenix.framework.agent.cognition.actor import Actor
 from phoenix.framework.agent.cognition.pipeline import BrainRegistry, CognitionPipeline
 from phoenix.framework.agent.cognition.schema import (
     PlanSchema,
+    ReflectionSchema,
     ReflectorInputSchema,
     ReflectorType,
+    TaskSchema,
+    TaskStatus,
 )
+from phoenix.framework.agent.memory.budget import compact_value
 from phoenix.framework.agent.memory.manager import MemoryManager
 
 
@@ -63,6 +67,7 @@ class AgentLoop:
         enable_workspace_analysis: bool = False,
         approval_callback: Optional[Callable[..., Any]] = None,
         checkpoint_dir: Optional[str] = None,
+        fast_reflect: bool = False,
     ):
         self.thinker = thinker
         self.planner = planner
@@ -77,6 +82,7 @@ class AgentLoop:
         self.enable_workspace_analysis = enable_workspace_analysis
         self.approval_callback = approval_callback
         self.checkpoint_dir = checkpoint_dir
+        self.fast_reflect = fast_reflect
         self._bootstrap_pipeline: Optional[CognitionPipeline] = None
         self._background_tasks = set()
 
@@ -281,16 +287,33 @@ class AgentLoop:
             if hasattr(actor_output, "success") and not actor_output.success:
                 cell.log_error(getattr(actor_output, "error_context", "Actor execution failed") or "Actor execution failed")
 
-            ref_context = active_memory.build_retry_context(task.task_id)
-            compact_target = cell.get_last_runtime_result() or result_data
-            ref_input = ReflectorInputSchema(
-                reflector_type=ReflectorType.TASK,
-                target_id=task.task_id,
-                target_content=compact_target,
-                context=ref_context,
+            can_fast_reflect = (
+                self.fast_reflect
+                and bool(getattr(actor_output, "success", False))
+                and not cell.get_failed_tools()
+                and not cell.get_failed_io_ops()
+                and (bool(cell.get_successful_tools()) or bool(cell.get_direct_findings()))
             )
 
-            reflection = await self.reflector.reflect(ref_input)
+            if can_fast_reflect:
+                reflection = ReflectionSchema(
+                    status=TaskStatus.DONE,
+                    feedback=f"Task {task.task_id} succeeded cleanly (fast-reflect).",
+                    rating=9,
+                    is_task_complete=True,
+                    summary=cell.get_outcome_summary(200),
+                )
+            else:
+                ref_context = active_memory.build_retry_context(task.task_id)
+                compact_target = cell.get_last_runtime_result() or result_data
+                ref_input = ReflectorInputSchema(
+                    reflector_type=ReflectorType.TASK,
+                    target_id=task.task_id,
+                    target_content=compact_target,
+                    context=ref_context,
+                )
+                reflection = await self.reflector.reflect(ref_input)
+
             last_reflection = reflection
             ref_dict = _model_to_dict(reflection, fallback_key="feedback")
             cell.add_reflection(ref_dict)
@@ -303,7 +326,7 @@ class AgentLoop:
 
             if getattr(reflection, "is_task_complete", False):
                 task_complete = True
-                task.status = "done"
+                task.status = TaskStatus.DONE
                 active_memory.mark_complete(task.task_id)
                 rating = getattr(reflection, "rating", 8)
                 return True, f"Task {task.task_id} completed. Rating: {rating}/10.\n", reflection
@@ -488,7 +511,7 @@ class AgentLoop:
                     dependencies=getattr(task, "dependencies", []),
                 )
             elif task.task_id in active_memory.completed_tasks:
-                task.status = "done"
+                task.status = TaskStatus.DONE
 
         prompt = str(payload.get("prompt") or plan.objective)
         return await self._run_plan_dag_execution(
@@ -545,6 +568,125 @@ class AgentLoop:
             session_id=session_id,
             max_iterations=max_iterations,
         )
+
+    async def run_react(
+        self,
+        prompt: str,
+        memory: Any,
+        session_id: str,
+        max_iterations: int = 6,
+    ) -> str:
+        """
+        Ultra-fast direct ReAct loop (Think/Tool -> Observe -> Final Answer).
+        Designed for Local LLMs and ERP tool queries: typically completes in 1-2 LLM calls
+        instead of Plan -> Solve -> Reflect -> Synthesize (5-7 calls).
+        """
+        active_memory = self._resolve_memory_manager(memory)
+        base_context = ""
+        if hasattr(memory, "get_full_context"):
+            res = memory.get_full_context(session_id, query=prompt)
+            base_context = await res if inspect.isawaitable(res) else str(res or "")
+
+        active_memory.set_session(session_id, prompt)
+        react_task = TaskSchema(task_id="react_main", description=prompt)
+        cell = active_memory.create_cell(task_id="react_main", description=prompt)
+
+        observations: List[str] = []
+        final_answer = ""
+
+        await tracer.emit_event("react_start", {"session_id": session_id, "prompt": prompt[:120]})
+
+        for step in range(1, max(1, max_iterations) + 1):
+            cell.increment_attempt()
+            ctx_parts = []
+            if base_context:
+                ctx_parts.append(base_context)
+            if observations:
+                ctx_parts.append("TOOL OBSERVATIONS SO FAR:\n" + "\n".join(observations[-6:]))
+                ctx_parts.append("If these observations fully answer the user request, reply directly with `direct_response` and empty `tools_to_call`.")
+            step_context = "\n\n".join(ctx_parts)
+
+            task_exec = await self.thinker.solve_task(react_task, context=step_context)
+            tool_calls = getattr(task_exec, "tools_to_call", None) or []
+            direct_resp = (getattr(task_exec, "direct_response", None) or "").strip()
+
+            if not tool_calls:
+                final_answer = direct_resp or (getattr(task_exec, "thought_process", "") or "").strip() or "\n".join(observations)
+                active_memory.mark_complete("react_main")
+                break
+
+            if self.approval_callback is not None:
+                decision = self.approval_callback(react_task, step_context)
+                if inspect.isawaitable(decision):
+                    decision = await decision
+                if decision in ("reject", False):
+                    final_answer = "Execution stopped due to human rejection."
+                    break
+                if decision == "skip":
+                    final_answer = "Task skipped by human."
+                    break
+
+            step_returned_direct = False
+            for tc in tool_calls:
+                t_name = tc.tool_name
+                t_args = tc.arguments or {}
+                await tracer.emit_event("tool_call", {"step": step, "tool": t_name})
+                rec = await self.actor._invoke_tool(t_name, t_args)
+                cell.add_tool_record(
+                    tool_name=t_name,
+                    arguments=t_args,
+                    success=rec.get("success", False),
+                    output=rec.get("output"),
+                    error=rec.get("error"),
+                )
+                status = "OK" if rec.get("success") else "FAIL"
+                payload_txt = compact_value(rec.get("output") if rec.get("success") else rec.get("error"), max_chars=900)
+                observations.append(f"[Step {step} | {t_name} | {status}]: {payload_txt}")
+
+                if rec.get("success") and self.actor._is_return_direct_tool(t_name):
+                    final_answer = str(rec.get("output") or "")
+                    step_returned_direct = True
+                    active_memory.mark_complete("react_main")
+                    break
+
+            if step_returned_direct:
+                break
+            if getattr(task_exec, "is_complete", False) and direct_resp:
+                final_answer = direct_resp
+                active_memory.mark_complete("react_main")
+                break
+
+        if not final_answer:
+            final_answer = "\n".join(observations) if observations else "No result produced."
+
+        if hasattr(memory, "add_interaction"):
+            await memory.add_interaction(session_id, "assistant", final_answer)
+        if hasattr(active_memory, "finalize_run"):
+            self._schedule_background(
+                active_memory.finalize_run(
+                    session_id,
+                    objective=prompt,
+                    final_answer=final_answer,
+                    llm=getattr(self.reflector, "llm", None),
+                )
+            )
+        await self._flush_background()
+        await tracer.emit_event("complete", {"session_id": session_id, "mode": "react"})
+        return final_answer
+
+    async def run_react_stream(
+        self,
+        prompt: str,
+        memory: Any,
+        session_id: str,
+        max_iterations: int = 6,
+    ):
+        """Streaming wrapper around the fast ReAct loop."""
+        yield {"type": "status", "content": "Fast ReAct mode..."}
+        final = await self.run_react(prompt, memory, session_id, max_iterations=max_iterations)
+        yield {"type": "status", "content": "ReAct loop finished."}
+        for line in final.splitlines() or [final]:
+            yield {"type": "chunk", "content": f"{line}\n"}
 
     async def run_stream(self, prompt: str, memory: Any, session_id: str, max_iterations: int = 15):
         """Streaming version of the brain loop with unified memory graph."""

@@ -65,7 +65,7 @@ EXTRAS["full"] = list(set(dep for deps in EXTRAS.values() for dep in deps))
 
 setup(
     name="phx-ashborn",
-    version="1.1.0",
+    version="1.2.0",
     packages=find_packages(),
     install_requires=[
         "python-dotenv>=1.0.0",

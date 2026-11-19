@@ -184,7 +184,7 @@ class Telemetry:
             metadata["error"] = error
 
         run = _ACTIVE_RUN_METRICS.get()
-        if run is not None and span["name"].startswith(("OpenAILLM.", "BaseLLM.", "LLMRouter.")):
+        if run is not None and span["name"].startswith(("OpenAILLM.", "LocalLLM.", "BaseLLM.", "LLMRouter.")):
             if status == "success":
                 run.add_llm_usage(model=metadata.get("model"), usage=usage)
 
