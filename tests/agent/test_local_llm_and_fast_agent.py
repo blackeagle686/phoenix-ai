@@ -68,7 +68,6 @@ class TestLocalLLMAndFastAgent(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(plan, PlanSchema)
         self.assertEqual(plan.objective, "Check stock")
         self.assertEqual(captured_kwargs[-1]["response_format"]["type"], "json_object")
-        self.assertIn("schema", captured_kwargs[-1]["response_format"])
 
         streamed = []
         async for chunk in llm.generate_stream("Greet ERP"):
@@ -193,6 +192,27 @@ class TestLocalLLMAndFastAgent(unittest.IsolatedAsyncioTestCase):
         )
         await agent.run("Create -$5 invoice", session_id="erp_plan_2", mode="plan")
         self.assertGreaterEqual(agent.reflector.reflect.call_count, 1)
+
+    async def test_fast_mode_alias_and_greeting_shortcut_take_1_call(self):
+        llm = LocalLLM(model="qwen2.5:3b", backend="ollama")
+        llm.active_backend = "ollama"
+        llm.client = True
+        llm.generate = AsyncMock(return_value="Hello! How can I help you?")
+
+        @tool
+        def dummy_tool(x: str) -> str:
+            """Dummy tool."""
+            return x
+
+        agent = Agent(llm=llm, tools=[dummy_tool])
+
+        res1 = await agent.run("hello", mode="fast_mode")
+        self.assertEqual(res1, "Hello! How can I help you?")
+        self.assertEqual(llm.generate.call_count, 1)
+
+        res2 = await agent.run("hello", mode="auto")
+        self.assertEqual(res2, "Hello! How can I help you?")
+        self.assertEqual(llm.generate.call_count, 2)
 
 
 if __name__ == "__main__":

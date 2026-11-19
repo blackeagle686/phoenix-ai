@@ -379,6 +379,28 @@ class Agent:
             loop_pipeline_path=loop_pipeline_path,
         )
 
+    @staticmethod
+    def _normalize_mode(mode: Optional[str]) -> str:
+        raw = str(mode or "auto").strip().lower()
+        fast_aliases = {"fast_ans", "fast_mode", "fast", "direct", "chat"}
+        if raw in fast_aliases:
+            return "fast_ans"
+        if raw in ("auto", "plan", "react"):
+            return raw
+        raise ValueError(f"Invalid agent mode '{mode}'. Supported modes: 'auto', 'fast_ans', 'react', 'plan'.")
+
+    @staticmethod
+    def _looks_like_casual_greeting(prompt: str) -> bool:
+        cleaned = " ".join(str(prompt or "").strip().lower().split()).strip("!?.,")
+        if len(cleaned) > 40 or any(ch.isdigit() for ch in cleaned):
+            return False
+        greetings = {
+            "hi", "hello", "hey", "yo", "hola", "good morning", "good evening",
+            "how are you", "who are you", "thanks", "thank you", "ok", "okay",
+            "اهلا", "مرحبا", "السلام عليكم", "ازيك", "عامل ايه", "شكرا",
+        }
+        return cleaned in greetings or any(cleaned.startswith(g + " ") for g in ("hi", "hello", "hey", "اهلا"))
+
     def _build_auto_classification_prompt(self, prompt: str) -> str:
         tools_summary = ""
         tools_info = self.get_tools_info()
@@ -416,12 +438,13 @@ class Agent:
         try:
             await self.memory.add_interaction(session_id, "user", prompt)
 
-            actual_mode = mode
-            if mode == "auto":
+            actual_mode = self._normalize_mode(mode)
+            if actual_mode == "auto":
                 if self.fast_mode:
-                    # Zero-LLM fast heuristic for Local LLM / ERP speed:
-                    # Route directly to ReAct (1-2 calls total) when tools exist, avoiding extra classifier call.
-                    actual_mode = "react" if self.get_tools_info() else "fast_ans"
+                    if self._looks_like_casual_greeting(prompt) or not self.get_tools_info():
+                        actual_mode = "fast_ans"
+                    else:
+                        actual_mode = "react"
                 else:
                     classification_prompt = self._build_auto_classification_prompt(prompt)
                     classification = await self.llm.generate(classification_prompt, session_id=None, max_tokens=10)
@@ -476,10 +499,13 @@ class Agent:
         try:
             await self.memory.add_interaction(session_id, "user", prompt)
 
-            actual_mode = mode
-            if mode == "auto":
+            actual_mode = self._normalize_mode(mode)
+            if actual_mode == "auto":
                 if self.fast_mode:
-                    actual_mode = "react" if self.get_tools_info() else "fast_ans"
+                    if self._looks_like_casual_greeting(prompt) or not self.get_tools_info():
+                        actual_mode = "fast_ans"
+                    else:
+                        actual_mode = "react"
                 else:
                     classification_prompt = self._build_auto_classification_prompt(prompt)
                     classification = await self.llm.generate(classification_prompt, session_id=None, max_tokens=10)

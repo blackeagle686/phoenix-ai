@@ -238,6 +238,8 @@ class AgentLoop:
         increment_iteration_fn: Callable[[], None],
     ) -> tuple[bool, str, Optional[Any]]:
         cell = active_memory.get_cell(task.task_id)
+        if self.fast_reflect and cell.max_attempts > 2:
+            cell.max_attempts = 2
         cell.task_status = "in_progress"
         task_complete = False
         last_reflection = None
@@ -349,6 +351,8 @@ class AgentLoop:
         """Shared DAG execution, adaptive replanning, checkpointing, and answer synthesis."""
         status_log = ""
         iterations = 0
+        replan_count = 0
+        max_replans = 1 if self.fast_reflect else 3
 
         def _has_iterations_left() -> bool:
             return iterations < max_iterations
@@ -421,12 +425,14 @@ class AgentLoop:
 
                 if (
                     self.replan_on_failure
+                    and replan_count < max_replans
                     and (not completed or getattr(reflection_obj, "needs_replan", False))
                     and hasattr(self.thinker, "replan")
                     and _is_async_callable(self.thinker.replan)
                     and iterations < max_iterations
                 ):
                     try:
+                        replan_count += 1
                         recovery_plan = await self.thinker.replan(
                             objective=plan.objective,
                             completed_summary=active_memory.get_completed_summary(),
@@ -744,6 +750,8 @@ class AgentLoop:
 
         status_log = ""
         iterations = 0
+        replan_count = 0
+        max_replans = 1 if self.fast_reflect else 3
 
         for task in plan.tasks:
             if getattr(task, "status", "pending") == "done":

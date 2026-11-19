@@ -110,8 +110,19 @@ class LocalLLM(BaseLLM):
         }
 
     def _resolve_backend(self) -> str:
-        if self.backend in ("llama_cpp", "transformers", "ollama"):
-            return self.backend
+        aliases = {
+            "transformer": "transformers",
+            "transformers": "transformers",
+            "hf": "transformers",
+            "huggingface": "transformers",
+            "llama_cpp": "llama_cpp",
+            "llamacpp": "llama_cpp",
+            "llama-cpp": "llama_cpp",
+            "gguf": "llama_cpp",
+            "ollama": "ollama",
+        }
+        if self.backend in aliases:
+            return aliases[self.backend]
         if self.gguf_filename or str(self.model).lower().endswith(".gguf"):
             return "llama_cpp"
         if ":" in self.model and "/" not in self.model and not os.path.exists(self.model):
@@ -133,12 +144,25 @@ class LocalLLM(BaseLLM):
         return bool(self.model) and (self._allow_auto_load or config.LOAD_LOCAL_LLM)
 
     def _load_llama_cpp_sync(self, hw: Dict[str, Any]) -> Dict[str, Any]:
+        import llama_cpp
         from llama_cpp import Llama
+
+        actual_device = hw["device"]
+        gpu_offload_fn = getattr(llama_cpp, "llama_supports_gpu_offload", None)
+        supports_gpu = bool(gpu_offload_fn()) if callable(gpu_offload_fn) else True
+        if hw["n_gpu_layers"] != 0 and not supports_gpu:
+            actual_device = "cpu"
+            logger.warning(
+                "llama-cpp-python was compiled for CPU-only (no CUDA offload). Prompt evaluation will run on CPU. "
+                "On Colab GPU, either use a HuggingFace Transformers model (`Qwen/Qwen2.5-3B-Instruct`, backend='transformers') "
+                "with `pip install bitsandbytes accelerate`, or install a CUDA-enabled llama-cpp-python wheel."
+            )
 
         common_kwargs = {
             "n_ctx": self.n_ctx,
+            "n_batch": 512,
             "n_threads": hw["n_threads"],
-            "n_gpu_layers": hw["n_gpu_layers"],
+            "n_gpu_layers": hw["n_gpu_layers"] if supports_gpu else 0,
             "verbose": False,
         }
         if os.path.isfile(self.model):
@@ -157,7 +181,7 @@ class LocalLLM(BaseLLM):
         return {
             "type": "llama_cpp",
             "llama_model": llama,
-            "device": hw["device"],
+            "device": actual_device,
             "lock": threading.Lock(),
         }
 
@@ -171,7 +195,6 @@ class LocalLLM(BaseLLM):
                 if not torch.cuda.is_available():
                     device = "cpu"
                 else:
-                    # Verify CUDA kernel compatibility (guards against older GPUs like sm_61 on newer PyTorch)
                     _ = torch.zeros(1, device="cuda") + 1
             except Exception as cuda_err:
                 logger.warning(f"CUDA unavailable or incompatible ({cuda_err}); safely falling back to CPU.")
@@ -183,16 +206,24 @@ class LocalLLM(BaseLLM):
             except Exception:
                 pass
 
+        try:
+            import accelerate  # noqa: F401
+            has_accelerate = True
+        except ImportError:
+            has_accelerate = False
+
         load_kwargs: Dict[str, Any] = {
             "trust_remote_code": self.trust_remote_code,
-            "low_cpu_mem_usage": True,
         }
+        if has_accelerate:
+            load_kwargs["low_cpu_mem_usage"] = True
 
         quant_applied = "none"
         if device == "cuda":
             compute_dtype = torch.bfloat16 if hw["bf16_supported"] else torch.float16
             if self.quantization in ("auto", "4bit", "8bit"):
                 try:
+                    import bitsandbytes  # noqa: F401
                     from transformers import BitsAndBytesConfig
                     if self.quantization == "8bit":
                         load_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
@@ -206,7 +237,7 @@ class LocalLLM(BaseLLM):
                         )
                         quant_applied = "bnb_nf4"
                 except Exception as q_err:
-                    logger.warning(f"bitsandbytes quantization unavailable ({q_err}); using {compute_dtype}.")
+                    logger.warning(f"bitsandbytes unavailable ({q_err}); loading in {compute_dtype} (tip: `pip install bitsandbytes accelerate` for 4-bit).")
                     load_kwargs["torch_dtype"] = compute_dtype
                     quant_applied = str(compute_dtype)
             elif self.quantization == "bf16":
@@ -216,18 +247,20 @@ class LocalLLM(BaseLLM):
                 load_kwargs["torch_dtype"] = torch.float16
                 quant_applied = "fp16"
             else:
-                load_kwargs["torch_dtype"] = "auto"
-            load_kwargs["device_map"] = "auto"
+                load_kwargs["torch_dtype"] = compute_dtype
+            if has_accelerate:
+                load_kwargs["device_map"] = "auto"
             load_kwargs["attn_implementation"] = "sdpa"
         elif device == "mps":
             load_kwargs["torch_dtype"] = torch.float16
-            load_kwargs["device_map"] = "mps"
+            if has_accelerate:
+                load_kwargs["device_map"] = "mps"
             quant_applied = "fp16_mps"
         else:
-            # Optimized CPU path
-            cpu_dtype = torch.bfloat16 if self.quantization == "bf16" else torch.float32
+            # Memory-safe CPU path: NEVER load in FP32 when bfloat16 is available (cuts RAM usage by 50%!)
+            cpu_dtype = torch.bfloat16 if self.quantization in ("auto", "bf16", "4bit", "8bit") else torch.float32
             load_kwargs["torch_dtype"] = cpu_dtype
-            load_kwargs["device_map"] = None
+            quant_applied = "bf16_cpu" if cpu_dtype == torch.bfloat16 else "fp32_cpu"
 
         tokenizer = AutoTokenizer.from_pretrained(self.model, trust_remote_code=self.trust_remote_code)
         if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
@@ -235,24 +268,36 @@ class LocalLLM(BaseLLM):
 
         try:
             hf_model = AutoModelForCausalLM.from_pretrained(self.model, **load_kwargs)
-        except Exception as attn_err:
+        except Exception as load_err:
+            gc.collect()
             if "attn_implementation" in load_kwargs:
                 load_kwargs.pop("attn_implementation", None)
                 hf_model = AutoModelForCausalLM.from_pretrained(self.model, **load_kwargs)
             else:
-                raise attn_err
+                raise load_err
+
+        if device in ("cuda", "mps") and not has_accelerate and "quantization_config" not in load_kwargs:
+            hf_model = hf_model.to(device)
 
         hf_model.eval()
 
-        # Dynamic INT8 quantization for CPU linear layers (big RAM & latency reduction, zero extra deps)
-        if device == "cpu" and self.quantization in ("auto", "8bit", "4bit"):
+        # Only apply dynamic INT8 on CPU if user explicitly requested `8bit` AND there is plenty of free RAM
+        # (because quantize_dynamic temporarily duplicates linear weights in RAM during conversion).
+        ram_avail_gb = HardwareChecker.check_ram().get("available_gb", 0.0)
+        if device == "cpu" and self.quantization == "8bit" and ram_avail_gb >= 10.0:
             try:
+                hf_model = hf_model.to(torch.float32)
                 hf_model = torch.ao.quantization.quantize_dynamic(
                     hf_model, {torch.nn.Linear}, dtype=torch.qint8
                 )
+                gc.collect()
                 quant_applied = "cpu_dynamic_int8"
             except Exception as cpu_q_err:
-                logger.warning(f"CPU dynamic int8 skipped ({cpu_q_err}); running in {load_kwargs.get('torch_dtype')}.")
+                logger.warning(f"CPU dynamic int8 skipped ({cpu_q_err}); keeping {quant_applied}.")
+        elif device == "cpu" and self.quantization in ("auto", "4bit"):
+            logger.info(
+                "Running Transformers on CPU in bfloat16. For 4-bit ~2GB RAM on CPU, use a GGUF model with `backend='llama_cpp'` or `backend='ollama'`."
+            )
 
         logger.info(
             f"Loaded LocalLLM ({self.model}) on {device} via transformers [quant={quant_applied}, threads={hw['n_threads']}]"
@@ -410,7 +455,8 @@ class LocalLLM(BaseLLM):
                 "top_p": self.top_p,
             }
             if json_schema is not None:
-                kwargs["response_format"] = {"type": "json_object", "schema": json_schema}
+                # Use lightweight json_object mode in llama_cpp to avoid slow Pydantic $defs grammar compilation
+                kwargs["response_format"] = {"type": "json_object"}
 
             resp = self.llama_model.create_chat_completion(**kwargs)
             content = (resp["choices"][0]["message"].get("content") or "").strip()
