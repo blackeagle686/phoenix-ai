@@ -72,6 +72,10 @@ class IntentContract:
     target_files: List[str] = field(default_factory=list)
     requires_security: bool = False
     is_calculator_domain: bool = False
+    has_traceback: bool = False
+    traceback_error: Optional[str] = None
+    traceback_lines: List[int] = field(default_factory=list)
+    ast_node_hints: List[str] = field(default_factory=list)
     forbidden_constructs: List[str] = field(default_factory=list)
     required_ops: List[str] = field(default_factory=list)
     required_symbols: List[str] = field(default_factory=list)
@@ -229,9 +233,39 @@ class PreAnalyzer:
         requires_security = any(kw in low for kw in _SECURITY_KEYWORDS)
         is_calc = any(kw in low for kw in _CALC_ONLY_KEYWORDS)
 
+        has_traceback = bool(
+            re.search(
+                r"traceback\s*\(most recent call last\)|file\s+[\"'][^\"']+[\"'],\s+line\s+\d+|^\s*[A-Za-z_]*Error:",
+                text,
+                re.IGNORECASE | re.MULTILINE,
+            )
+        )
+        traceback_lines: List[int] = []
+        for m in re.finditer(r"\bline\s+(\d+)\b", text):
+            ln_no = int(m.group(1))
+            if ln_no not in traceback_lines:
+                traceback_lines.append(ln_no)
+        traceback_error: Optional[str] = None
+        if has_traceback:
+            for ln in reversed([x.strip() for x in text.splitlines() if x.strip()]):
+                if re.match(r"^[A-Za-z_]*(?:Error|Exception):", ln) or "Unsupported node type" in ln:
+                    traceback_error = ln[:220]
+                    break
+        ast_node_hints: List[str] = []
+        for m in re.finditer(r"ast\.([A-Za-z_][A-Za-z0-9_]*)", text):
+            hint = f"ast.{m.group(1)}"
+            if hint not in ast_node_hints and m.group(1) not in ("parse", "walk", "AST", "dump"):
+                ast_node_hints.append(hint)
+
+        # Extract requested math operations only from the user's descriptive text (never quoted traceback code)
+        ops_source = (
+            re.split(r"traceback\s*\(most recent call last\)|file\s+[\"']", text, maxsplit=1, flags=re.IGNORECASE)[0]
+            if has_traceback
+            else text
+        ).lower()
         required_ops: List[str] = []
         for op in KNOWN_MATH_OPS:
-            if re.search(rf"\b{re.escape(op)}\b", low):
+            if re.search(rf"\b{re.escape(op)}\b", ops_source):
                 required_ops.append(op)
 
         required_symbols: List[str] = []
@@ -286,6 +320,7 @@ class PreAnalyzer:
         modify_verbs = (
             "update", "fix", "edit", "modify", "make it", "secure", "harden",
             "refactor", "support", "souport", "add ", "improve", "upgrade",
+            "traceback", "exception", "valueerror", "attributeerror", "nameerror", "typeerror",
             "عدل", "صلح", "حسن", "دعم",
         )
 
@@ -295,9 +330,9 @@ class PreAnalyzer:
             if ok and os.path.isfile(abs_p):
                 existing_targets.append(tf)
 
-        if existing_targets and any(v in low for v in qa_verbs) and not any(v in low for v in modify_verbs):
+        if existing_targets and any(v in low for v in qa_verbs) and not (any(v in low for v in modify_verbs) or has_traceback):
             archetype = "code_qa"
-        elif existing_targets and (any(v in low for v in modify_verbs) or requires_security or required_ops):
+        elif existing_targets and (any(v in low for v in modify_verbs) or requires_security or required_ops or has_traceback):
             archetype = "code_modify"
         elif resolved_targets and (any(v in low for v in create_verbs) or not existing_targets):
             archetype = "code_create"
@@ -310,6 +345,10 @@ class PreAnalyzer:
             target_files=resolved_targets,
             requires_security=requires_security,
             is_calculator_domain=is_calc,
+            has_traceback=has_traceback,
+            traceback_error=traceback_error,
+            traceback_lines=traceback_lines,
+            ast_node_hints=ast_node_hints,
             forbidden_constructs=forbidden,
             required_ops=required_ops,
             required_symbols=required_symbols,

@@ -166,6 +166,14 @@ class PatchProtocol:
             lines.append(
                 "SECURITY MANDATE: NO eval(), NO exec(), NO compile(), NO __import__(), NO os/subprocess/open()."
             )
+        if c.has_traceback and c.traceback_error:
+            line_hint = f" at line(s) {c.traceback_lines}" if c.traceback_lines else ""
+            lines.append(f"REPORTED RUNTIME ERROR{line_hint}: {c.traceback_error}")
+            if any("ast.Expr" in h for h in c.ast_node_hints):
+                lines.append(
+                    "AST BUGFIX RULE: `ast.parse(expr)` returns an `ast.Module` whose `.body[0]` is `ast.Expr(value=...)`. "
+                    "Handle `isinstance(node, ast.Expr)` by returning `evaluate_node(node.value)`, AND handle `ast.Expression` (`node.body`) and `ast.Constant`!"
+                )
         if c.required_ops:
             lines.append(f"REQUIRED OPERATIONS: {', '.join(c.required_ops)}")
         if c.is_calculator_domain and c.requires_security:
@@ -193,7 +201,7 @@ class PatchProtocol:
         lines.append(
             "OUTPUT FORMAT: Return the complete updated Python file inside a single ```python ... ``` code block "
             "(or ```SEARCH / ======= / >>>>>>> REPLACE blocks for small edits). "
-            "Do NOT wrap Python code inside JSON. Preserve any existing CLI/helper API compatibility cleanly."
+            "Do NOT wrap Python code inside JSON. Preserve existing class/function names and runnable top-level test code cleanly."
         )
         return "\n\n".join(lines)
 

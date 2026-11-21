@@ -894,6 +894,7 @@ class AgentLoop:
 
             digest_lines = [
                 f"Target File(s): {', '.join(ns_res.get('target_files', []))}",
+                "On-Disk Status: ALREADY WRITTEN TO DISK by Neuro-Symbolic Engine (summarize the verified changes and actual results directly; do NOT tell the user to edit the file manually).",
                 f"Sandbox Verification Score: {score}/100 ({'PASSED' if ns_res.get('success') else 'INCOMPLETE'})",
             ]
             if func_outputs:

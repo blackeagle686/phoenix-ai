@@ -64,18 +64,50 @@ class VerificationReport:
     functional_outputs: List[str] = field(default_factory=list)
 
 
-def _prepare_module_for_sandbox(code: str, required_ops: List[str]) -> Tuple[str, List[str], List[str], Dict[str, List[str]]]:
-    """Strip `if __name__ == '__main__':` + replace blocked `input(...)` stubs, and collect callable targets."""
+def _is_ast_node_visitor(fn_node: ast.FunctionDef) -> bool:
+    """Detect methods/functions that take an ast.AST node rather than an expression string."""
+    arg_names = [a.arg.lower() for a in fn_node.args.args if a.arg != "self"]
+    if not arg_names:
+        return False
+    calls_parse = any(
+        isinstance(sub, ast.Attribute) and sub.attr == "parse"
+        for sub in ast.walk(fn_node)
+    )
+    if calls_parse:
+        return False
+    first_arg = arg_names[0]
+    fn_low = fn_node.name.lower()
+    if "node" in first_arg or "ast" in first_arg or "node" in fn_low or fn_low.startswith("visit"):
+        return True
+    # Also inspect AST attribute checks on the parameter (e.g. node.left / node.body / node.value)
+    node_attrs = {"left", "right", "operand", "value", "body", "func", "args", "op"}
+    for sub in ast.walk(fn_node):
+        if (
+            isinstance(sub, ast.Attribute)
+            and isinstance(sub.value, ast.Name)
+            and sub.value.id == fn_node.args.args[-len(arg_names)].arg
+            and sub.attr in node_attrs
+        ):
+            return True
+    return False
+
+
+def _prepare_module_for_sandbox(
+    code: str,
+    required_ops: List[str],
+) -> Tuple[str, List[str], List[str], Dict[str, List[str]], List[str], Dict[str, List[str]]]:
+    """Strip only blocking `input()` loops; separate string evaluators from AST-node visitors."""
     try:
         tree = ast.parse(code)
     except SyntaxError:
-        return code, [], [], {}
+        return code, [], [], {}, [], {}
 
     lines = code.splitlines()
-    ranges_to_clear: List[Tuple[int, int]] = []
-    discovered_funcs: List[str] = []
+    discovered_str_funcs: List[str] = []
+    discovered_node_funcs: List[str] = []
     discovered_classes: List[str] = []
-    class_methods: Dict[str, List[str]] = {}
+    class_str_methods: Dict[str, List[str]] = {}
+    class_node_methods: Dict[str, List[str]] = {}
 
     for node in tree.body:
         if isinstance(node, ast.If):
@@ -87,33 +119,47 @@ def _prepare_module_for_sandbox(code: str, required_ops: List[str]) -> Tuple[str
             ):
                 start = node.lineno - 1
                 end = getattr(node, "end_lineno", node.lineno) - 1
-                ranges_to_clear.append((start, end))
+                block_src = "\n".join(lines[start : end + 1])
+                if re.search(r"\binput\s*\(|\bwhile\s+True\b", block_src):
+                    for i in range(start, min(end + 1, len(lines))):
+                        lines[i] = "pass" if i == start else ""
+                else:
+                    # Non-interactive __main__ verification script -> run it inside the sandbox!
+                    if start < len(lines):
+                        indent = lines[start][: len(lines[start]) - len(lines[start].lstrip())]
+                        lines[start] = f"{indent}if True:"
         elif isinstance(node, ast.FunctionDef):
             if node.name not in ("main", "run_console", "cli") and node.name not in required_ops:
                 if len(node.args.args) >= 1:
-                    discovered_funcs.append(node.name)
+                    if _is_ast_node_visitor(node):
+                        discovered_node_funcs.append(node.name)
+                    else:
+                        discovered_str_funcs.append(node.name)
         elif isinstance(node, ast.ClassDef):
             discovered_classes.append(node.name)
-            methods: List[str] = []
+            s_methods: List[str] = []
+            n_methods: List[str] = []
             for item in node.body:
                 if isinstance(item, ast.FunctionDef) and not item.name.startswith("_"):
                     if len(item.args.args) >= 2:  # self + at least 1 argument
-                        methods.append(item.name)
-            if methods:
-                class_methods[node.name] = methods
-
-    for start, end in ranges_to_clear:
-        for i in range(start, min(end + 1, len(lines))):
-            lines[i] = "pass" if i == start else ""
+                        if _is_ast_node_visitor(item):
+                            n_methods.append(item.name)
+                        else:
+                            s_methods.append(item.name)
+            if s_methods:
+                class_str_methods[node.name] = s_methods
+            if n_methods:
+                class_node_methods[node.name] = n_methods
 
     cleaned = "\n".join(lines)
     cleaned = re.sub(r"\binput\s*\([^()\r\n]*\)", "'0'", cleaned)
 
-    ordered_funcs: List[str] = []
-    for name in list(_PREFERRED_EVAL_NAMES) + discovered_funcs:
-        if name not in ordered_funcs:
-            ordered_funcs.append(name)
-    return cleaned, ordered_funcs, discovered_classes, class_methods
+    ordered_str_funcs: List[str] = []
+    for name in list(_PREFERRED_EVAL_NAMES) + discovered_str_funcs:
+        if name not in discovered_node_funcs and name not in ordered_str_funcs:
+            ordered_str_funcs.append(name)
+
+    return cleaned, ordered_str_funcs, discovered_classes, class_str_methods, discovered_node_funcs, class_node_methods
 
 
 def _build_sandbox_harness(
@@ -121,49 +167,61 @@ def _build_sandbox_harness(
     required_ops: List[str],
     requires_security: bool,
     is_calculator: bool,
+    ast_node_hints: Optional[List[str]] = None,
 ) -> str:
     """Build an isolated Python test harness compatible with RestrictedPythonRuntime AST constraints."""
-    safe_module_code, candidate_funcs, candidate_classes, class_methods = _prepare_module_for_sandbox(
-        module_code, required_ops
-    )
+    (
+        safe_module_code,
+        candidate_funcs,
+        candidate_classes,
+        class_str_methods,
+        node_funcs,
+        class_node_methods,
+    ) = _prepare_module_for_sandbox(module_code, required_ops)
 
     # Generate NameError-safe namespace binding without restricted `globals()`/`vars()`/`dir()`/`hasattr()`
     capture_lines: List[str] = ["    _ns = {}"]
-    names_to_capture = list(dict.fromkeys(candidate_funcs + list(required_ops) + candidate_classes))
+    names_to_capture = list(dict.fromkeys(candidate_funcs + node_funcs + list(required_ops) + candidate_classes))
     for sym in names_to_capture:
         if sym.isidentifier():
             capture_lines.append(f"    try:\n        _ns[{sym!r}] = {sym}\n    except Exception:\n        pass")
     capture_block = "\n".join(capture_lines)
 
-    # Discover callable instance methods directly from AST ClassDef without calling hasattr/getattr
-    class_probe_lines: List[str] = []
-    for cname in candidate_classes:
-        methods = class_methods.get(cname, [])
-        preferred = [m for m in _PREFERRED_EVAL_NAMES if m in methods] + [m for m in methods if m not in _PREFERRED_EVAL_NAMES]
-        for mname in preferred:
-            if cname.isidentifier() and mname.isidentifier():
-                class_probe_lines.append(
-                    f"        if _expr_fn is None:\n"
-                    f"            try:\n"
-                    f"                _inst = {cname}()\n"
-                    f"                _m = _inst.{mname}\n"
-                    f"                if callable(_m):\n"
-                    f"                    _expr_fn = _m\n"
-                    f"            except Exception:\n"
-                    f"                pass"
-                )
-    class_probe_block = "\n".join(class_probe_lines) if class_probe_lines else "        pass"
+    def _build_class_probes(target_var: str, methods_map: Dict[str, List[str]]) -> str:
+        lines_out: List[str] = []
+        for cname in candidate_classes:
+            methods = methods_map.get(cname, [])
+            preferred = [m for m in _PREFERRED_EVAL_NAMES if m in methods] + [m for m in methods if m not in _PREFERRED_EVAL_NAMES]
+            for mname in preferred:
+                if cname.isidentifier() and mname.isidentifier():
+                    lines_out.append(
+                        f"        if {target_var} is None:\n"
+                        f"            try:\n"
+                        f"                _inst = {cname}()\n"
+                        f"                _m = _inst.{mname}\n"
+                        f"                if callable(_m):\n"
+                        f"                    {target_var} = _m\n"
+                        f"            except Exception:\n"
+                        f"                pass"
+                    )
+        return "\n".join(lines_out) if lines_out else "        pass"
+
+    class_str_probe_block = _build_class_probes("_expr_fn", class_str_methods)
+    class_node_probe_block = _build_class_probes("_node_fn", class_node_methods)
 
     harness_cfg = json.dumps({
         "required_ops": required_ops,
         "requires_security": requires_security,
         "is_calculator": is_calculator,
         "candidate_funcs": candidate_funcs,
+        "node_funcs": node_funcs,
+        "ast_node_hints": ast_node_hints or [],
         "probes": ADVERSARIAL_PROBES,
         "expectations": {k: list(v) for k, v in MATH_FUNC_EXPECTATIONS.items()},
     })
 
     return f"""
+import ast as _v_ast
 import json as _v_json
 import math as _v_math
 
@@ -184,7 +242,17 @@ def _v_run_checks():
             break
 
     if _expr_fn is None:
-{class_probe_block}
+{class_str_probe_block}
+
+    _node_fn = None
+    for _nname in _cfg["node_funcs"]:
+        _ncand = _ns.get(_nname)
+        if callable(_ncand):
+            _node_fn = _ncand
+            break
+
+    if _node_fn is None:
+{class_node_probe_block}
 
     def _looks_like_safe_rejection(val):
         if val is None or isinstance(val, bool):
@@ -198,7 +266,7 @@ def _v_run_checks():
         return False
 
     if _expr_fn is not None:
-        # 1. Basic arithmetic check (only require strict match when calculator/math ops requested)
+        # 1. Basic arithmetic check
         try:
             _r_arith = _expr_fn("2 + 3 * 4")
             _num = float(_r_arith) if not isinstance(_r_arith, (int, float)) else _r_arith
@@ -258,6 +326,30 @@ def _v_run_checks():
                         _out["passed"].append("blocked_probe:" + _probe[:24])
                 except Exception:
                     _out["passed"].append("blocked_probe:" + _probe[:24])
+    elif _node_fn is not None:
+        # AST node visitor check (handles ast.Expression AND ast.Expr from ast.parse(...).body[0])
+        try:
+            _ast_eval_node = _v_ast.parse("2 + 3 * 4", mode="eval")
+            _r_node = _node_fn(_ast_eval_node)
+            if abs(float(_r_node) - 14.0) < 1e-6:
+                _out["passed"].append("ast_eval: 2+3*4 == 14")
+                _out["outputs"].append("evaluate_node(ast.parse('2 + 3 * 4', mode='eval')) -> " + repr(_r_node))
+            else:
+                _out["failed"].append("AST node check failed: returned " + repr(_r_node) + " for 2+3*4 instead of 14")
+        except Exception as _e:
+            _out["failed"].append("AST node check raised " + type(_e).__name__ + ": " + str(_e))
+
+        if any("Expr" in _h for _h in _cfg["ast_node_hints"]):
+            try:
+                _expr_stmt = _v_ast.parse("2 + 3 * 4").body[0]
+                _r_expr = _node_fn(_expr_stmt)
+                if abs(float(_r_expr) - 14.0) < 1e-6:
+                    _out["passed"].append("ast_expr_node_supported")
+                    _out["outputs"].append("evaluate_node(ast.parse('2 + 3 * 4').body[0]) -> " + repr(_r_expr))
+                else:
+                    _out["failed"].append("ast.Expr node returned " + repr(_r_expr) + " instead of 14")
+            except Exception as _e:
+                _out["failed"].append("ast.Expr node check (ast.parse(...).body[0]) raised " + type(_e).__name__ + ": " + str(_e))
     else:
         for _op in _cfg["required_ops"]:
             _fn_op = _ns.get(_op)
@@ -392,6 +484,7 @@ class ExecutionVerifier:
                     required_ops=c.required_ops,
                     requires_security=c.requires_security,
                     is_calculator=c.is_calculator_domain,
+                    ast_node_hints=c.ast_node_hints,
                 )
                 exec_res = await sb_rt.execute_code(harness, language="python")
                 parsed_out: Optional[Dict[str, Any]] = None
