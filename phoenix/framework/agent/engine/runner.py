@@ -84,9 +84,26 @@ class NeuroSymbolicRunner:
         previous_feedback = ""
         last_written_code: Optional[str] = None
         repeated_same_code = 0
+        focus_scope: Optional[Dict[str, Any]] = None
+        diagnosis_hints: List[str] = []
+        attempts_run = 0
+
+        # Pre-flight deterministic execution trace before attempt 1 when modifying an existing file
+        if diag.contract.archetype == "code_modify":
+            initial_ver = await ExecutionVerifier.verify(diag, runtime=runtime)
+            best_score = initial_ver.score
+            best_report = initial_ver
+            focus_scope = initial_ver.focus_scope
+            diagnosis_hints = list(initial_ver.diagnosis_hints or [])
+            if initial_ver.discrepancies:
+                previous_feedback = (
+                    f"- Current File Score: {initial_ver.score}/100\n"
+                    "- Detected failing checks on disk:\n"
+                    + "\n".join(f"  * {d}" for d in initial_ver.discrepancies)
+                )
 
         for attempt in range(1, max(1, max_attempts) + 1):
-            # Re-analyze on retry from current disk state (which stays at best_snapshot)
+            attempts_run = attempt
             if attempt > 1:
                 diag = PreAnalyzer.analyze(prompt, runtime=runtime)
 
@@ -94,6 +111,8 @@ class NeuroSymbolicRunner:
                 diag,
                 previous_feedback=previous_feedback,
                 best_score=max(0, best_score),
+                focus_scope=focus_scope,
+                diagnosis_hints=diagnosis_hints,
             )
             await _emit(
                 "acting",
@@ -108,6 +127,7 @@ class NeuroSymbolicRunner:
                 target_path=primary_target,
                 runtime=runtime,
                 syntax_guard=syntax_guard,
+                focus_class=(focus_scope or {}).get("class_name"),
             )
 
             if not apply_res.success:
@@ -140,12 +160,23 @@ class NeuroSymbolicRunner:
                 runtime=runtime,
                 candidate_files=[apply_res.resolved_path],
             )
+            focus_scope = ver.focus_scope or focus_scope
+            if ver.diagnosis_hints:
+                diagnosis_hints = list(ver.diagnosis_hints)
 
-            if ver.score >= best_score:
+            has_real_diff = bool(apply_res.diff) and apply_res.diff != "(no changes)"
+            if ver.score > best_score:
                 best_score = ver.score
                 best_snapshot = cls._snapshot_files([apply_res.resolved_path], runtime)
                 best_report = ver
                 best_diff = apply_res.diff
+            elif ver.score == best_score:
+                # Never overwrite a real non-empty diff with "(no changes)" on equal score
+                if has_real_diff or not best_diff or best_diff == "(no changes)":
+                    best_snapshot = cls._snapshot_files([apply_res.resolved_path], runtime)
+                    best_report = ver
+                    if has_real_diff:
+                        best_diff = apply_res.diff
             else:
                 # Monotonic protection: never allow a worse retry to corrupt a higher-scoring file on disk
                 cls._restore_snapshot(best_snapshot)
@@ -154,7 +185,7 @@ class NeuroSymbolicRunner:
                 return {
                     "handled": True,
                     "success": True,
-                    "attempts": attempt,
+                    "attempts": attempts_run,
                     "target_files": targets,
                     "resolved_file": apply_res.resolved_path,
                     "verification": ver,
@@ -171,7 +202,7 @@ class NeuroSymbolicRunner:
             )
             if is_duplicate_attempt:
                 repeated_same_code += 1
-                previous_feedback += "\n- WARNING: Output matched previous failing code identically. Rewrite the failing parts explicitly."
+                previous_feedback += "\n- WARNING: Output matched previous failing code identically. Apply the exact AST/runtime fix above."
             else:
                 repeated_same_code = 0
 
@@ -196,7 +227,7 @@ class NeuroSymbolicRunner:
         return {
             "handled": True,
             "success": bool(best_report and best_report.passed),
-            "attempts": max_attempts,
+            "attempts": attempts_run,
             "target_files": targets,
             "resolved_file": primary_target,
             "verification": best_report,

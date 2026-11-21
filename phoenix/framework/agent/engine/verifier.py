@@ -18,6 +18,10 @@ from phoenix.framework.agent.engine.pre_analyzer import (
     DiagnosticReport,
     scan_python_ast,
 )
+from phoenix.framework.agent.engine.surgical import (
+    diagnose_python_error,
+    find_enclosing_callable,
+)
 from phoenix.framework.agent.runtime.restricted_python import RestrictedPythonRuntime
 from phoenix.framework.agent.tools._fs_utils import resolve_existing_path
 
@@ -62,6 +66,9 @@ class VerificationReport:
     discrepancies: List[str] = field(default_factory=list)
     corrective_action: Optional[str] = None
     functional_outputs: List[str] = field(default_factory=list)
+    focus_line: Optional[int] = None
+    focus_scope: Optional[Dict[str, Any]] = None
+    diagnosis_hints: List[str] = field(default_factory=list)
 
 
 def _is_ast_node_visitor(fn_node: ast.FunctionDef) -> bool:
@@ -398,6 +405,9 @@ class ExecutionVerifier:
         checks_passed: List[str] = []
         discrepancies: List[str] = []
         functional_outputs: List[str] = []
+        focus_line: Optional[int] = None
+        focus_scope: Optional[Dict[str, Any]] = None
+        diagnosis_hints: List[str] = []
         score = 0
 
         py_files_checked = 0
@@ -500,24 +510,59 @@ class ExecutionVerifier:
                 if not exec_res.success:
                     err_msg = exec_res.error or "Sandbox execution failed"
                     line_match = re.search(r"at line (\d+)", err_msg)
+                    h_lines = harness.splitlines()
+                    mod_begin_idx = next(
+                        (i for i, l in enumerate(h_lines) if "# --- BEGIN TARGET MODULE ---" in l),
+                        -1,
+                    )
+                    src_line_txt = ""
                     src_snippet = ""
                     if line_match:
                         ln_no = int(line_match.group(1))
-                        h_lines = harness.splitlines()
                         if 1 <= ln_no <= len(h_lines):
-                            src_snippet = f" -> `{h_lines[ln_no - 1].strip()}`"
-                    discrepancies.append(f"Sandbox runtime error in {os.path.basename(resolved)}: {err_msg}{src_snippet}")
+                            src_line_txt = h_lines[ln_no - 1].strip()
+                            src_snippet = f" -> `{src_line_txt}`"
+                        if mod_begin_idx >= 0 and ln_no > mod_begin_idx + 1:
+                            cand_user_ln = ln_no - (mod_begin_idx + 1)
+                            if 1 <= cand_user_ln <= len(code.splitlines()):
+                                focus_line = cand_user_ln
+                    if focus_line is None and src_line_txt:
+                        for c_idx, c_line in enumerate(code.splitlines(), start=1):
+                            if c_line.strip() == src_line_txt:
+                                focus_line = c_idx
+                                break
+                    if focus_line is not None and focus_scope is None:
+                        focus_scope = find_enclosing_callable(code, focus_line)
+                    for hint in diagnose_python_error(err_msg, src_line_txt, focus_line):
+                        if hint not in diagnosis_hints:
+                            diagnosis_hints.append(hint)
+                    loc_label = f"line {focus_line}" if focus_line is not None else "sandbox"
+                    scope_label = f" in `{focus_scope['qualname']}`" if focus_scope else ""
+                    discrepancies.append(
+                        f"Sandbox runtime error in {os.path.basename(resolved)} at {loc_label}{scope_label}: {err_msg}{src_snippet}"
+                    )
                 elif parsed_out is not None:
                     checks_passed.extend(parsed_out.get("passed", []))
                     functional_outputs.extend(parsed_out.get("outputs", []))
                     sb_failures = parsed_out.get("failed", [])
                     if sb_failures:
                         discrepancies.extend(sb_failures[:4])
+                        for hint in diagnose_python_error("\n".join(sb_failures), code, focus_line):
+                            if hint not in diagnosis_hints:
+                                diagnosis_hints.append(hint)
                     else:
                         score += 30
                 else:
                     score += 30
                     checks_passed.append("sandbox_import_ok")
+
+            if discrepancies and focus_scope is None and c.traceback_lines:
+                for tb_ln in reversed(c.traceback_lines):
+                    scope_cand = find_enclosing_callable(code, tb_ln)
+                    if scope_cand is not None:
+                        focus_line = tb_ln
+                        focus_scope = scope_cand
+                        break
 
         if py_files_checked > 1:
             score = min(100, score // py_files_checked)
@@ -535,4 +580,7 @@ class ExecutionVerifier:
             discrepancies=discrepancies,
             corrective_action=corrective,
             functional_outputs=functional_outputs,
+            focus_line=focus_line,
+            focus_scope=focus_scope,
+            diagnosis_hints=diagnosis_hints,
         )

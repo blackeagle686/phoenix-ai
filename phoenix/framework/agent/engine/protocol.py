@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from phoenix.framework.agent.engine.pre_analyzer import DiagnosticReport, FileDiagnostic, KNOWN_MATH_OPS
+from phoenix.framework.agent.engine.surgical import SurgicalCodePatcher
 from phoenix.framework.agent.tools._fs_utils import (
     SyntaxGuard,
     build_compact_diff,
@@ -153,10 +154,13 @@ class PatchProtocol:
         report: DiagnosticReport,
         previous_feedback: str = "",
         best_score: int = 0,
+        focus_scope: Optional[Dict[str, Any]] = None,
+        diagnosis_hints: Optional[List[str]] = None,
     ) -> str:
         c = report.contract
         primary_path = c.target_files[0] if c.target_files else "target.py"
         fd: Optional[FileDiagnostic] = next((f for f in report.files if f.exists), None)
+        surgical_mode = bool(focus_scope and focus_scope.get("source") and fd is not None and fd.ast_valid and not c.requires_security)
 
         lines: List[str] = [
             f"TASK: {report.prompt}",
@@ -184,7 +188,15 @@ class PatchProtocol:
                 + ", raising ValueError on any unsupported node or expression."
             )
 
-        if fd is not None:
+        if diagnosis_hints:
+            lines.append("SYSTEM ERROR DIAGNOSIS (APPLY THIS FIX):\n" + "\n".join(f"- {h}" for h in diagnosis_hints))
+
+        if surgical_mode and focus_scope is not None:
+            lines.append(
+                f"SURGICAL FOCUS (`{focus_scope['qualname']}`, L{focus_scope['start_line']}-L{focus_scope['end_line']}):\n"
+                f"```python\n{focus_scope['source']}\n```"
+            )
+        elif fd is not None:
             if fd.security_findings:
                 lines.append("DETECTED RISKS IN CURRENT FILE: " + "; ".join(fd.security_findings[:6]))
             if fd.missing_ops:
@@ -198,11 +210,17 @@ class PatchProtocol:
                 "Fix ALL listed issues directly. Do NOT repeat the exact same failing code."
             )
 
-        lines.append(
-            "OUTPUT FORMAT: Return the complete updated Python file inside a single ```python ... ``` code block "
-            "(or ```SEARCH / ======= / >>>>>>> REPLACE blocks for small edits). "
-            "Do NOT wrap Python code inside JSON. Preserve existing class/function names and runnable top-level test code cleanly."
-        )
+        if surgical_mode and focus_scope is not None:
+            lines.append(
+                f"OUTPUT FORMAT: Return ONLY the fixed `def {focus_scope['func_name']}(...):` function inside a ```python ... ``` block "
+                f"(the system will splice it safely back into `{primary_path}` without touching other lines). Do NOT wrap in JSON."
+            )
+        else:
+            lines.append(
+                "OUTPUT FORMAT: Return the complete updated Python file inside a single ```python ... ``` code block "
+                "(or ```SEARCH / ======= / >>>>>>> REPLACE blocks for small edits). "
+                "Do NOT wrap Python code inside JSON. Preserve existing class/function names and runnable top-level test code cleanly."
+            )
         return "\n\n".join(lines)
 
     @staticmethod
@@ -276,6 +294,7 @@ class PatchProtocol:
         target_path: str,
         runtime: Any,
         syntax_guard: Optional[SyntaxGuard] = None,
+        focus_class: Optional[str] = None,
     ) -> PatchApplyResult:
         """Apply parsed SEARCH/REPLACE or full code safely onto the workspace file."""
         mode, payload = cls.parse_model_output(raw_output)
@@ -328,7 +347,16 @@ class PatchProtocol:
                 working = updated or working
             new_content, healed_actions = SymbolicHealer.heal_python_code(working, resolved)
         else:
-            new_content, healed_actions = SymbolicHealer.heal_python_code(str(payload), resolved)
+            candidate_code, resolved_mode, surgical_notes = SurgicalCodePatcher.apply_surgical_or_full(
+                old_content,
+                str(payload),
+                focus_class=focus_class,
+            )
+            if resolved_mode:
+                mode = resolved_mode
+            new_content, healed_actions = SymbolicHealer.heal_python_code(candidate_code, resolved)
+            if surgical_notes:
+                healed_actions = list(surgical_notes) + list(healed_actions)
 
         # Prevent destructive shrinkage of existing non-trivial files into tiny stubs
         if old_content and len(old_content.splitlines()) >= 8 and len(new_content.splitlines()) < 3:
