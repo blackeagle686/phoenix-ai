@@ -411,24 +411,30 @@ class LocalLLM(BaseLLM):
                     logger.warning(f"llama_cpp unavailable ({e}); falling back to Ollama.")
                     cached = {"type": "ollama", "device": hw["device"], "lock": threading.Lock()}
             elif target_backend == "transformers":
+                final_err: Optional[Exception] = None
                 try:
                     cached = await asyncio.to_thread(self._load_transformers_sync, hw)
                 except Exception as e:
+                    final_err = e
                     err_low = str(e).lower()
                     if ("out of memory" in err_low or "cuda" in err_low) and LocalLLM._model_cache:
                         logger.warning("CUDA/memory pressure while loading expert model; evicting oldest cached LocalLLM and retrying...")
                         LocalLLM._evict_oldest_cached_model()
                         try:
                             cached = await asyncio.to_thread(self._load_transformers_sync, hw)
+                            final_err = None
                         except Exception as e2:
-                            if self.backend == "transformers":
-                                raise RuntimeError(f"Failed to load HuggingFace model '{self.model}': {e2}")
-                            cached = None
-                    if cached is None:
-                        if self.backend == "transformers":
-                            raise RuntimeError(f"Failed to load HuggingFace model '{self.model}': {e}")
-                        logger.warning(f"Transformers local load failed ({e}); falling back to Ollama.")
-                        cached = {"type": "ollama", "device": hw["device"], "lock": threading.Lock()}
+                            final_err = e2
+                if cached is None:
+                    err_str = str(final_err or "")
+                    if (
+                        self.backend == "transformers"
+                        or "trust_remote_code" in err_str.lower()
+                        or "/" in str(self.model)
+                    ):
+                        raise RuntimeError(f"Failed to load HuggingFace model '{self.model}': {final_err}")
+                    logger.warning(f"Transformers local load failed ({final_err}); falling back to Ollama.")
+                    cached = {"type": "ollama", "device": hw["device"], "lock": threading.Lock()}
             else:
                 cached = {"type": "ollama", "device": hw["device"], "lock": threading.Lock()}
 

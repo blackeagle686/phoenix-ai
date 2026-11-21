@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Union
 
 from phoenix.core.hardware_check import HardwareChecker
 from phoenix.services.llm.local import LocalLLM
@@ -111,14 +111,14 @@ class LocalMoELLM(LocalLLM):
         trust_remote_code: Optional[bool] = None,
         allow_auto_load: Optional[bool] = None,
         prefer_gguf_on_cpu: bool = True,
-        cpu_offload: bool = True,
+        cpu_offload: Union[bool, str] = "auto",
         offload_folder: Optional[str] = None,
     ):
         resolved_model, preset = _resolve_moe_preset(model)
         self._moe_preset: Dict[str, Any] = preset
         self.requested_model: str = model or resolved_model
         self.prefer_gguf_on_cpu: bool = bool(prefer_gguf_on_cpu)
-        self.cpu_offload: bool = bool(cpu_offload)
+        self.cpu_offload: Union[bool, str] = cpu_offload
         self.offload_folder: str = offload_folder or os.path.join(
             os.path.expanduser("~"), ".cache", "phoenix", "moe_offload"
         )
@@ -190,36 +190,47 @@ class LocalMoELLM(LocalLLM):
         device: str,
         has_accelerate: bool,
     ) -> None:
-        """Apply MoE-safe GPU+CPU expert offloading, max_memory bounds, and offload folder."""
+        """Apply MoE-safe GPU+CPU expert offloading only when hardware VRAM/RAM genuinely requires it."""
         if not self.cpu_offload:
             return
 
         ram_info = HardwareChecker.check_ram()
         avail_ram_gb = max(4, int(float(ram_info.get("available_gb", 8.0)) * 0.85))
-        qcfg = load_kwargs.get("quantization_config")
-        if qcfg is not None and hasattr(qcfg, "llm_int8_enable_fp32_cpu_offload"):
-            try:
-                qcfg.llm_int8_enable_fp32_cpu_offload = True
-            except Exception:
-                pass
+        vram_gb = float(hw.get("vram_gb") or 0.0)
+        est_needed = float(self._moe_preset.get("vram_4bit_gb") or 0.0)
+        force_offload = self.cpu_offload is True
+
+        need_gpu_offload = (
+            device == "cuda"
+            and vram_gb > 0
+            and (
+                force_offload
+                or (est_needed > 0 and vram_gb < est_needed * 1.15)
+                or (est_needed == 0.0 and vram_gb < 10.0)
+            )
+        )
+
+        if need_gpu_offload:
+            qcfg = load_kwargs.get("quantization_config")
+            if qcfg is not None and hasattr(qcfg, "llm_int8_enable_fp32_cpu_offload"):
+                try:
+                    qcfg.llm_int8_enable_fp32_cpu_offload = True
+                except Exception:
+                    pass
 
         if not has_accelerate:
             return
 
-        os.makedirs(self.offload_folder, exist_ok=True)
-        vram_gb = float(hw.get("vram_gb") or 0.0)
-        est_needed = float(self._moe_preset.get("vram_4bit_gb") or 0.0)
-
-        if device == "cuda" and vram_gb > 0:
+        if need_gpu_offload:
+            os.makedirs(self.offload_folder, exist_ok=True)
+            safe_vram = max(2, int(vram_gb * 0.88))
             load_kwargs["device_map"] = "auto"
             load_kwargs["offload_folder"] = self.offload_folder
-            # Cap GPU memory cleanly at ~88% so KV cache fits and overflow MoE experts spill to RAM safely
-            if est_needed == 0.0 or vram_gb <= est_needed * 1.4:
-                safe_vram = max(2, int(vram_gb * 0.88))
-                load_kwargs["max_memory"] = {0: f"{safe_vram}GiB", "cpu": f"{avail_ram_gb}GiB"}
-                self._hybrid_offload_used = True
+            load_kwargs["max_memory"] = {0: f"{safe_vram}GiB", "cpu": f"{avail_ram_gb}GiB"}
+            self._hybrid_offload_used = True
         elif device == "cpu":
-            # Prevent huge MoE BF16 tensors (e.g. 28GB for 14B) from crashing CPU RAM
+            # Prevent large MoE CPU tensors from crashing system RAM
+            os.makedirs(self.offload_folder, exist_ok=True)
             load_kwargs["device_map"] = "auto"
             load_kwargs["offload_folder"] = self.offload_folder
             load_kwargs["max_memory"] = {"cpu": f"{avail_ram_gb}GiB"}
