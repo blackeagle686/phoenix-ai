@@ -156,21 +156,39 @@ class PatchProtocol:
         best_score: int = 0,
         focus_scope: Optional[Dict[str, Any]] = None,
         diagnosis_hints: Optional[List[str]] = None,
+        force_search_replace: bool = False,
     ) -> str:
         c = report.contract
         primary_path = c.target_files[0] if c.target_files else "target.py"
         fd: Optional[FileDiagnostic] = next((f for f in report.files if f.exists), None)
         surgical_mode = bool(focus_scope and focus_scope.get("source") and fd is not None and fd.ast_valid and not c.requires_security)
 
+        err_core = (
+            c.traceback_error.split(":", 1)[-1].strip().lower()
+            if c.traceback_error and ":" in c.traceback_error
+            else (c.traceback_error or "").strip().lower()
+        )
+        stale_traceback = bool(
+            c.has_traceback
+            and err_core
+            and previous_feedback
+            and err_core not in previous_feedback.lower()
+        )
+        task_text = (
+            f"Fix the active runtime error inside `{focus_scope['qualname']}` in `{primary_path}`."
+            if stale_traceback and surgical_mode and focus_scope is not None
+            else report.prompt
+        )
+
         lines: List[str] = [
-            f"TASK: {report.prompt}",
+            f"TASK: {task_text}",
             f"TARGET FILE: {primary_path}",
         ]
         if c.requires_security:
             lines.append(
                 "SECURITY MANDATE: NO eval(), NO exec(), NO compile(), NO __import__(), NO os/subprocess/open()."
             )
-        if c.has_traceback and c.traceback_error:
+        if c.has_traceback and c.traceback_error and not stale_traceback:
             line_hint = f" at line(s) {c.traceback_lines}" if c.traceback_lines else ""
             lines.append(f"REPORTED RUNTIME ERROR{line_hint}: {c.traceback_error}")
             if any("ast.Expr" in h for h in c.ast_node_hints):
@@ -210,7 +228,13 @@ class PatchProtocol:
                 "Fix ALL listed issues directly. Do NOT repeat the exact same failing code."
             )
 
-        if surgical_mode and focus_scope is not None:
+        if force_search_replace:
+            lines.append(
+                "OUTPUT FORMAT (SURGICAL DIFF ONLY): Do NOT copy the whole function unchanged. "
+                "Emit ONLY a targeted SEARCH/REPLACE block changing the failing lines:\n"
+                "<<<<<<< SEARCH\n<exact existing lines to change>\n=======\n<fixed lines>\n>>>>>>> REPLACE"
+            )
+        elif surgical_mode and focus_scope is not None:
             lines.append(
                 f"OUTPUT FORMAT: Return ONLY the fixed `def {focus_scope['func_name']}(...):` function inside a ```python ... ``` block "
                 f"(the system will splice it safely back into `{primary_path}` without touching other lines). Do NOT wrap in JSON."
@@ -218,7 +242,7 @@ class PatchProtocol:
         else:
             lines.append(
                 "OUTPUT FORMAT: Return the complete updated Python file inside a single ```python ... ``` code block "
-                "(or ```SEARCH / ======= / >>>>>>> REPLACE blocks for small edits). "
+                "(or <<<<<<< SEARCH / ======= / >>>>>>> REPLACE blocks for small edits). "
                 "Do NOT wrap Python code inside JSON. Preserve existing class/function names and runnable top-level test code cleanly."
             )
         return "\n\n".join(lines)

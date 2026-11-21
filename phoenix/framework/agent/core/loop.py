@@ -906,6 +906,21 @@ class AgentLoop:
             if not ns_res.get("success") and ns_res.get("error"):
                 digest_lines.append(f"Remaining Gaps: {ns_res['error']}")
 
+            if not ns_res.get("success") and is_local_engine:
+                # Grounded factual report for failed local-model runs instead of hallucinated synthesis prose
+                factual = (
+                    f"Partial execution on `{', '.join(ns_res.get('target_files', []))}` "
+                    f"(sandbox score {score}/100 after {ns_res.get('attempts', 1)} attempts).\n"
+                )
+                if ver and ver.diagnosis_hints:
+                    factual += "\nRecommended Next Fix:\n" + "\n".join(ver.diagnosis_hints[:2]) + "\n"
+                factual += f"\n---\nDeep Execution Summary:\n{status_log.strip()}"
+                if hasattr(memory, "add_interaction"):
+                    await memory.add_interaction(session_id, "assistant", factual)
+                await self._flush_background()
+                await tracer.emit_event("complete", {"session_id": session_id, "mode": "engine" if force_engine else "deep"})
+                return factual
+
             return await self._finalize_deep_response(
                 prompt=prompt,
                 objective=objective,

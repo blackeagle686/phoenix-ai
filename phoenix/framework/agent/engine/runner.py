@@ -114,6 +114,7 @@ class NeuroSymbolicRunner:
                 best_score=max(0, best_score),
                 focus_scope=focus_scope,
                 diagnosis_hints=diagnosis_hints,
+                force_search_replace=(repeated_same_code >= 1),
             )
             await _emit(
                 "acting",
@@ -125,7 +126,7 @@ class NeuroSymbolicRunner:
                 try:
                     sig = inspect.signature(llm.generate)
                     if "temperature" in sig.parameters:
-                        gen_kwargs["temperature"] = 0.35 if repeated_same_code >= 1 else 0.25
+                        gen_kwargs["temperature"] = 0.55 if repeated_same_code >= 1 else 0.3
                 except (TypeError, ValueError):
                     pass
 
