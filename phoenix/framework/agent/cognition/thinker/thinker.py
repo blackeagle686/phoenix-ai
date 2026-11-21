@@ -3,6 +3,7 @@ import json
 from typing import Any, Dict, Optional
 from .base import BaseThinker
 from phoenix.framework.agent.cognition.schema import (
+    ActionWatchSchema,
     PlanSchema,
     TaskSchema,
     TaskExecutionSchema,
@@ -12,13 +13,25 @@ from phoenix.framework.agent.cognition.schema import (
     TaskStatus,
 )
 from phoenix.framework.agent.cognition.utils import parse_llm_json
+from phoenix.framework.agent.tools._fs_utils import get_workspace_snapshot
 
 
 class Thinker(BaseThinker):
-    """Central Brain. Coordinates structured reasoning, tool selection, reflection, and synthesis."""
+    """Central Brain. Coordinates structured reasoning, tool selection, verification watching, and synthesis."""
 
     def __init__(self, llm, profile=None, tool_manager=None):
         super().__init__(llm, profile=profile, tool_manager=tool_manager)
+
+    def _is_local_model(self) -> bool:
+        return type(self.llm).__name__ == "LocalLLM"
+
+    def _default_structured_budget(self) -> int:
+        return 2048 if self._is_local_model() else 4096
+
+    def _get_workspace_context(self) -> str:
+        rt = getattr(self.tool_manager, "runtime", None) if self.tool_manager else None
+        snap = get_workspace_snapshot(rt, max_files=25)
+        return f"\nWorkspace Files: {snap}" if snap else ""
 
     def _get_tools_list(self, compact_signatures: bool = False) -> str:
         """
@@ -143,6 +156,10 @@ class Thinker(BaseThinker):
         workspace_section = ""
         if workspace_analysis:
             workspace_section = f"\n\nWorkspace Analysis:\n{json.dumps(workspace_analysis, indent=2)}"
+        else:
+            ws_ctx = self._get_workspace_context()
+            if ws_ctx:
+                workspace_section = ws_ctx
 
         system_prompt = (
             "You are the master Thinker and Planner. Analyze the user request and project context.\n"
@@ -154,13 +171,19 @@ class Thinker(BaseThinker):
             f" - For status, use one of: {task_statuses} (new tasks should be 'pending').\n"
             " - Design tasks around the Available Tools (including any custom user-defined tools). If a specific tool matches the user's request, create a task to execute it.\n"
             " - Use `dependencies` (list of task_ids from earlier tasks in this plan) ONLY when a task strictly depends on another task finishing first. Independent tasks should have `dependencies: []` so they can run in parallel.\n"
+            " - Populate `expected_result` and `target_files` concisely on each task whenever applicable.\n"
             " - Prefer fewer, cohesive tasks over excessive micro-tasks.\n"
             " - ALL file paths must be ABSOLUTE full paths whenever possible."
         )
         system_prompt += self._get_profile_string()
 
         full_prompt = f"{system_prompt}{workspace_section}\n\nContext:\n{context}\n\nUser Request: {prompt}"
-        return await self._call_structured(full_prompt, PlanSchema, session_id=session_id, max_tokens=8192)
+        return await self._call_structured(
+            full_prompt,
+            PlanSchema,
+            session_id=session_id,
+            max_tokens=self._default_structured_budget(),
+        )
 
     def _supports_native_tool_calling(self) -> bool:
         from phoenix.services.llm.base import BaseLLM
@@ -178,6 +201,18 @@ class Thinker(BaseThinker):
         """Brain Step 2: Reason about the task using native tool calling when supported, else structured JSON."""
         task_desc = getattr(task, "description", str(task))
         task_id = getattr(task, "task_id", "unknown")
+        expected_res = getattr(task, "expected_result", None)
+        ws_ctx = "" if "Workspace Files:" in (context or "") else self._get_workspace_context()
+        expected_line = f"\nExpected Result: {expected_res}" if expected_res else ""
+        budget = self._default_structured_budget()
+
+        routing_rules = (
+            "TOOL ROUTING RULES:\n"
+            "1. Existing file modifications/adding functions: call `file_read` FIRST, then `file_edit` (use `upsert=true` when adding a new block/function). Do NOT overwrite existing files blindly with `file_write`.\n"
+            "2. Creating a brand-new file: use `file_write`. Finding symbols/files: use `file_search`.\n"
+            "3. NEVER use `python_repl` or `execute_command` to create/edit project files (`python_repl` is only for quick in-memory calculation and blocks `input()`).\n"
+            "4. Set `expected_outcome` concisely before invoking tools; when done, leave `tools_to_call` empty and state ONLY verified tool/disk results in `direct_response`."
+        )
 
         use_native = (
             self._supports_native_tool_calling()
@@ -190,34 +225,32 @@ class Thinker(BaseThinker):
             system_prompt = (
                 "You are the Thinker. Given the following task and its context, call the exact tool(s) needed to complete the task, "
                 "or reply directly once the task objective is already satisfied by previous tool outputs.\n"
-                "IMPORTANT:\n"
-                "1. ALWAYS use ABSOLUTE file paths for any file_path or directory whenever possible.\n"
-                "2. Prioritize specific registered/custom tools matching the task objective.\n"
-                "3. Use native file tools (`file_read`, `file_write`, `file_edit`, `file_update_multi`, `file_search`) rather than shell commands.\n"
-                "4. If the task is already answered in context or needs no further tool calls, respond directly with your findings."
+                f"{routing_rules}\n"
+                "5. Prioritize specific registered/custom tools matching the task objective."
             )
             system_prompt += self._get_profile_string()
-            full_prompt = f"{system_prompt}\n\nTask ID: {task_id}\nTask Description: {task_desc}\n\nContext:\n{context}"
-            return await self.llm.generate_with_tools(full_prompt, openai_tools, max_tokens=8192)
+            full_prompt = (
+                f"{system_prompt}{ws_ctx}\n\n"
+                f"Task ID: {task_id}\nTask Description: {task_desc}{expected_line}\n\nContext:\n{context}"
+            )
+            return await self.llm.generate_with_tools(full_prompt, openai_tools, max_tokens=budget)
 
         tools_list = self._get_tools_list()
         system_prompt = (
             "You are the Thinker. Given the following task and its full context (including any previous tool outputs in this task), "
             "analyze the problem, formulate your approach, and define the exact explicit tool calls required for the next step.\n"
             f"{tools_list}\n\n"
-            "IMPORTANT:\n"
-            "1. ALWAYS use ABSOLUTE file paths for any file_path or directory whenever possible.\n"
-            "2. When specifying tools_to_call, ONLY use the tool names and exact parameter names/types provided in the Available Tools list.\n"
-            "3. Always prioritize calling a specific tool from Available Tools (including custom user-created tools) when it matches the task objective.\n"
-            "4. Use native file tools (`file_read`, `file_write`, `file_edit`, `file_update_multi`, `file_search`) for file operations rather than shell commands.\n"
-            "5. If you need to inspect a file before editing it, call `file_read` or `file_search` first.\n"
-            "6. If the task is already answered by the context/tool outputs or requires no further tool calls, leave `tools_to_call` empty, provide the answer/findings in `direct_response`, and set `is_complete: true`.\n"
-            "7. If previous attempts failed, check the context for error details and adjust your approach."
+            f"{routing_rules}\n"
+            "5. When specifying `tools_to_call`, ONLY use exact tool names and parameter names/types from Available Tools.\n"
+            "6. Prioritize registered/custom tools matching the task objective, and adjust approach on previous errors."
         )
         system_prompt += self._get_profile_string()
 
-        full_prompt = f"{system_prompt}\n\nTask ID: {task_id}\nTask Description: {task_desc}\n\nContext:\n{context}"
-        return await self._call_structured(full_prompt, TaskExecutionSchema, max_tokens=8192)
+        full_prompt = (
+            f"{system_prompt}{ws_ctx}\n\n"
+            f"Task ID: {task_id}\nTask Description: {task_desc}{expected_line}\n\nContext:\n{context}"
+        )
+        return await self._call_structured(full_prompt, TaskExecutionSchema, max_tokens=budget)
 
     async def generate_reflection(self, runtime_output: Any, context: str = "") -> ReflectionSchema:
         """Brain Step 3: Evaluate runtime execution results and judge task completion."""
@@ -237,7 +270,7 @@ class Thinker(BaseThinker):
         system_prompt += self._get_profile_string()
 
         full_prompt = f"{system_prompt}\n\nFull Context:\n{context}\n\nRuntime Output:\n{runtime_output}"
-        return await self._call_structured(full_prompt, ReflectionSchema)
+        return await self._call_structured(full_prompt, ReflectionSchema, max_tokens=min(1024, self._default_structured_budget()))
 
     async def replan(
         self,
@@ -263,7 +296,7 @@ class Thinker(BaseThinker):
             f"Completed Work:\n{completed_summary}\n\n"
             f"Failed Task: {failed_desc}\nFailure Context:\n{failure_context}"
         )
-        return await self._call_structured(full_prompt, PlanSchema, max_tokens=4096)
+        return await self._call_structured(full_prompt, PlanSchema, max_tokens=self._default_structured_budget())
 
     async def synthesize_final_answer(
         self,
@@ -272,12 +305,13 @@ class Thinker(BaseThinker):
         execution_digest: str,
         context: str = "",
     ) -> str:
-        """Synthesize a clear, direct, user-facing response from all executed tasks and tool outputs."""
+        """Synthesize a clear, grounded, user-facing response strictly from verified executed outputs."""
         system_prompt = (
             "You are the Phoenix Autonomous Agent. You have finished executing the planned tasks for the user's request.\n"
-            "Using the execution digest (tool outputs, file operations, and task findings), provide a clear, accurate, "
+            "Using the execution digest (tool outputs, file operations, and verified disk checks), provide a clear, accurate, "
             "and helpful final response directly addressing the user's prompt.\n"
-            "Include concrete results, findings, or summaries of files created/modified."
+            "GROUNDING RULE: Report ONLY files, functions, diffs, and behaviors actually verified in Execution Digest. "
+            "NEVER fabricate or print unverified code that was not actually written to disk."
         )
         system_prompt += self._get_profile_string()
 
@@ -291,3 +325,69 @@ class Thinker(BaseThinker):
             full_prompt += f"\nAdditional Context:\n{context[:2000]}"
 
         return await self.llm.generate(full_prompt)
+
+    async def generate_deep_plan(
+        self,
+        prompt: str,
+        memory: Any = None,
+        session_id: str = "",
+        workspace_snapshot: str = "",
+    ) -> PlanSchema:
+        """Deep-mode Tasking + Planning: break request into verifiable tasks with explicit expected outcomes."""
+        context = ""
+        if memory and hasattr(memory, "get_full_context"):
+            res = memory.get_full_context(session_id, query=prompt)
+            context = await res if inspect.isawaitable(res) else str(res)
+
+        ws_line = f"\nWorkspace Files: {workspace_snapshot}" if workspace_snapshot else self._get_workspace_context()
+        tools_list = self._get_tools_list(compact_signatures=True)
+        task_types = [e.value for e in TaskType]
+        task_priorities = [e.value for e in TaskPriority]
+
+        system_prompt = (
+            "You are the Thinker running in DEEP COGNITIVE MODE (Tasking -> Planning with Expected Results -> Acting -> Watching -> Reacting).\n"
+            "Decompose the user's request into a clean, minimal sequence of cohesive tasks.\n"
+            f"{tools_list}\n"
+            "REQUIREMENTS FOR EVERY TASK:\n"
+            " - Provide exact `description` + `target_files` (any workspace files touched or verified).\n"
+            " - Provide concrete, testable `expected_result` describing what MUST be true on disk/stdout AFTER execution "
+            "(e.g., required functions, syntax validity, behavior, no placeholder stubs).\n"
+            f" - Use task_type in {task_types} and priority in {task_priorities}; set `dependencies` only when sequential order matters."
+        )
+        system_prompt += self._get_profile_string()
+        full_prompt = f"{system_prompt}{ws_line}\n\nContext:\n{context}\n\nUser Request: {prompt}"
+        return await self._call_structured(
+            full_prompt,
+            PlanSchema,
+            session_id=session_id,
+            max_tokens=self._default_structured_budget(),
+        )
+
+    async def watch_action_results(
+        self,
+        task: Any,
+        expected_result: str,
+        actual_digest: str,
+        disk_checks: str = "",
+    ) -> ActionWatchSchema:
+        """Deep-mode Watching step: compare actual execution & real disk state against expected outcome."""
+        task_desc = getattr(task, "description", str(task))
+        system_prompt = (
+            "You are the Deep-Mode Watcher verifying whether Acting produced the Expected Result.\n"
+            "Compare EXPECTED RESULT strictly against ACTUAL TOOL OUTPUTS and VERIFIED ON-DISK FILES.\n"
+            "RULES:\n"
+            " - If files contain toy/stub/incomplete placeholder code, missing requested features, tool errors, or syntax errors -> set `matches_expectation: false`.\n"
+            " - List concrete gaps in `discrepancies` and give a specific, actionable fix in `corrective_action`.\n"
+            " - Set `matches_expectation: true` ONLY when actual tool outputs and disk contents genuinely fulfill the expected result."
+        )
+        full_prompt = (
+            f"{system_prompt}\n\nTask: {task_desc}\n"
+            f"EXPECTED RESULT:\n{expected_result}\n\n"
+            f"ACTUAL TOOL OUTPUTS:\n{actual_digest}\n\n"
+            f"VERIFIED ON-DISK STATE:\n{disk_checks or '(no disk file changes recorded)'}"
+        )
+        return await self._call_structured(
+            full_prompt,
+            ActionWatchSchema,
+            max_tokens=min(1024, self._default_structured_budget()),
+        )

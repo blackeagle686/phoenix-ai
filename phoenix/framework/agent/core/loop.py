@@ -12,6 +12,7 @@ from phoenix.framework.agent.cognition.analyzer import Analyzer
 from phoenix.framework.agent.cognition.actor import Actor
 from phoenix.framework.agent.cognition.pipeline import BrainRegistry, CognitionPipeline
 from phoenix.framework.agent.cognition.schema import (
+    ActionWatchSchema,
     PlanSchema,
     ReflectionSchema,
     ReflectorInputSchema,
@@ -19,8 +20,10 @@ from phoenix.framework.agent.cognition.schema import (
     TaskSchema,
     TaskStatus,
 )
+from phoenix.framework.agent.cognition.actor.actor import MUTATING_FILE_TOOLS
 from phoenix.framework.agent.memory.budget import compact_value
 from phoenix.framework.agent.memory.manager import MemoryManager
+from phoenix.framework.agent.tools._fs_utils import get_workspace_snapshot, inspect_workspace_file
 
 
 def _is_async_callable(fn: Any) -> bool:
@@ -289,9 +292,30 @@ class AgentLoop:
             if hasattr(actor_output, "success") and not actor_output.success:
                 cell.log_error(getattr(actor_output, "error_context", "Actor execution failed") or "Actor execution failed")
 
+            has_syntax_warn = False
+            has_mutation = False
+            rt = getattr(getattr(self.actor, "tool_manager", None), "runtime", None) or getattr(self.actor, "runtime", None)
+            if hasattr(actor_output, "result") and isinstance(actor_output.result, dict):
+                for r in actor_output.result.get("execution_results", []) or []:
+                    t_name = r.get("tool", "")
+                    out_obj = r.get("output")
+                    if isinstance(out_obj, dict) and out_obj.get("syntax_warning"):
+                        has_syntax_warn = True
+                    if r.get("success") and t_name in MUTATING_FILE_TOOLS:
+                        has_mutation = True
+                        fpath = out_obj.get("file_path") if isinstance(out_obj, dict) else None
+                        if fpath and rt:
+                            chk = inspect_workspace_file(rt, str(fpath))
+                            if chk.get("exists") and not chk.get("ast_valid", True):
+                                has_syntax_warn = True
+
+            needs_mutation = str(getattr(task, "task_type", "")).lower() in ("write", "update", "delete")
             can_fast_reflect = (
                 self.fast_reflect
                 and bool(getattr(actor_output, "success", False))
+                and not has_syntax_warn
+                and not has_mutation
+                and (not needs_mutation or has_mutation)
                 and not cell.get_failed_tools()
                 and not cell.get_failed_io_ops()
                 and (bool(cell.get_successful_tools()) or bool(cell.get_direct_findings()))
@@ -534,6 +558,11 @@ class AgentLoop:
         if not self._uses_plan_schema_mode():
             return await self._run_iterative_action_loop(prompt, memory, session_id, max_iterations=max_iterations)
 
+        active_memory = self._resolve_memory_manager(memory)
+        active_memory.set_session(session_id, prompt)
+        if hasattr(self.actor, "reset_session_tracking"):
+            self.actor.reset_session_tracking()
+
         workspace_analysis = None
         if self.enable_workspace_analysis and self.analyzer and hasattr(self.analyzer, "analyze_workspace"):
             try:
@@ -552,8 +581,7 @@ class AgentLoop:
         else:
             plan = await self.planner.generate_initial_plan(prompt, memory, session_id)
 
-        active_memory = self._resolve_memory_manager(memory)
-        active_memory.set_session(session_id, plan.objective)
+        active_memory.objective = plan.objective
         if hasattr(memory, "session") and hasattr(memory.session, "set"):
             memory.session.set("current_objective", plan.objective)
 
@@ -575,6 +603,353 @@ class AgentLoop:
             max_iterations=max_iterations,
         )
 
+    def _active_runtime(self) -> Any:
+        return getattr(getattr(self.actor, "tool_manager", None), "runtime", None) or getattr(self.actor, "runtime", None)
+
+    def _collect_deep_disk_checks(self, actor_output: Any, task: Any) -> tuple[str, List[str]]:
+        """Inspect actual files on disk touched by Acting and flag deterministic issues."""
+        rt = self._active_runtime()
+        if rt is None:
+            return "", []
+
+        candidates: List[str] = []
+        artifacts = getattr(actor_output, "artifacts", None) or {}
+        for fp in artifacts.get("files_modified", []) or []:
+            if fp not in candidates:
+                candidates.append(fp)
+        for fp in getattr(task, "target_files", []) or []:
+            if fp and fp not in candidates:
+                candidates.append(fp)
+
+        reports: List[str] = []
+        issues: List[str] = []
+        for target in candidates[:6]:
+            chk = inspect_workspace_file(rt, str(target), preview_lines=30)
+            fname = os.path.basename(str(chk.get("file_path") or target))
+            if not chk.get("exists"):
+                issues.append(f"Expected file '{target}' does not exist on disk.")
+                reports.append(f"- {fname}: MISSING ({chk.get('error', 'not found')})")
+                continue
+            if not chk.get("ast_valid", True):
+                issues.append(f"Python syntax error in '{fname}': {chk.get('ast_error')}")
+            symbols = ", ".join(chk.get("symbols") or []) or "none"
+            reports.append(
+                f"- {fname} ({chk.get('line_count', 0)}L, ast_valid={chk.get('ast_valid', True)}, symbols=[{symbols}]):\n"
+                f"{chk.get('preview', '')}"
+            )
+            if chk.get("line_count", 0) == 0:
+                issues.append(f"File '{fname}' is empty (0 lines).")
+
+        return "\n".join(reports), issues
+
+    async def _watch_deep_task(
+        self,
+        task: Any,
+        actor_output: Any,
+        expected_result: str,
+    ) -> tuple[ActionWatchSchema, str]:
+        """Deep-mode Watching stage: verify actual results + on-disk state against expected outcome."""
+        disk_report, det_issues = self._collect_deep_disk_checks(actor_output, task)
+
+        exec_results = []
+        if hasattr(actor_output, "result") and isinstance(actor_output.result, dict):
+            exec_results = actor_output.result.get("execution_results", []) or []
+
+        task_type = str(getattr(task, "task_type", "")).lower()
+        mutated = any(r.get("success") and r.get("tool") in MUTATING_FILE_TOOLS for r in exec_results)
+        has_direct = bool(
+            hasattr(actor_output, "result")
+            and isinstance(actor_output.result, dict)
+            and (actor_output.result.get("direct_response") or "").strip()
+        )
+        if task_type in ("write", "update") and not mutated:
+            det_issues.append("Task requires modifying/writing files, but no mutating file tool succeeded.")
+        if not exec_results and not has_direct:
+            det_issues.append("Actor produced no tool calls and no direct response.")
+        if not getattr(actor_output, "success", False):
+            err_ctx = getattr(actor_output, "error_context", None) or "One or more tool calls failed."
+            det_issues.append(err_ctx)
+
+        actual_lines = [
+            f"- {r.get('tool')} [{'OK' if r.get('success') else 'FAIL'}]: "
+            f"{compact_value(r.get('output') if r.get('success') else r.get('error'), max_chars=500)}"
+            for r in exec_results[-6:]
+        ]
+        if has_direct:
+            actual_lines.append(f"- Direct Response: {compact_value(actor_output.result.get('direct_response'), max_chars=400)}")
+        actual_digest = "\n".join(actual_lines) or "(no tool execution output)"
+
+        if det_issues:
+            watch = ActionWatchSchema(
+                matches_expectation=False,
+                actual_summary=actual_digest[:500],
+                discrepancies=det_issues,
+                corrective_action="; ".join(det_issues[:3]),
+                rating=3,
+            )
+            return watch, disk_report
+
+        if hasattr(self.thinker, "watch_action_results") and _is_async_callable(self.thinker.watch_action_results):
+            try:
+                watch = await self.thinker.watch_action_results(
+                    task=task,
+                    expected_result=expected_result,
+                    actual_digest=actual_digest,
+                    disk_checks=disk_report,
+                )
+                return watch, disk_report
+            except Exception:
+                pass
+
+        return (
+            ActionWatchSchema(
+                matches_expectation=True,
+                actual_summary=actual_digest[:500],
+                discrepancies=[],
+                corrective_action=None,
+                rating=8,
+            ),
+            disk_report,
+        )
+
+    async def _run_deep_core(
+        self,
+        prompt: str,
+        memory: Any,
+        session_id: str,
+        max_iterations: int = 15,
+        status_queue: Optional[asyncio.Queue] = None,
+    ) -> str:
+        """
+        Deep Cognitive Mode:
+        Tasking -> Planning (with Expected Outcomes) -> Acting -> Watching Results vs Expectations -> Reacting & Fixing.
+        """
+        async def _emit_phase(phase: str, info: Optional[Dict[str, Any]] = None) -> None:
+            payload = {"session_id": session_id, "phase": phase, **(info or {})}
+            await tracer.emit_event("deep_phase", payload)
+            if status_queue is not None:
+                await status_queue.put({"type": "status", "content": f"[Deep:{phase}] {info.get('message', '') if info else ''}".strip()})
+
+        active_memory = self._resolve_memory_manager(memory)
+        active_memory.set_session(session_id, prompt)
+        if hasattr(self.actor, "reset_session_tracking"):
+            self.actor.reset_session_tracking()
+
+        rt = self._active_runtime()
+        ws_snap = get_workspace_snapshot(rt, max_files=25) if rt else ""
+        await _emit_phase("tasking", {"message": "Analyzing workspace and decomposing request into verifiable tasks..."})
+
+        if hasattr(self.thinker, "generate_deep_plan") and _is_async_callable(self.thinker.generate_deep_plan):
+            plan = await self.thinker.generate_deep_plan(prompt, memory, session_id, workspace_snapshot=ws_snap)
+        else:
+            plan = await self.planner.generate_initial_plan(prompt, memory, session_id)
+
+        if not getattr(plan, "tasks", None):
+            plan = PlanSchema(
+                objective=getattr(plan, "objective", prompt) or prompt,
+                tasks=[TaskSchema(task_id="t1", description=prompt, expected_result="Complete user request accurately")],
+            )
+
+        active_memory.objective = plan.objective
+        if hasattr(memory, "session") and hasattr(memory.session, "set"):
+            memory.session.set("current_objective", plan.objective)
+
+        for task in plan.tasks:
+            cell = active_memory.create_cell(
+                task_id=task.task_id,
+                description=task.description,
+                task_type=getattr(task, "task_type", "other"),
+                priority=getattr(task, "priority", "medium"),
+                dependencies=getattr(task, "dependencies", []),
+            )
+            cell.max_attempts = 3
+
+        await _emit_phase("planning", {"tasks": len(plan.tasks), "message": f"Planned {len(plan.tasks)} verifiable tasks."})
+        self._save_checkpoint_safe(active_memory, session_id, plan, prompt)
+
+        status_log = ""
+        disk_evidence_notes: List[str] = []
+        iterations = 0
+        replan_count = 0
+        remaining = list(plan.tasks)
+
+        while remaining and iterations < max_iterations:
+            ready = [t for t in remaining if active_memory.are_dependencies_met(t.task_id)]
+            task = ready[0] if ready else remaining[0]
+            cell = active_memory.get_cell(task.task_id)
+            cell.task_status = "in_progress"
+            expected_res = getattr(task, "expected_result", None) or task.description
+            task_complete = False
+
+            while not task_complete and iterations < max_iterations and not cell.is_exhausted():
+                cell.increment_attempt()
+                iterations += 1
+                base_ctx = active_memory.get_task_context(task.task_id)
+                ws_note = f"\nWorkspace Files: {ws_snap}" if ws_snap else ""
+                target_files = ", ".join(getattr(task, "target_files", []) or []) or "auto"
+                acting_ctx = (
+                    f"{base_ctx}{ws_note}\n\n"
+                    f"DEEP MODE PRE-ACTION CONTRACT:\n"
+                    f"- Expected Outcome Before Acting: {expected_res}\n"
+                    f"- Target Files: {target_files}"
+                )
+
+                await _emit_phase("acting", {"task_id": task.task_id, "attempt": cell.attempts, "message": f"Executing {task.task_id} (attempt {cell.attempts})..."})
+                actor_output = await self.actor.generate_and_execute(task, context=acting_ctx, max_tool_steps=5)
+                cell.add_runtime_result(_model_to_dict(actor_output))
+
+                if hasattr(actor_output, "result") and isinstance(actor_output.result, dict):
+                    for r in actor_output.result.get("execution_results", []) or []:
+                        if r.get("io_op"):
+                            cell.add_io_record(
+                                operation=r.get("io_op", "unknown"),
+                                file_path=r.get("path", "unknown"),
+                                success=r.get("success", False),
+                                error=r.get("error"),
+                            )
+                        if r.get("tool"):
+                            cell.add_tool_record(
+                                tool_name=r.get("tool", "unknown"),
+                                arguments=r.get("arguments", {}),
+                                success=r.get("success", False),
+                                output=r.get("output"),
+                                error=r.get("error"),
+                            )
+
+                await _emit_phase("watching", {"task_id": task.task_id, "message": f"Watching & verifying {task.task_id} against expectations..."})
+                watch, disk_report = await self._watch_deep_task(task, actor_output, expected_res)
+
+                watch_dict = _model_to_dict(watch)
+                cell.add_reflection({
+                    "status": "done" if watch.matches_expectation else "in_progress",
+                    "rating": watch.rating,
+                    "summary": watch.actual_summary,
+                    "feedback": (
+                        f"Expected matched: {watch.actual_summary}"
+                        if watch.matches_expectation
+                        else f"MISMATCH ({'; '.join(watch.discrepancies)}). Fix: {watch.corrective_action or 'retry carefully'}"
+                    ),
+                })
+
+                if watch.matches_expectation:
+                    task_complete = True
+                    task.status = TaskStatus.DONE
+                    active_memory.mark_complete(task.task_id)
+                    if disk_report:
+                        disk_evidence_notes.append(f"[{task.task_id}] Verified On-Disk Files:\n{disk_report}")
+                    status_log += f"Task {task.task_id} verified ({watch.rating}/10).\n"
+                else:
+                    mismatch_msg = "; ".join(watch.discrepancies) or "Output did not match expected result"
+                    fix_hint = watch.corrective_action or "Inspect the actual file/tool output and fix all gaps."
+                    cell.log_error(f"Watch mismatch: {mismatch_msg} | Action: {fix_hint}")
+                    await _emit_phase("reacting", {"task_id": task.task_id, "discrepancies": watch.discrepancies, "message": f"Mismatch on {task.task_id}; reacting: {fix_hint[:120]}"})
+                    if disk_report:
+                        ws_snap = get_workspace_snapshot(rt, max_files=25) if rt else ws_snap
+
+            if not task_complete:
+                if cell.is_exhausted():
+                    active_memory.mark_failed(task.task_id, "Did not match expected outcome after max retries")
+                    status_log += f"Task {task.task_id} failed verification after {cell.attempts} attempts.\n"
+                if (
+                    self.replan_on_failure
+                    and replan_count < 2
+                    and iterations < max_iterations
+                    and hasattr(self.thinker, "replan")
+                    and _is_async_callable(self.thinker.replan)
+                ):
+                    try:
+                        replan_count += 1
+                        recovery = await self.thinker.replan(
+                            objective=plan.objective,
+                            completed_summary=active_memory.get_completed_summary(),
+                            failed_task=task,
+                            failure_context=active_memory.build_retry_context(task.task_id),
+                        )
+                        if isinstance(recovery, PlanSchema) and recovery.tasks:
+                            for nt in recovery.tasks:
+                                if not active_memory.has_cell(nt.task_id):
+                                    nc = active_memory.create_cell(
+                                        task_id=nt.task_id,
+                                        description=nt.description,
+                                        task_type=getattr(nt, "task_type", "other"),
+                                        priority=getattr(nt, "priority", "medium"),
+                                        dependencies=getattr(nt, "dependencies", []),
+                                    )
+                                    nc.max_attempts = 2
+                                    remaining.append(nt)
+                    except Exception:
+                        pass
+
+            self._save_checkpoint_safe(active_memory, session_id, plan, prompt)
+            remaining = [t for t in remaining if t.task_id != task.task_id and getattr(t, "status", "pending") != "done"]
+
+        final_answer = status_log
+        if (
+            self.synthesize_answer
+            and hasattr(self.thinker, "synthesize_final_answer")
+            and _is_async_callable(self.thinker.synthesize_final_answer)
+        ):
+            try:
+                digest = active_memory.get_execution_digest()
+                if disk_evidence_notes:
+                    digest = f"{digest}\n\nVERIFIED ON-DISK EVIDENCE:\n" + "\n".join(disk_evidence_notes[-3:])
+                synthesized = await self.thinker.synthesize_final_answer(
+                    prompt=prompt,
+                    objective=plan.objective,
+                    execution_digest=digest,
+                )
+                if synthesized and isinstance(synthesized, str) and synthesized.strip():
+                    final_answer = f"{synthesized.strip()}\n\n---\nDeep Execution Summary:\n{status_log.strip()}"
+            except Exception:
+                pass
+
+        if hasattr(memory, "add_interaction"):
+            await memory.add_interaction(session_id, "assistant", final_answer)
+        if hasattr(active_memory, "finalize_run"):
+            self._schedule_background(
+                active_memory.finalize_run(
+                    session_id,
+                    objective=plan.objective,
+                    final_answer=final_answer,
+                    llm=getattr(self.reflector, "llm", None),
+                )
+            )
+        await self._flush_background()
+        await tracer.emit_event("complete", {"session_id": session_id, "mode": "deep"})
+        return final_answer
+
+    async def run_deep(
+        self,
+        prompt: str,
+        memory: Any,
+        session_id: str,
+        max_iterations: int = 15,
+    ) -> str:
+        """Public entrypoint for `mode='deep'`."""
+        return await self._run_deep_core(prompt, memory, session_id, max_iterations=max_iterations)
+
+    async def run_deep_stream(
+        self,
+        prompt: str,
+        memory: Any,
+        session_id: str,
+        max_iterations: int = 15,
+    ):
+        """Streaming entrypoint for `mode='deep'` yielding phase status updates and final response."""
+        q: asyncio.Queue = asyncio.Queue()
+        task = asyncio.create_task(
+            self._run_deep_core(prompt, memory, session_id, max_iterations=max_iterations, status_queue=q)
+        )
+        while not task.done() or not q.empty():
+            try:
+                ev = await asyncio.wait_for(q.get(), timeout=0.05)
+                yield ev
+            except asyncio.TimeoutError:
+                continue
+        final_answer = await task
+        for line in final_answer.splitlines() or [final_answer]:
+            yield {"type": "chunk", "content": f"{line}\n"}
+
     async def run_react(
         self,
         prompt: str,
@@ -588,12 +963,20 @@ class AgentLoop:
         instead of Plan -> Solve -> Reflect -> Synthesize (5-7 calls).
         """
         active_memory = self._resolve_memory_manager(memory)
+        active_memory.set_session(session_id, prompt)
+        if hasattr(self.actor, "reset_session_tracking"):
+            self.actor.reset_session_tracking()
+
         base_context = ""
         if hasattr(memory, "get_full_context"):
             res = memory.get_full_context(session_id, query=prompt)
             base_context = await res if inspect.isawaitable(res) else str(res or "")
 
-        active_memory.set_session(session_id, prompt)
+        rt = self._active_runtime()
+        ws_snap = get_workspace_snapshot(rt, max_files=25) if rt else ""
+        if ws_snap and "Workspace Files:" not in base_context:
+            base_context = f"{base_context}\n\nWorkspace Files: {ws_snap}".strip()
+
         react_task = TaskSchema(task_id="react_main", description=prompt)
         cell = active_memory.create_cell(task_id="react_main", description=prompt)
 
@@ -616,7 +999,16 @@ class AgentLoop:
                 )
             step_context = "\n\n".join(ctx_parts)
 
-            task_exec = await self.thinker.solve_task(react_task, context=step_context)
+            try:
+                task_exec = await self.thinker.solve_task(react_task, context=step_context)
+            except (ValueError, RuntimeError) as fmt_err:
+                if not isinstance(fmt_err, ValueError) and "json" not in str(fmt_err).lower():
+                    raise
+                observations.append(
+                    f"[Step {step} | FORMAT ERROR]: {fmt_err}. Return valid JSON with `tools_to_call` or `direct_response`."
+                )
+                continue
+
             tool_calls = getattr(task_exec, "tools_to_call", None) or []
             direct_resp = (getattr(task_exec, "direct_response", None) or "").strip()
 
@@ -660,11 +1052,14 @@ class AgentLoop:
                     break
 
             step_returned_direct = False
+            step_all_succeeded = True
             for tc in tool_calls:
                 t_name = tc.tool_name
                 t_args = tc.arguments or {}
                 await tracer.emit_event("tool_call", {"step": step, "tool": t_name})
                 rec = await self.actor._invoke_tool(t_name, t_args)
+                if not rec.get("success", False):
+                    step_all_succeeded = False
                 cell.add_tool_record(
                     tool_name=t_name,
                     arguments=t_args,
@@ -684,7 +1079,7 @@ class AgentLoop:
 
             if step_returned_direct:
                 break
-            if getattr(task_exec, "is_complete", False) and direct_resp:
+            if step_all_succeeded and getattr(task_exec, "is_complete", False) and direct_resp:
                 final_answer = direct_resp
                 active_memory.mark_complete("react_main")
                 break
@@ -758,9 +1153,13 @@ class AgentLoop:
             return
 
         yield {"type": "status", "content": "Thinking and Planning..."}
-        plan = await self.planner.generate_initial_plan(prompt, memory, session_id)
         active_memory = self._resolve_memory_manager(memory)
-        active_memory.set_session(session_id, plan.objective)
+        active_memory.set_session(session_id, prompt)
+        if hasattr(self.actor, "reset_session_tracking"):
+            self.actor.reset_session_tracking()
+
+        plan = await self.planner.generate_initial_plan(prompt, memory, session_id)
+        active_memory.objective = plan.objective
         if hasattr(memory, "session") and hasattr(memory.session, "set"):
             memory.session.set("current_objective", plan.objective)
 

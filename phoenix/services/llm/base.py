@@ -4,27 +4,44 @@ import json
 import re
 
 
+def _try_parse_json_dict(candidate: str) -> dict:
+    for strict_mode in (True, False):
+        try:
+            data = json.loads(candidate, strict=strict_mode)
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+    cleaned = re.sub(r",\s*([}\]])", r"\1", candidate)
+    for strict_mode in (True, False):
+        try:
+            data = json.loads(cleaned, strict=strict_mode)
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+    return {}
+
+
 def _extract_json_dict(raw_output: str) -> dict:
     if not raw_output or not isinstance(raw_output, str):
         return {}
     text = raw_output.strip()
     match = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
     if match:
-        text = match.group(1).strip()
-    try:
-        data = json.loads(text)
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        # Try finding outermost JSON object
-        start = text.find("{")
-        end = text.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            try:
-                data = json.loads(text[start : end + 1])
-                return data if isinstance(data, dict) else {}
-            except Exception:
-                pass
-        return {}
+        parsed = _try_parse_json_dict(match.group(1).strip())
+        if parsed:
+            return parsed
+
+    parsed = _try_parse_json_dict(text)
+    if parsed:
+        return parsed
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return _try_parse_json_dict(text[start : end + 1])
+    return {}
 
 
 class BaseLLM(BaseService):

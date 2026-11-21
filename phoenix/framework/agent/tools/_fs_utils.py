@@ -400,3 +400,93 @@ class SyntaxGuard:
                 f"to avoid infinite retry loop: {err_detail}"
             )
             return True, None, warning, fails
+
+
+def get_workspace_snapshot(runtime: Any = None, max_files: int = 25) -> str:
+    """Return a concise single-string summary of workspace files so the LLM knows what already exists."""
+    ws = getattr(runtime, "workspace_root", None) if runtime is not None else None
+    if not ws:
+        return ""
+    real_ws = os.path.realpath(ws)
+    if not os.path.isdir(real_ws):
+        return ""
+
+    entries: List[str] = []
+    truncated = False
+    for root, dirs, files in os.walk(real_ws):
+        dirs[:] = [d for d in sorted(dirs) if not is_ignored_dir(d)]
+        for fname in sorted(files):
+            if fname.startswith("."):
+                continue
+            full_path = os.path.join(root, fname)
+            rel_path = os.path.relpath(full_path, real_ws)
+            try:
+                size = os.path.getsize(full_path)
+                if size <= 200_000:
+                    with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+                        line_cnt = sum(1 for _ in f)
+                    entries.append(f"{rel_path} ({line_cnt}L)")
+                else:
+                    entries.append(f"{rel_path} ({size // 1024}KB)")
+            except OSError:
+                entries.append(rel_path)
+
+            if len(entries) >= max_files:
+                truncated = True
+                break
+        if truncated:
+            break
+
+    if not entries:
+        return "(empty workspace)"
+    suffix = " ..." if truncated else ""
+    return ", ".join(entries) + suffix
+
+
+def inspect_workspace_file(runtime: Any, file_path: str, preview_lines: int = 35) -> Dict[str, Any]:
+    """Deterministically inspect an on-disk workspace file (existence, line count, Python AST, preview)."""
+    ok, resolved_path, err, _ = resolve_existing_path(file_path, runtime, allow_dir=False)
+    if not ok or not os.path.isfile(resolved_path):
+        return {
+            "file_path": resolved_path or file_path,
+            "exists": False,
+            "error": err or f"File not found: {file_path}",
+        }
+
+    try:
+        with open(resolved_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except OSError as exc:
+        return {"file_path": resolved_path, "exists": True, "error": str(exc)}
+
+    lines = content.splitlines()
+    info: Dict[str, Any] = {
+        "file_path": resolved_path,
+        "exists": True,
+        "line_count": len(lines),
+        "char_count": len(content),
+        "ast_valid": True,
+        "ast_error": None,
+        "symbols": [],
+    }
+    if resolved_path.lower().endswith(".py"):
+        try:
+            tree = ast.parse(content, filename=resolved_path)
+            symbols = []
+            for node in tree.body:
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    symbols.append(f"def {node.name}")
+                elif isinstance(node, ast.ClassDef):
+                    symbols.append(f"class {node.name}")
+            info["symbols"] = symbols
+        except SyntaxError as exc:
+            info["ast_valid"] = False
+            info["ast_error"] = f"SyntaxError line {exc.lineno}: {exc.msg}"
+
+    if len(lines) <= preview_lines:
+        info["preview"] = content
+    else:
+        head = "\n".join(lines[: preview_lines // 2])
+        tail = "\n".join(lines[-(preview_lines // 2) :])
+        info["preview"] = f"{head}\n... ({len(lines) - preview_lines} lines omitted) ...\n{tail}"
+    return info

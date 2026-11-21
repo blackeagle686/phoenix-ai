@@ -17,15 +17,38 @@ from phoenix.services.observability.tracing import tracer
 logger = get_logger("Phoenix AI.LLM.Local")
 
 
+def _summarize_param_schema(meta: Any, depth: int = 0) -> str:
+    if not isinstance(meta, dict):
+        return "any"
+    if "enum" in meta and isinstance(meta["enum"], list):
+        return "enum(" + "|".join(str(x) for x in meta["enum"][:6]) + ")"
+    ptype = meta.get("type", "any")
+    if ptype == "array" and depth < 2:
+        items = meta.get("items") or {}
+        if isinstance(items, dict) and items.get("type") == "object" and isinstance(items.get("properties"), dict):
+            fields = ",".join(f"{k}:{_summarize_param_schema(v, depth + 1)}" for k, v in list(items["properties"].items())[:4])
+            return f"list[{{{fields}}}]"
+        return f"list[{_summarize_param_schema(items, depth + 1)}]"
+    return str(ptype)
+
+
 def _compact_tools_for_prompt(tools: List[Dict[str, Any]]) -> str:
     compact = []
     for item in tools or []:
         fn = item.get("function", item) if isinstance(item, dict) else {}
         if isinstance(fn, dict) and fn.get("name"):
+            params = fn.get("parameters") or {}
+            props = params.get("properties", {}) if isinstance(params, dict) else {}
+            req = set(params.get("required", []) if isinstance(params, dict) else ())
+            args_map = {
+                f"{p_name}{'*' if p_name in req else ''}": _summarize_param_schema(p_meta)
+                for p_name, p_meta in props.items()
+            }
+            desc = " ".join(str(fn.get("description", "")).split())
             compact.append({
                 "name": fn.get("name"),
-                "description": fn.get("description", ""),
-                "parameters": fn.get("parameters", {}),
+                "desc": desc[:130] + ("..." if len(desc) > 130 else ""),
+                "args": args_map,
             })
     return json.dumps(compact, separators=(",", ":"), ensure_ascii=False)
 
@@ -404,11 +427,12 @@ class LocalLLM(BaseLLM):
             else:
                 formatted = "\n".join(f"{m['role']}: {m['content']}" for m in messages) + "\nassistant:"
 
+            reserved_out = min(max_new_tokens, max(256, self.n_ctx // 3))
             inputs = self.tokenizer(
                 formatted,
                 return_tensors="pt",
                 truncation=True,
-                max_length=max(256, self.n_ctx - min(max_new_tokens, self.n_ctx // 2)),
+                max_length=max(256, self.n_ctx - reserved_out),
             )
             model_device = getattr(self.hf_model, "device", torch.device("cpu"))
             inputs = {k: v.to(model_device) for k, v in inputs.items()}
@@ -597,13 +621,28 @@ class LocalLLM(BaseLLM):
             if hasattr(schema, "model_json_schema")
             else (schema.schema() if hasattr(schema, "schema") else {})
         )
-        schema_str = json.dumps(schema_dict, separators=(",", ":")) if isinstance(schema_dict, dict) else str(schema)
+
+        def _minify_schema(node: Any) -> Any:
+            if isinstance(node, dict):
+                return {
+                    k: _minify_schema(v)
+                    for k, v in node.items()
+                    if k not in ("title", "description", "additionalProperties")
+                }
+            if isinstance(node, list):
+                return [_minify_schema(i) for i in node]
+            return node
+
+        prompt_schema = _minify_schema(schema_dict) if (self.active_backend == "transformers" and isinstance(schema_dict, dict)) else schema_dict
+        schema_str = json.dumps(prompt_schema, separators=(",", ":")) if isinstance(prompt_schema, dict) else str(schema)
         system_prompt = (
             "You are a strict JSON generator. Return ONLY a single valid raw JSON object matching this schema "
             f"(no markdown, no explanation):\n{schema_str}"
         )
         messages = self._build_messages(prompt=prompt, system_prompt=system_prompt)
         out_tokens = max_tokens or config.SECURITY_MAX_OUTPUT_LENGTH
+        if self.active_backend == "transformers":
+            out_tokens = min(out_tokens, max(512, self.n_ctx // 3))
 
         span_id = tracer.start_span(
             "LocalLLM.generate_structured",
@@ -626,7 +665,7 @@ class LocalLLM(BaseLLM):
             if not parsed:
                 # One deterministic repair attempt on malformed local output
                 repair_messages = self._build_messages(
-                    prompt=f"Fix this broken output into valid raw JSON matching the schema.\nBroken output:\n{raw[:1200]}",
+                    prompt=f"Fix this broken output into valid raw JSON matching the schema.\nBroken output:\n{raw[:1400]}",
                     system_prompt=system_prompt,
                 )
                 if self.active_backend == "llama_cpp":
@@ -645,9 +684,27 @@ class LocalLLM(BaseLLM):
                 parsed = _extract_json_dict(raw)
 
             tracer.end_span(span_id, status="success", usage=usage)
+            if not parsed:
+                raw_text = (raw or "").strip()
+                looks_like_failed_json = any(
+                    tok in raw_text
+                    for tok in ('"tools_to_call"', '"tool_name"', "{", "file_write", "file_edit", "file_read")
+                )
+                if not looks_like_failed_json and raw_text and getattr(schema, "__name__", "") == "TaskExecutionSchema":
+                    return schema(
+                        thought_process="",
+                        tools_to_call=[],
+                        direct_response=raw_text,
+                        is_complete=True,
+                    )
+                raise ValueError(f"Invalid or empty JSON returned by {self.model}: {raw_text[:200]}")
+
             if hasattr(schema, "model_validate"):
                 return schema.model_validate(parsed)
             return schema(**parsed)
+        except ValueError as ve:
+            tracer.end_span(span_id, status="error", error=str(ve))
+            raise
         except Exception as e:
             tracer.end_span(span_id, status="error", error=str(e))
             raise RuntimeError(f"LocalLLM structured generation failed: {e}")

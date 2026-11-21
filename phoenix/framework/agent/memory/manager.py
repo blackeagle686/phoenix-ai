@@ -292,10 +292,11 @@ class MemoryManager:
             if not cell:
                 continue
             lines = []
-            for t_rec in cell.tool_history[-3:]:
+            for t_rec in cell.tool_history[-4:]:
                 status = "OK" if t_rec["success"] else "FAIL"
-                detail = t_rec.get("output") or t_rec.get("error") or ""
-                lines.append(f"  - Tool {t_rec['tool_name']} [{status}]: {truncate_text(str(detail), 600, mode='middle')}")
+                detail = t_rec.get("output") if t_rec.get("success") else (t_rec.get("error") or t_rec.get("output") or "")
+                args_hint = compact_value(t_rec.get("arguments", {}), max_chars=120)
+                lines.append(f"  - Tool {t_rec['tool_name']}({args_hint}) [{status}]: {truncate_text(str(detail), 800, mode='middle')}")
             for finding in cell.get_direct_findings()[-1:]:
                 lines.append(f"  - Finding: {truncate_text(finding, 500)}")
             if cell.reflections:

@@ -218,9 +218,18 @@ ToolCallSchema = ToolCall
 
 class TaskExecutionSchema(BaseModel):
     thought_process: str = Field(default="", description="Detailed analysis of the problem and the step-by-step approach to solve it")
+    expected_outcome: Optional[str] = Field(default=None, description="Expected observable outcome of running tools_to_call before execution")
     tools_to_call: List[ToolCall] = Field(default_factory=list, description="Specific tool calls required to enact the solution")
     direct_response: Optional[str] = Field(default=None, description="Direct answer or finding when no further tool calls are needed")
     is_complete: bool = Field(default=False, description="Whether the task objective is satisfied by this step")
+
+
+class ActionWatchSchema(BaseModel):
+    matches_expectation: bool = Field(default=True, description="Whether actual tool outputs and disk state satisfy the expected result")
+    actual_summary: str = Field(default="", description="Factual summary of what actually occurred on disk/stdout")
+    discrepancies: List[str] = Field(default_factory=list, description="Specific gaps or errors between expected and actual outcome")
+    corrective_action: Optional[str] = Field(default=None, description="Concrete fix to apply on retry if mismatches exist")
+    rating: int = Field(default=8, ge=1, le=10, description="Quality rating from 1 to 10")
 
 class ActionSchema(BaseModel):
     action_id: str = Field(default_factory=generate_unique_id, description="Unique ID for the action")
@@ -244,6 +253,8 @@ class TaskSchema(BaseModel):
     task_type: TaskType = Field(default=TaskType.OTHER, description="The operational archetype of the task")
     priority: TaskPriority = Field(default=TaskPriority.MEDIUM, description="Execution priority")
     description: str = Field(..., description="What the task requires")
+    expected_result: Optional[str] = Field(default=None, description="Explicit expected outcome or verifiable post-state before acting")
+    target_files: List[str] = Field(default_factory=list, description="Workspace files expected to be read, created, or modified")
     status: TaskStatus = Field(default=TaskStatus.PENDING, description="Task workflow status")
     dependencies: List[str] = Field(default_factory=list, description="List of task_ids that must complete before this task")
 
@@ -272,6 +283,8 @@ class ActorOutputSchema(BaseModel):
     success: bool = Field(..., description="Whether the actor successfully completed the task")
     result: Optional[Dict[str, Any]] = Field(None, description="The normalized tool output payload")
     error_context: Optional[str] = Field(None, description="Additional actor-level error context")
+    expected_outcome: Optional[str] = Field(default=None, description="Expected outcome declared before tool execution")
+    artifacts: Dict[str, Any] = Field(default_factory=dict, description="Tracked files read/modified and tool counts")
     reflection: Optional[Any] = Field(None, description="Optional reflection output from the Reflector module")
 
 class ActorToReflectorSchema(BaseModel):
