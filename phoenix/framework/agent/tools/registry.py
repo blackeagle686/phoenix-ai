@@ -39,10 +39,15 @@ class ToolRegistry:
         """
         tool_obj = ensure_tool(tool_or_func, name=name, description=description, **kwargs)
         if self.runtime is not None:
-            if hasattr(tool_obj, "set_runtime") and getattr(tool_obj, "runtime", None) is None:
-                tool_obj.set_runtime(self.runtime)
-            elif hasattr(tool_obj, "runtime") and getattr(tool_obj, "runtime", None) is None:
-                tool_obj.runtime = self.runtime
+            should_bind = (
+                getattr(tool_obj, "runtime", None) is None
+                or getattr(tool_obj, "_default_runtime_created", False)
+            )
+            if should_bind:
+                if hasattr(tool_obj, "set_runtime"):
+                    tool_obj.set_runtime(self.runtime)
+                elif hasattr(tool_obj, "runtime"):
+                    tool_obj.runtime = self.runtime
         self.tools[tool_obj.name] = tool_obj
         return tool_obj
 
@@ -115,9 +120,9 @@ class ToolRegistry:
         registry = cls(runtime=runtime)
         registry.register(WebSearchTool())
         registry.register(CodeExecutionTool(runtime=runtime))
-        registry.register(PythonAnalyzerTool())
+        registry.register(PythonAnalyzerTool(runtime=runtime))
         registry.register(CommandExecutionTool(runtime=runtime))
-        registry.register(CodeCompileTool())
+        registry.register(CodeCompileTool(runtime=runtime))
         registry.register(FileReadTool(runtime=runtime))
         registry.register(FileWriteTool(runtime=runtime))
         registry.register(FileAppendTool(runtime=runtime))

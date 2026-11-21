@@ -12,6 +12,30 @@ class ToolResult(BaseModel):
     error: Optional[str] = None
 
 
+def _resolve_json_refs(node: Any, defs: Dict[str, Any], seen: Optional[set] = None) -> Any:
+    """Recursively inline Pydantic $defs/$ref references so OpenAI/LLM schemas stay self-contained."""
+    seen = seen or set()
+    if isinstance(node, dict):
+        ref = node.get("$ref")
+        if isinstance(ref, str) and ref.startswith("#/"):
+            ref_name = ref.split("/")[-1]
+            if ref_name in defs and ref_name not in seen:
+                resolved = _resolve_json_refs(defs[ref_name], defs, seen | {ref_name})
+                merged = dict(resolved) if isinstance(resolved, dict) else {}
+                for k, v in node.items():
+                    if k != "$ref":
+                        merged[k] = _resolve_json_refs(v, defs, seen)
+                return merged
+        return {
+            k: _resolve_json_refs(v, defs, seen)
+            for k, v in node.items()
+            if k not in ("$defs", "definitions", "title")
+        }
+    if isinstance(node, list):
+        return [_resolve_json_refs(item, defs, seen) for item in node]
+    return node
+
+
 def _python_type_to_json_schema(annotation: Any) -> Dict[str, Any]:
     if annotation is inspect.Parameter.empty or annotation is Any:
         return {"type": "string"}
@@ -30,11 +54,15 @@ def _python_type_to_json_schema(annotation: Any) -> Dict[str, Any]:
                     base_schema["description"] = getattr(meta, "description")
             return base_schema
 
-    # Handle Optional / Union
+    # Handle Optional / Union (prefer BaseModel schema over raw dict when both exist)
     if origin is Union:
         non_none = [a for a in args if a is not type(None)]
         if non_none:
-            return _python_type_to_json_schema(non_none[0])
+            model_choice = next(
+                (a for a in non_none if inspect.isclass(a) and issubclass(a, BaseModel)),
+                None,
+            )
+            return _python_type_to_json_schema(model_choice or non_none[0])
 
     # Handle Literal[...]
     if getattr(origin, "__name__", "") == "Literal" or str(origin) == "typing.Literal":
@@ -69,11 +97,13 @@ def _python_type_to_json_schema(annotation: Any) -> Dict[str, Any]:
     if annotation is dict:
         return {"type": "object"}
     if inspect.isclass(annotation) and issubclass(annotation, BaseModel):
-        if hasattr(annotation, "model_json_schema"):
-            return annotation.model_json_schema()
-        if hasattr(annotation, "schema"):
-            return annotation.schema()
-        return {"type": "object"}
+        raw = (
+            annotation.model_json_schema()
+            if hasattr(annotation, "model_json_schema")
+            else (annotation.schema() if hasattr(annotation, "schema") else {"type": "object"})
+        )
+        defs = raw.get("$defs") or raw.get("definitions") or {}
+        return _resolve_json_refs(raw, defs)
     return {"type": "string"}
 
 
@@ -120,9 +150,11 @@ def _extract_parameters_schema(fn: Callable, args_schema: Optional[Type[BaseMode
             if hasattr(args_schema, "model_json_schema")
             else args_schema.schema()
         )
+        defs = raw_schema.get("$defs") or raw_schema.get("definitions") or {}
+        resolved = _resolve_json_refs(raw_schema, defs)
         return {
             "type": "object",
-            "properties": raw_schema.get("properties", {}),
+            "properties": resolved.get("properties", {}),
             "required": raw_schema.get("required", []),
         }
 
@@ -195,13 +227,31 @@ def _coerce_value(value: Any, annotation: Any) -> Any:
     return value
 
 
+def _apply_param_aliases(
+    raw_kwargs: Dict[str, Any],
+    param_aliases: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """Map legacy/alternative parameter names to canonical names when canonical key is absent."""
+    kwargs = dict(raw_kwargs or {})
+    if not param_aliases:
+        return kwargs
+    for alias, canonical in param_aliases.items():
+        if alias in kwargs and kwargs[alias] is not None:
+            if canonical not in kwargs or kwargs[canonical] is None:
+                kwargs[canonical] = kwargs.pop(alias)
+            else:
+                kwargs.pop(alias, None)
+    return kwargs
+
+
 def _prepare_call_kwargs(
     fn: Callable,
     raw_kwargs: Dict[str, Any],
     args_schema: Optional[Type[BaseModel]] = None,
+    param_aliases: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
-    """Validate and bind kwargs to a callable's signature, filtering unexpected keys when **kwargs is absent."""
-    kwargs = dict(raw_kwargs or {})
+    """Validate and bind kwargs to a callable's signature, resolving aliases and filtering unexpected keys."""
+    kwargs = _apply_param_aliases(raw_kwargs, param_aliases=param_aliases)
 
     if args_schema is not None and inspect.isclass(args_schema) and issubclass(args_schema, BaseModel):
         validated = (
@@ -252,8 +302,10 @@ class BaseTool:
     name: str = ""
     description: str = ""
     args_schema: Optional[Type[BaseModel]] = None
+    param_aliases: Dict[str, str] = {}
     read_only: bool = False
     return_direct: bool = False
+    timeout: Optional[float] = None
     runtime: Optional[Any] = None
 
     def __init__(
@@ -264,6 +316,7 @@ class BaseTool:
         read_only: Optional[bool] = None,
         return_direct: Optional[bool] = None,
         runtime: Optional[Any] = None,
+        timeout: Optional[float] = None,
     ):
         if name is not None:
             self.name = name
@@ -283,9 +336,12 @@ class BaseTool:
             self.return_direct = return_direct
         if runtime is not None:
             self.runtime = runtime
+        if timeout is not None:
+            self.timeout = timeout
 
     def set_runtime(self, runtime: Any) -> None:
         self.runtime = runtime
+        self._default_runtime_created = False
 
     async def execute(self, **kwargs) -> Union[ToolResult, Any]:
         raise NotImplementedError("Tool must implement execute method")
@@ -293,18 +349,37 @@ class BaseTool:
     async def invoke(self, **kwargs) -> ToolResult:
         """
         Safe execution entry point that supports both async and sync `execute` implementations,
-        validates/coerces parameters, and normalizes any return value into `ToolResult`.
+        validates/coerces parameters, enforces optional timeout, and normalizes any return value into `ToolResult`.
         """
         target_fn = getattr(self, "func", self.execute)
+        aliases = getattr(self, "param_aliases", None)
         try:
-            call_kwargs = _prepare_call_kwargs(target_fn, kwargs, args_schema=getattr(self, "args_schema", None))
-            exec_method = self.execute
-            if inspect.iscoroutinefunction(exec_method):
-                raw_res = await exec_method(**call_kwargs)
-            else:
-                maybe_coro = await asyncio.to_thread(exec_method, **call_kwargs)
-                raw_res = await maybe_coro if inspect.isawaitable(maybe_coro) else maybe_coro
-            return _normalize_tool_output(raw_res)
+            call_kwargs = _prepare_call_kwargs(
+                target_fn,
+                kwargs,
+                args_schema=getattr(self, "args_schema", None),
+                param_aliases=aliases,
+            )
+
+            async def _run_inner() -> ToolResult:
+                exec_method = self.execute
+                if inspect.iscoroutinefunction(exec_method):
+                    raw_res = await exec_method(**call_kwargs)
+                else:
+                    maybe_coro = await asyncio.to_thread(exec_method, **call_kwargs)
+                    raw_res = await maybe_coro if inspect.isawaitable(maybe_coro) else maybe_coro
+                return _normalize_tool_output(raw_res)
+
+            timeout_val = getattr(self, "timeout", None)
+            if timeout_val is not None and timeout_val > 0:
+                return await asyncio.wait_for(_run_inner(), timeout=timeout_val)
+            return await _run_inner()
+        except asyncio.TimeoutError:
+            return ToolResult(
+                success=False,
+                output=None,
+                error=f"Tool '{self.name}' timed out after {getattr(self, 'timeout', '?')}s.",
+            )
         except Exception as e:
             return ToolResult(success=False, output=None, error=str(e))
 
@@ -397,7 +472,12 @@ class FunctionTool(BaseTool):
 
     async def execute(self, **kwargs) -> ToolResult:
         try:
-            call_kwargs = _prepare_call_kwargs(self.func, kwargs, args_schema=self.args_schema)
+            call_kwargs = _prepare_call_kwargs(
+                self.func,
+                kwargs,
+                args_schema=self.args_schema,
+                param_aliases=getattr(self, "param_aliases", None),
+            )
             if inspect.iscoroutinefunction(self.func):
                 result = await self.func(**call_kwargs)
             else:

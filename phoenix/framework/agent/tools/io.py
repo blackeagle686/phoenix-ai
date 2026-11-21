@@ -1,109 +1,65 @@
+"""Deterministic, token-efficient filesystem & search tools with workspace jailing and bounded syntax rollback."""
+
+from __future__ import annotations
+
+import ast
+import asyncio
+import fnmatch
 import os
 import re
-import ast
-import json
-import shlex
-import asyncio
-import difflib
-from typing import List, Dict, Union, Optional, Any
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-from phoenix.framework.agent.tools.base import BaseTool, ToolResult
+from pydantic import BaseModel, Field
+
 from phoenix.framework.agent.cognition.schema import (
     FileContent,
     FileReadResult,
-    FileWriteResult,
-    FileUpdateResult,
-    ReplacementChunk,
     FileSearchMatch,
-    FileSearchResult,
+    MultiBlockUpdateEdit,
+    ReplacementChunk,
 )
+from phoenix.framework.agent.runtime.restricted_python import RestrictedPythonRuntime
+from phoenix.framework.agent.tools._fs_utils import (
+    EditItemSchema,
+    SyntaxGuard,
+    build_compact_diff,
+    check_runtime_path,
+    is_ignored_dir,
+    resolve_existing_path,
+    resolve_write_path,
+    smart_find_and_replace,
+)
+from phoenix.framework.agent.tools.base import BaseTool, ToolResult
+
+_ALLOWED_INDEX_EXTS = frozenset({
+    ".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss",
+    ".json", ".md", ".txt", ".yml", ".yaml", ".toml", ".ini",
+    ".sh", ".bash", ".c", ".cpp", ".h", ".java", ".go", ".rs",
+})
 
 
-def _auto_correct_path(
+def _dump_model(model: Any) -> Dict[str, Any]:
+    return model.model_dump() if hasattr(model, "model_dump") else model.dict()
+
+
+def get_blocks_from_lines(
+    lines: List[str],
     file_path: str,
-    is_edit_mode: bool = True,
-    tool_name: str = "Tool",
-    workspace_root: Optional[str] = None,
-) -> str:
-    base_dir = workspace_root or os.getcwd()
-
-    if os.path.isabs(file_path) and os.path.exists(file_path):
-        return file_path
-
-    # Direct check relative to base_dir or cwd
-    candidate_abs = file_path if os.path.isabs(file_path) else os.path.abspath(os.path.join(base_dir, file_path))
-    if os.path.exists(candidate_abs):
-        return candidate_abs
-
-    parent_dir = os.path.dirname(file_path) or "."
-    base_name = os.path.basename(file_path)
-    if os.path.exists(parent_dir) and os.path.exists(os.path.join(parent_dir, base_name)):
-        return os.path.abspath(os.path.join(parent_dir, base_name))
-
-    corrected_path = None
-
-    if is_edit_mode and base_name:
-        search_root = base_dir
-        curr = search_root
-        while curr and curr != "/":
-            if os.path.isdir(os.path.join(curr, ".git")):
-                search_root = curr
-                break
-            curr = os.path.dirname(curr)
-
-        IGNORE_DIRS = {
-            ".git", "venv", "env", "agent_venv", "git_venv",
-            "__pycache__", ".idea", ".vscode", "node_modules", "dist", "build",
-        }
-
-        exact_matches = []
-        partial_matches = []
-
-        for root, dirs, files in os.walk(search_root):
-            dirs[:] = [d for d in dirs if d not in IGNORE_DIRS and not d.startswith(".")]
-            for f in files:
-                if f == base_name:
-                    exact_matches.append(os.path.join(root, f))
-                elif base_name.lower() in f.lower():
-                    partial_matches.append(os.path.join(root, f))
-
-        candidates = exact_matches if exact_matches else partial_matches
-
-        if len(candidates) == 1:
-            corrected_path = candidates[0]
-        elif len(candidates) > 1:
-            rel_file_path = file_path if not os.path.isabs(file_path) else os.path.relpath(file_path, search_root)
-            rel_candidates = [os.path.relpath(c, search_root) for c in candidates]
-            matches = difflib.get_close_matches(rel_file_path, rel_candidates, n=1, cutoff=0.1)
-            if matches:
-                corrected_path = os.path.join(search_root, matches[0])
-            else:
-                corrected_path = candidates[0]
-
-    if corrected_path:
-        return corrected_path
-
-    # For creation or non-existing target, normalize to absolute path and ensure parent directory exists
-    if not is_edit_mode:
-        parent = os.path.dirname(candidate_abs)
-        if parent and not os.path.exists(parent):
-            os.makedirs(parent, exist_ok=True)
-    return candidate_abs
-
-
-def get_blocks_from_lines(lines: List[str], file_path: str, block_size: int = 100, start_line_offset: int = 1) -> tuple[List[FileContent], int]:
+    block_size: int = 200,
+    start_line_offset: int = 1,
+) -> Tuple[List[FileContent], int]:
     total_lines = len(lines)
     if total_lines == 0:
         return [], 0
 
-    blocks = []
-    for i in range(0, total_lines, block_size):
-        chunk_end = min(i + block_size, total_lines)
-        content_block = "".join(lines[i:chunk_end])
+    step = max(1, int(block_size))
+    blocks: List[FileContent] = []
+    for i in range(0, total_lines, step):
+        chunk_end = min(i + step, total_lines)
         blocks.append(
             FileContent(
                 file_path=file_path,
-                content_block=content_block,
+                content_block="".join(lines[i:chunk_end]),
                 from_line=start_line_offset + i,
                 to_line=start_line_offset + chunk_end - 1,
                 block_summary=None,
@@ -112,133 +68,147 @@ def get_blocks_from_lines(lines: List[str], file_path: str, block_size: int = 10
     return blocks, total_lines
 
 
+class _FileWriteArgs(BaseModel):
+    file_path: str = Field(..., description="Target file path inside workspace")
+    content: str = Field(..., description="Text or code content to write")
+    from_line: int = Field(default=1, ge=1, description="Optional 1-indexed start line for partial replacement")
+    to_line: Optional[int] = Field(default=None, ge=1, description="Optional 1-indexed inclusive end line for partial replacement")
+    expected_target: Optional[str] = Field(default=None, description="Optional expected text inside [from_line:to_line] to prevent off-by-one overwrites")
+    verify_syntax: bool = Field(default=True, description="Validate Python AST syntax before saving .py files (max 3 rollbacks)")
+
+
+class _FileEditArgs(BaseModel):
+    file_path: str = Field(..., description="Path to the file to edit")
+    edits: Optional[List[EditItemSchema]] = Field(default=None, description="Search/replace blocks: [{'target': '...', 'replacement': '...'}]")
+    chunks: Optional[List[ReplacementChunk]] = Field(default=None, description="Line-range replacements: [{'from_line': 10, 'to_line': 15, 'replacement_content': '...', 'target_content': '...'}]")
+    upsert: bool = Field(default=False, description="When True, append replacements if search text is missing or create file if missing")
+    verify_syntax: bool = Field(default=True, description="Validate Python AST syntax before saving .py files (max 3 rollbacks)")
+
+
+class _FileSearchArgs(BaseModel):
+    query: str = Field(..., description="Substring or regex pattern to search for")
+    path: str = Field(default=".", description="File or directory path inside workspace (defaults to '.')")
+    file_glob: Optional[str] = Field(default=None, description="Optional filename glob filter, e.g. '*.py'")
+    is_regex: bool = Field(default=False, description="Treat query as a regular expression")
+    case_sensitive: bool = Field(default=False, description="Perform case-sensitive matching")
+    max_matches: int = Field(default=50, ge=1, le=500, description="Maximum matching lines returned")
+
+
+def _extract_outline(file_path: str, content: str) -> Dict[str, Any]:
+    file_data: Dict[str, Any] = {"language": "", "imports": [], "functions": [], "classes": []}
+    ext = os.path.splitext(file_path)[1].lower()
+
+    if ext == ".py":
+        file_data["language"] = "python"
+        try:
+            tree = ast.parse(content)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    file_data["imports"].extend(a.name for a in node.names)
+                elif isinstance(node, ast.ImportFrom):
+                    mod = node.module or ""
+                    file_data["imports"].extend(f"{mod}.{a.name}" for a in node.names)
+                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    file_data["functions"].append(
+                        f"{node.name} (L{node.lineno}-L{getattr(node, 'end_lineno', node.lineno)})"
+                    )
+                elif isinstance(node, ast.ClassDef):
+                    file_data["classes"].append(
+                        f"{node.name} (L{node.lineno}-L{getattr(node, 'end_lineno', node.lineno)})"
+                    )
+        except SyntaxError:
+            pass
+    elif ext in (".js", ".jsx", ".ts", ".tsx"):
+        file_data["language"] = "javascript/typescript"
+        file_data["imports"].extend(re.findall(r'import\s+.*?\s+from\s+[\'"](.*?)[\'"]', content))
+        file_data["classes"].extend(m.group(1) for m in re.finditer(r"class\s+([a-zA-Z0-9_]+)", content))
+    else:
+        file_data["language"] = ext.lstrip(".") or "text"
+
+    file_data["imports"] = sorted(set(file_data["imports"]))
+    file_data["functions"] = sorted(set(file_data["functions"]))
+    file_data["classes"] = sorted(set(file_data["classes"]))
+    return file_data
+
+
 class FileReadTool(BaseTool):
     name = "file_read"
+    read_only = True
+    param_aliases = {"path": "file_path"}
     description = (
-        "Reads a file or inspects a directory and returns its content blocks, line counts, and code structure outline. "
-        "Input: 'file_path' (str), optional 'from_line' (int, 1-indexed), 'to_line' (int), 'block_size' (int)."
+        "Reads a file (or lists a workspace directory) within optional 1-indexed line bounds and returns content blocks + outline. "
+        "Inputs: 'file_path' (str), optional 'from_line' (int=1), 'to_line' (int), 'block_size' (int=200)."
     )
 
-    def __init__(self, runtime=None):
-        super().__init__()
-        from phoenix.framework.agent.runtime.restricted_python import RestrictedPythonRuntime
+    def __init__(self, runtime: Optional[Any] = None):
+        super().__init__(read_only=True)
+        self._default_runtime_created = runtime is None
         self.runtime = runtime or RestrictedPythonRuntime()
-
-    def _indexing_file(self, file_path: str, content: Optional[str] = None) -> tuple[Dict[str, Any], str]:
-        file_data: Dict[str, Any] = {
-            "language": "",
-            "imports": [],
-            "functions": [],
-            "classes": [],
-        }
-
-        _, ext = os.path.splitext(file_path)
-        ext = ext.lower()
-
-        if content is None:
-            if not os.path.exists(file_path):
-                return file_data, ""
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-            except Exception:
-                return file_data, ""
-
-        if ext == ".py":
-            file_data["language"] = "python"
-            try:
-                tree = ast.parse(content)
-                for node in ast.walk(tree):
-                    if isinstance(node, ast.Import):
-                        for alias in node.names:
-                            file_data["imports"].append(alias.name)
-                    elif isinstance(node, ast.ImportFrom):
-                        module = node.module or ""
-                        for alias in node.names:
-                            file_data["imports"].append(f"{module}.{alias.name}")
-                    elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        file_data["functions"].append(
-                            f"{node.name} (L{node.lineno}-L{getattr(node, 'end_lineno', node.lineno)})"
-                        )
-                    elif isinstance(node, ast.ClassDef):
-                        file_data["classes"].append(
-                            f"{node.name} (L{node.lineno}-L{getattr(node, 'end_lineno', node.lineno)})"
-                        )
-            except SyntaxError:
-                pass
-        elif ext in [".js", ".jsx", ".ts", ".tsx"]:
-            file_data["language"] = "javascript/typescript"
-            import_matches = re.findall(r'import\s+.*?\s+from\s+[\'"](.*?)[\'"]', content)
-            file_data["imports"].extend(import_matches)
-            for m in re.finditer(r"class\s+([a-zA-Z0-9_]+)", content):
-                file_data["classes"].append(m.group(1))
-        else:
-            file_data["language"] = ext.lstrip(".") or "text"
-
-        file_data["imports"] = sorted(set(file_data["imports"]))
-        file_data["functions"] = sorted(set(file_data["functions"]))
-        file_data["classes"] = sorted(set(file_data["classes"]))
-        return file_data, content
 
     async def execute(
         self,
-        file_path: str,
+        file_path: str = ".",
         from_line: int = 1,
         to_line: Optional[int] = None,
-        block_size: int = 100,
+        block_size: int = 200,
+        include_outline: bool = True,
+        max_files: int = 80,
         **kwargs,
     ) -> ToolResult:
         try:
-            workspace_root = getattr(self.runtime, "workspace_root", None)
-            resolved_path = _auto_correct_path(
-                file_path,
-                is_edit_mode=True,
-                tool_name="FileReadTool",
-                workspace_root=workspace_root,
+            target = kwargs.get("path") or file_path or "."
+            ok, resolved_path, err, meta = await asyncio.to_thread(
+                resolve_existing_path, target, self.runtime, True
             )
-
-            if not os.path.exists(resolved_path):
-                return ToolResult(success=False, output=None, error=f"File or directory not found: {file_path}")
+            if not ok:
+                return ToolResult(success=False, output=meta or None, error=err)
 
             if os.path.isdir(resolved_path):
-                IGNORE_DIRS = {
-                    ".git", "venv", "env", "agent_venv", "git_venv",
-                    "__pycache__", ".idea", ".vscode", "node_modules", "dist", "build",
-                }
-                ALLOWED_EXTENSIONS = {
-                    ".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss",
-                    ".json", ".md", ".txt", ".yml", ".yaml", ".toml", ".ini",
-                    ".sh", ".bash", ".c", ".cpp", ".h", ".java", ".go", ".rs",
-                }
-                files_outline: Dict[str, Any] = {}
-                summary_lines: List[str] = []
+                def _scan_dir():
+                    files_outline: Dict[str, Any] = {}
+                    summary_lines: List[str] = []
+                    truncated = False
+                    count = 0
+                    for root, dirs, files in os.walk(resolved_path):
+                        dirs[:] = [d for d in sorted(dirs) if not is_ignored_dir(d)]
+                        for fname in sorted(files):
+                            if fname.startswith("."):
+                                continue
+                            ext = os.path.splitext(fname)[1].lower()
+                            if ext not in _ALLOWED_INDEX_EXTS:
+                                continue
+                            if count >= max_files:
+                                truncated = True
+                                break
+                            fp = os.path.join(root, fname)
+                            try:
+                                with open(fp, "r", encoding="utf-8", errors="replace") as f:
+                                    raw = f.read()
+                            except Exception:
+                                continue
+                            line_cnt = len(raw.splitlines())
+                            summary_lines.append(f"{os.path.relpath(fp, resolved_path)} ({line_cnt} lines)\n")
+                            if include_outline and count < 25:
+                                ol = _extract_outline(fp, raw)
+                                ol["total_lines"] = line_cnt
+                                files_outline[fp] = ol
+                            else:
+                                files_outline[fp] = {"total_lines": line_cnt}
+                            count += 1
+                        if truncated:
+                            break
+                    return summary_lines, files_outline, truncated
 
-                for root, dirs, files in os.walk(resolved_path):
-                    dirs[:] = [d for d in dirs if d not in IGNORE_DIRS and not d.startswith(".")]
-                    for file in sorted(files):
-                        if file.startswith("."):
-                            continue
-                        _, ext = os.path.splitext(file)
-                        if ext.lower() in ALLOWED_EXTENSIONS:
-                            fp = os.path.join(root, file)
-                            outline, raw_text = await asyncio.to_thread(self._indexing_file, fp)
-                            line_cnt = len(raw_text.splitlines())
-                            outline["total_lines"] = line_cnt
-                            files_outline[fp] = outline
-                            summary_lines.append(f"{fp} ({line_cnt} lines)\n")
-
+                summary_lines, files_outline, truncated = await asyncio.to_thread(_scan_dir)
                 blocks, total_lines = get_blocks_from_lines(summary_lines, resolved_path, block_size=block_size)
-                res_model = FileReadResult(
-                    file_path=resolved_path,
-                    content=blocks,
-                    total_lines=total_lines,
-                )
-                out_dict = res_model.model_dump() if hasattr(res_model, "model_dump") else res_model.dict()
+                res_model = FileReadResult(file_path=resolved_path, content=blocks, total_lines=total_lines)
+                out_dict = _dump_model(res_model)
                 out_dict["is_directory"] = True
+                out_dict["truncated"] = truncated
                 out_dict["files"] = files_outline
+                out_dict.update(meta)
                 return ToolResult(success=True, output=out_dict)
 
-            # Single file read via runtime
             read_result = await self.runtime.execute_io("read", resolved_path)
             if not read_result.success:
                 return ToolResult(success=False, output=None, error=read_result.error)
@@ -257,15 +227,11 @@ class FileReadTool(BaseTool):
                 block_size=max(1, block_size),
                 start_line_offset=start_idx + 1,
             )
-            outline, _ = self._indexing_file(resolved_path, content=raw_content)
-
-            result = FileReadResult(
-                file_path=resolved_path,
-                content=blocks,
-                total_lines=total_file_lines,
-            )
-            out_dict = result.model_dump() if hasattr(result, "model_dump") else result.dict()
-            out_dict["outline"] = outline
+            res_model = FileReadResult(file_path=resolved_path, content=blocks, total_lines=total_file_lines)
+            out_dict = _dump_model(res_model)
+            if include_outline:
+                out_dict["outline"] = await asyncio.to_thread(_extract_outline, resolved_path, raw_content)
+            out_dict.update(meta)
             return ToolResult(success=True, output=out_dict)
         except Exception as e:
             return ToolResult(success=False, output=None, error=str(e))
@@ -273,51 +239,76 @@ class FileReadTool(BaseTool):
 
 class FileWriteTool(BaseTool):
     name = "file_write"
+    args_schema = _FileWriteArgs
+    param_aliases = {"write_content": "content", "path": "file_path"}
     description = (
-        "Writes or overwrites content in a file. "
-        "Payload must include: 'file_path' (str), and 'write_content' or 'content' (str, the actual code/text). "
-        "Optional: 'from_line' (int, 1-indexed), 'to_line' (int)."
+        "Creates or overwrites a file (or replaces a line range when from_line/to_line are provided). "
+        "Inputs: 'file_path' (str), 'content' (str). Optional: 'from_line', 'to_line', 'expected_target', 'verify_syntax'."
     )
 
-    def __init__(self, runtime=None):
+    def __init__(self, runtime: Optional[Any] = None, max_syntax_rollbacks: int = 3):
         super().__init__()
-        from phoenix.framework.agent.runtime.restricted_python import RestrictedPythonRuntime
+        self._default_runtime_created = runtime is None
         self.runtime = runtime or RestrictedPythonRuntime()
+        self._syntax_guard = SyntaxGuard(max_rollbacks=max_syntax_rollbacks)
 
     async def execute(
         self,
         file_path: str,
-        write_content: Optional[str] = None,
+        content: Optional[str] = None,
         from_line: int = 1,
         to_line: Optional[int] = None,
-        content: Optional[str] = None,
+        expected_target: Optional[str] = None,
+        verify_syntax: bool = True,
+        write_content: Optional[str] = None,
         **kwargs,
     ) -> ToolResult:
         try:
-            actual_content = write_content if write_content is not None else content
+            actual_content = content if content is not None else write_content
             if actual_content is None:
-                actual_content = ""
+                return ToolResult(
+                    success=False,
+                    output=None,
+                    error="Missing required 'content' argument for file_write (refusing to overwrite file with empty string).",
+                )
 
-            workspace_root = getattr(self.runtime, "workspace_root", None)
-            is_partial = from_line > 1 or to_line is not None
-            resolved_path = _auto_correct_path(
-                file_path,
-                is_edit_mode=is_partial,
-                tool_name="FileWriteTool",
-                workspace_root=workspace_root,
-            )
+            is_partial = (from_line or 1) > 1 or to_line is not None
+            meta: Dict[str, Any] = {}
+            if is_partial:
+                ok, resolved_path, err, meta = await asyncio.to_thread(
+                    resolve_existing_path, file_path, self.runtime, False
+                )
+                if not ok:
+                    return ToolResult(success=False, output=meta or None, error=err)
+            else:
+                ok, resolved_path, err = await asyncio.to_thread(resolve_write_path, file_path, self.runtime)
+                if not ok:
+                    return ToolResult(success=False, output=None, error=err)
+
+            old_content = ""
+            if os.path.exists(resolved_path):
+                read_old = await self.runtime.execute_io("read", resolved_path)
+                if read_old.success and read_old.output is not None:
+                    old_content = read_old.output
 
             if not is_partial:
-                write_result = await self.runtime.execute_io("edit", resolved_path, actual_content)
-                if not write_result.success:
-                    return ToolResult(success=False, output=None, error=write_result.error)
-                lines = actual_content.splitlines(keepends=True)
+                final_content = actual_content
             else:
-                read_result = await self.runtime.execute_io("read", resolved_path)
-                lines = read_result.output.splitlines(keepends=True) if (read_result.success and read_result.output) else []
-
-                start_idx = max(0, from_line - 1)
+                lines = old_content.splitlines(keepends=True)
+                start_idx = max(0, (from_line or 1) - 1)
                 end_line = to_line if to_line is not None else max(1, len(lines))
+
+                if expected_target is not None:
+                    slice_text = "".join(lines[start_idx:end_line])
+                    if expected_target.replace("\r\n", "\n") not in slice_text.replace("\r\n", "\n"):
+                        return ToolResult(
+                            success=False,
+                            output={"actual_lines": slice_text},
+                            error=(
+                                f"Line guard mismatch at L{start_idx + 1}-L{end_line}: "
+                                "'expected_target' did not match lines on disk. Read lines again before writing."
+                            ),
+                        )
 
                 if start_idx > len(lines):
                     lines.extend(["\n"] * (start_idx - len(lines)))
@@ -331,107 +322,159 @@ class FileWriteTool(BaseTool):
 
                 lines[start_idx:end_line] = new_lines
                 final_content = "".join(lines)
-                write_result = await self.runtime.execute_io("edit", resolved_path, final_content)
-                if not write_result.success:
-                    return ToolResult(success=False, output=None, error=write_result.error)
 
-            blocks, total_lines = get_blocks_from_lines(lines, resolved_path)
-            result = FileWriteResult(
-                file_path=resolved_path,
-                content=blocks,
-                total_lines=total_lines,
+            allow, rb_err, syn_warn, _ = self._syntax_guard.check_python(
+                resolved_path, final_content, enabled=verify_syntax
             )
-            out_dict = result.model_dump() if hasattr(result, "model_dump") else result.dict()
-            return ToolResult(success=True, output=out_dict)
+            if not allow:
+                return ToolResult(success=False, output={"rolled_back": True}, error=rb_err)
+
+            write_result = await self.runtime.execute_io("edit", resolved_path, final_content)
+            if not write_result.success:
+                return ToolResult(success=False, output=None, error=write_result.error)
+
+            total_lines = len(final_content.splitlines())
+            written_lines = len(actual_content.splitlines())
+            out: Dict[str, Any] = {
+                "file_path": resolved_path,
+                "success": True,
+                "total_lines": total_lines,
+                "lines_written": written_lines,
+                "diff": build_compact_diff(old_content, final_content, resolved_path)
+                if old_content
+                else f"Created {os.path.basename(resolved_path)} ({total_lines} lines).",
+            }
+            if syn_warn:
+                out["syntax_warning"] = syn_warn
+            out.update(meta)
+            return ToolResult(success=True, output=out)
         except Exception as e:
             return ToolResult(success=False, output=None, error=str(e))
 
 
 class FileAppendTool(BaseTool):
     name = "file_append"
-    description = "Appends content to the end of a file and returns FileWriteResult. Input: 'file_path' (str), 'content' (str)."
+    param_aliases = {"write_content": "content", "path": "file_path"}
+    description = "Appends text to the end of a file inside the workspace. Inputs: 'file_path' (str), 'content' (str)."
 
-    def __init__(self, runtime=None):
+    def __init__(self, runtime: Optional[Any] = None):
         super().__init__()
-        from phoenix.framework.agent.runtime.restricted_python import RestrictedPythonRuntime
+        self._default_runtime_created = runtime is None
         self.runtime = runtime or RestrictedPythonRuntime()
 
-    async def execute(self, file_path: str, content: str = "", write_content: Optional[str] = None, **kwargs) -> ToolResult:
+    async def execute(
+        self,
+        file_path: str,
+        content: Optional[str] = None,
+        write_content: Optional[str] = None,
+        **kwargs,
+    ) -> ToolResult:
         try:
-            actual_content = content if content else (write_content or "")
-            workspace_root = getattr(self.runtime, "workspace_root", None)
-            resolved_path = _auto_correct_path(
-                file_path,
-                is_edit_mode=os.path.exists(file_path),
-                tool_name="FileAppendTool",
-                workspace_root=workspace_root,
-            )
+            actual_content = content if content is not None else write_content
+            if actual_content is None:
+                return ToolResult(success=False, output=None, error="Missing 'content' argument for file_append.")
+
+            ok, resolved_path, err = await asyncio.to_thread(resolve_write_path, file_path, self.runtime)
+            if not ok:
+                return ToolResult(success=False, output=None, error=err)
 
             append_result = await self.runtime.execute_io("append", resolved_path, actual_content)
             if not append_result.success:
                 return ToolResult(success=False, output=None, error=append_result.error)
 
             read_result = await self.runtime.execute_io("read", resolved_path)
-            lines = read_result.output.splitlines(keepends=True) if (read_result.success and read_result.output) else []
+            lines = read_result.output.splitlines() if (read_result.success and read_result.output) else []
 
-            blocks, total_lines = get_blocks_from_lines(lines, resolved_path)
-            result = FileWriteResult(
-                file_path=resolved_path,
-                content=blocks,
-                total_lines=total_lines,
+            return ToolResult(
+                success=True,
+                output={
+                    "file_path": resolved_path,
+                    "success": True,
+                    "appended_lines": len(actual_content.splitlines()),
+                    "total_lines": len(lines),
+                    "tail_preview": "\n".join(lines[-5:]),
+                },
             )
-            out_dict = result.model_dump() if hasattr(result, "model_dump") else result.dict()
-            return ToolResult(success=True, output=out_dict)
         except Exception as e:
             return ToolResult(success=False, output=None, error=str(e))
 
 
 class FileEditTool(BaseTool):
     name = "file_edit"
+    args_schema = _FileEditArgs
+    param_aliases = {"path": "file_path"}
     description = (
-        "Updates/Edits a file using line-based chunks or search/replace edits. "
-        "Payload must include: 'file_path' (str), and either 'chunks' (list of dicts with 'from_line', 'to_line', 'replacement_content') "
-        "or 'edits' (list of dicts with 'search' and 'replace')."
+        "Deterministically edits a file using exact/whitespace-safe search+replace 'edits' or line-range 'chunks'. "
+        "Inputs: 'file_path' (str), and either 'edits' ([{'target': '...', 'replacement': '...'}]) "
+        "or 'chunks' ([{'from_line': int, 'to_line': int, 'replacement_content': str, 'target_content'?: str}])."
     )
 
-    def __init__(self, runtime=None):
+    def __init__(self, runtime: Optional[Any] = None, max_syntax_rollbacks: int = 3):
         super().__init__()
-        from phoenix.framework.agent.runtime.restricted_python import RestrictedPythonRuntime
+        self._default_runtime_created = runtime is None
         self.runtime = runtime or RestrictedPythonRuntime()
+        self._syntax_guard = SyntaxGuard(max_rollbacks=max_syntax_rollbacks)
 
     async def execute(
         self,
         file_path: str,
         chunks: Optional[List[Union[ReplacementChunk, Dict[str, Any]]]] = None,
-        edits: Optional[list] = None,
-        upsert: bool = True,
+        edits: Optional[List[Union[MultiBlockUpdateEdit, Dict[str, Any]]]] = None,
+        upsert: bool = False,
+        verify_syntax: bool = True,
         **kwargs,
     ) -> ToolResult:
         try:
-            workspace_root = getattr(self.runtime, "workspace_root", None)
-            resolved_path = _auto_correct_path(
-                file_path,
-                is_edit_mode=True,
-                tool_name="FileEditTool",
-                workspace_root=workspace_root,
-            )
+            if not chunks and not edits:
+                return ToolResult(
+                    success=False,
+                    output=None,
+                    error="No edits provided. Supply non-empty 'edits' or 'chunks'.",
+                )
 
-            read_result = await self.runtime.execute_io("read", resolved_path)
-            lines = read_result.output.splitlines(keepends=True) if (read_result.success and read_result.output) else []
+            meta: Dict[str, Any] = {}
+            ok, resolved_path, err, meta = await asyncio.to_thread(
+                resolve_existing_path, file_path, self.runtime, False
+            )
+            if not ok:
+                if upsert:
+                    ok_w, resolved_path, err_w = await asyncio.to_thread(resolve_write_path, file_path, self.runtime)
+                    if not ok_w:
+                        return ToolResult(success=False, output=None, error=err_w)
+                else:
+                    return ToolResult(success=False, output=meta or None, error=err)
+
+            old_content = ""
+            if os.path.exists(resolved_path):
+                read_result = await self.runtime.execute_io("read", resolved_path)
+                if read_result.success and read_result.output is not None:
+                    old_content = read_result.output
+
+            applied_count = 0
+            match_modes: List[str] = []
 
             if chunks:
-                processed_chunks = []
-                for chunk in chunks:
-                    if isinstance(chunk, dict):
-                        processed_chunks.append(ReplacementChunk(**chunk))
-                    else:
-                        processed_chunks.append(chunk)
+                lines = old_content.splitlines(keepends=True)
+                processed: List[ReplacementChunk] = [
+                    ReplacementChunk(**c) if isinstance(c, dict) else c for c in chunks
+                ]
+                processed.sort(key=lambda c: c.from_line, reverse=True)
 
-                processed_chunks.sort(key=lambda c: c.from_line, reverse=True)
-
-                for chunk in processed_chunks:
+                for chunk in processed:
                     start_idx = max(0, chunk.from_line - 1)
                     end_idx = chunk.to_line
+
+                    if chunk.target_content:
+                        slice_text = "".join(lines[start_idx:end_idx])
+                        if chunk.target_content.replace("\r\n", "\n").strip() not in slice_text.replace("\r\n", "\n"):
+                            return ToolResult(
+                                success=False,
+                                output={"actual_lines": slice_text, "rolled_back": True},
+                                error=(
+                                    f"Chunk target_content mismatch at L{chunk.from_line}-L{chunk.to_line}. "
+                                    "Aborted without modifying file."
+                                ),
+                            )
 
                     if start_idx > len(lines):
                         lines.extend(["\n"] * (start_idx - len(lines)))
@@ -444,156 +487,234 @@ class FileEditTool(BaseTool):
                             new_lines.append("\n")
 
                     lines[start_idx:end_idx] = new_lines
+                    applied_count += 1
+                    match_modes.append("line_chunk")
 
-            elif edits:
-                content = "".join(lines)
-                updated = content
+                final_content = "".join(lines)
+            else:
+                updated = old_content
+                for edit in edits or []:
+                    if isinstance(edit, BaseModel):
+                        search = getattr(edit, "target", "")
+                        replace = getattr(edit, "replacement", "")
+                    else:
+                        search = edit.get("target", edit.get("search", ""))
+                        replace = edit.get("replacement", edit.get("replace", ""))
 
-                for edit in edits:
-                    search = edit.get("search", edit.get("target", ""))
-                    replace = edit.get("replace", edit.get("replacement", ""))
                     if not search:
                         continue
 
-                    if search in updated:
-                        updated = updated.replace(search, replace)
-                    elif upsert:
+                    new_text, find_err, find_meta = smart_find_and_replace(updated, search, replace)
+                    if find_err is None and new_text is not None:
+                        updated = new_text
+                        applied_count += 1
+                        match_modes.append(str(find_meta.get("match_mode", "exact")))
+                    elif upsert and not find_meta.get("occurrences_at_lines"):
                         if updated and not updated.endswith("\n"):
                             updated += "\n"
                         updated += replace
                         if replace and not replace.endswith("\n"):
                             updated += "\n"
+                        applied_count += 1
+                        match_modes.append("upsert_append")
                     else:
                         return ToolResult(
                             success=False,
-                            output=None,
-                            error=f"Search text not found: {search[:80]}",
+                            output={"applied_before_abort": 0, **find_meta},
+                            error=find_err or f"Search text not found: {search[:100]}",
                         )
-                lines = updated.splitlines(keepends=True)
 
-            final_content = "".join(lines)
+                final_content = updated
+
+            allow, rb_err, syn_warn, _ = self._syntax_guard.check_python(
+                resolved_path, final_content, enabled=verify_syntax
+            )
+            if not allow:
+                return ToolResult(success=False, output={"rolled_back": True}, error=rb_err)
+
             write_result = await self.runtime.execute_io("edit", resolved_path, final_content)
             if not write_result.success:
                 return ToolResult(success=False, output=None, error=write_result.error)
 
-            blocks, total_lines = get_blocks_from_lines(lines, resolved_path)
-            result = FileUpdateResult(
-                file_path=resolved_path,
-                success=True,
-                content=blocks,
-                total_lines=total_lines,
-            )
-            out_dict = result.model_dump() if hasattr(result, "model_dump") else result.dict()
-            return ToolResult(success=True, output=out_dict)
+            out: Dict[str, Any] = {
+                "file_path": resolved_path,
+                "success": True,
+                "applied_count": applied_count,
+                "match_modes": match_modes,
+                "total_lines": len(final_content.splitlines()),
+                "diff": build_compact_diff(old_content, final_content, resolved_path),
+            }
+            if syn_warn:
+                out["syntax_warning"] = syn_warn
+            out.update(meta)
+            return ToolResult(success=True, output=out)
         except Exception as e:
             return ToolResult(success=False, output=None, error=str(e))
 
 
 class FileSearchTool(BaseTool):
     name = "file_search"
+    read_only = True
+    args_schema = _FileSearchArgs
+    param_aliases = {"search_query": "query", "pattern": "query", "file_path": "path"}
     description = (
-        "Searches for a query string or regex pattern in a file or directory. "
-        "Input: 'file_path' (str), 'search_query' (str), optional 'is_regex' (bool), 'case_sensitive' (bool)."
+        "Fast pure-Python text/regex search inside workspace files or directories (auto-skips .git, venvs, node_modules). "
+        "Inputs: 'query' (str), optional 'path' (str='.'), 'file_glob' (str), 'is_regex' (bool), 'case_sensitive' (bool), 'max_matches' (int=50)."
     )
 
-    def __init__(self, runtime=None):
-        super().__init__()
-        from phoenix.framework.agent.runtime.restricted_python import RestrictedPythonRuntime
+    def __init__(self, runtime: Optional[Any] = None):
+        super().__init__(read_only=True)
+        self._default_runtime_created = runtime is None
         self.runtime = runtime or RestrictedPythonRuntime()
 
     async def execute(
         self,
-        file_path: Optional[str] = None,
-        search_query: Optional[str] = None,
+        query: Optional[str] = None,
+        path: str = ".",
+        file_glob: Optional[str] = None,
         is_regex: bool = False,
         case_sensitive: bool = False,
-        path: Optional[str] = None,
+        max_matches: int = 50,
+        search_query: Optional[str] = None,
         pattern: Optional[str] = None,
-        query: Optional[str] = None,
+        file_path: Optional[str] = None,
         **kwargs,
     ) -> ToolResult:
         try:
-            target_path = file_path or path
-            final_query = search_query or pattern or query
+            final_query = query if query is not None else (search_query if search_query is not None else pattern)
+            target_path = file_path or path or "."
 
-            if not target_path:
-                return ToolResult(success=False, output=None, error="No file path provided to search.")
             if not final_query:
-                return ToolResult(success=False, output=None, error="No search query/pattern provided.")
+                return ToolResult(success=False, output=None, error="Missing required 'query' argument to search.")
 
-            grep_flags = "-n"
-            if not case_sensitive:
-                grep_flags += " -i"
-            if is_regex:
-                grep_flags += " -E"
-            else:
-                grep_flags += " -F"
-
-            is_dir = os.path.isdir(target_path)
-            if is_dir:
-                grep_flags += " -r"
-
-            cmd = f"grep {grep_flags} {shlex.quote(final_query)} {shlex.quote(target_path)}"
-            search_result = await self.runtime.execute_command(cmd)
-
-            matches = []
-            if search_result.success and search_result.output:
-                for line in search_result.output.splitlines():
-                    if not line.strip():
-                        continue
-                    parts = line.split(":", 2 if is_dir else 1)
-                    if len(parts) >= 2:
-                        try:
-                            if is_dir and len(parts) >= 3:
-                                line_num = int(parts[1])
-                                line_content = parts[2]
-                            else:
-                                line_num = int(parts[0])
-                                line_content = parts[1]
-
-                            block_idx = max(0, line_num - 1) // 100
-                            matches.append(
-                                FileSearchMatch(
-                                    line_number=line_num,
-                                    line_content=line_content.strip(),
-                                    block_index=block_idx,
-                                )
-                            )
-                        except ValueError:
-                            pass
-
-            result = FileSearchResult(
-                file_path=target_path,
-                matches=matches,
-                total_matches=len(matches),
+            ok, resolved_path, err, meta = await asyncio.to_thread(
+                resolve_existing_path, target_path, self.runtime, True
             )
-            out_dict = result.model_dump() if hasattr(result, "model_dump") else result.dict()
-            return ToolResult(success=True, output=out_dict)
+            if not ok:
+                return ToolResult(success=False, output=meta or None, error=err)
+
+            flags = 0 if case_sensitive else re.IGNORECASE
+            try:
+                regex_obj = re.compile(final_query if is_regex else re.escape(final_query), flags)
+                ci_regex = re.compile(final_query if is_regex else re.escape(final_query), re.IGNORECASE) if case_sensitive else None
+            except re.error as r_err:
+                return ToolResult(
+                    success=False,
+                    output=None,
+                    error=f"Invalid regular expression {final_query!r}: {r_err}",
+                )
+
+            cap = max(1, min(int(max_matches or 50), 500))
+
+            def _search_sync() -> Dict[str, Any]:
+                matches: List[Dict[str, Any]] = []
+                ci_hint_count = 0
+                files_searched = 0
+                truncated = False
+
+                def _scan_file(fp: str) -> None:
+                    nonlocal ci_hint_count, files_searched, truncated
+                    if truncated:
+                        return
+                    try:
+                        if os.path.getsize(fp) > 2 * 1024 * 1024:
+                            return
+                        with open(fp, "rb") as fb:
+                            sample = fb.read(1024)
+                            if b"\x00" in sample:
+                                return
+                        with open(fp, "r", encoding="utf-8", errors="replace") as f:
+                            files_searched += 1
+                            for line_num, line in enumerate(f, start=1):
+                                if regex_obj.search(line):
+                                    match_obj = FileSearchMatch(
+                                        line_number=line_num,
+                                        line_content=line.strip()[:240],
+                                        block_index=(line_num - 1) // 100,
+                                    )
+                                    rec = _dump_model(match_obj)
+                                    rec["file_path"] = fp
+                                    matches.append(rec)
+                                    if len(matches) >= cap:
+                                        truncated = True
+                                        return
+                                elif ci_regex is not None and len(matches) == 0 and ci_hint_count < 20:
+                                    if ci_regex.search(line):
+                                        ci_hint_count += 1
+                    except Exception:
+                        return
+
+                if os.path.isfile(resolved_path):
+                    _scan_file(resolved_path)
+                else:
+                    for root, dirs, files in os.walk(resolved_path):
+                        dirs[:] = [d for d in sorted(dirs) if not is_ignored_dir(d)]
+                        for fname in sorted(files):
+                            if fname.startswith("."):
+                                continue
+                            if file_glob and not fnmatch.fnmatch(fname, file_glob):
+                                continue
+                            _scan_file(os.path.join(root, fname))
+                            if truncated:
+                                break
+                        if truncated:
+                            break
+
+                return {
+                    "matches": matches,
+                    "ci_hint_count": ci_hint_count,
+                    "files_searched": files_searched,
+                    "truncated": truncated,
+                }
+
+            res = await asyncio.to_thread(_search_sync)
+            out: Dict[str, Any] = {
+                "file_path": resolved_path,
+                "success": True,
+                "matches": res["matches"],
+                "total_matches": len(res["matches"]),
+                "files_searched": res["files_searched"],
+                "truncated": res["truncated"],
+            }
+            if len(res["matches"]) == 0 and res["ci_hint_count"] > 0:
+                out["hint"] = (
+                    f"Found {res['ci_hint_count']}+ matches ignoring case. "
+                    "Retry with case_sensitive=False."
+                )
+            out.update(meta)
+            return ToolResult(success=True, output=out)
         except Exception as e:
             return ToolResult(success=False, output=None, error=str(e))
 
 
 class FileDeleteTool(BaseTool):
     name = "file_delete"
-    description = "Deletes a file. Input: 'file_path' (str)."
+    param_aliases = {"path": "file_path"}
+    description = "Safely deletes an exact file path inside the workspace. Input: 'file_path' (str)."
 
-    def __init__(self, runtime=None):
+    def __init__(self, runtime: Optional[Any] = None):
         super().__init__()
-        from phoenix.framework.agent.runtime.restricted_python import RestrictedPythonRuntime
+        self._default_runtime_created = runtime is None
         self.runtime = runtime or RestrictedPythonRuntime()
 
     async def execute(self, file_path: str, **kwargs) -> ToolResult:
         try:
-            if not os.path.exists(file_path):
+            ok, checked_path, sec_err = await asyncio.to_thread(
+                check_runtime_path, self.runtime, file_path
+            )
+            if not ok:
+                return ToolResult(success=False, output=None, error=sec_err)
+
+            if not os.path.exists(checked_path):
                 return ToolResult(
                     success=False,
                     output=None,
                     error=f"Safety Check Failed: Exact file not found at {file_path}. Auto-correction is disabled for deletion.",
                 )
 
-            exe_result = await self.runtime.execute_io("delete", file_path)
+            exe_result = await self.runtime.execute_io("delete", checked_path)
             if not exe_result.success:
                 return ToolResult(success=False, output=None, error=exe_result.error)
-            return ToolResult(success=True, output=f"Successfully deleted {file_path}")
+            return ToolResult(success=True, output=f"Successfully deleted {checked_path}")
         except Exception as e:
             return ToolResult(success=False, output=None, error=str(e))

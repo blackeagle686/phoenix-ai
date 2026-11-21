@@ -50,9 +50,22 @@ class RestrictedPythonRuntime(BaseRuntime):
         "True", "False", "None",
     )
 
-    def __init__(self, workspace_root: Optional[str] = None, timeout: float = 30.0):
-        self.workspace_root = os.path.abspath(workspace_root) if workspace_root else None
+    def __init__(
+        self,
+        workspace_root: Optional[str] = None,
+        timeout: float = 30.0,
+        max_output_chars: int = 24000,
+    ):
+        self.workspace_root = os.path.realpath(workspace_root) if workspace_root else None
         self.timeout = timeout
+        self.max_output_chars = max(500, int(max_output_chars))
+
+    def _cap_text(self, text: str) -> str:
+        if not text or len(text) <= self.max_output_chars:
+            return text
+        head = int(self.max_output_chars * 0.65)
+        tail = self.max_output_chars - head - 40
+        return f"{text[:head]}\n... [output truncated] ...\n{text[-max(0, tail):]}"
 
     def _is_safe_code(self, code: str) -> tuple[bool, Optional[str]]:
         try:
@@ -140,9 +153,9 @@ class RestrictedPythonRuntime(BaseRuntime):
                 exit_code=1,
             )
 
-        output = output_buffer.getvalue()
+        output = self._cap_text(output_buffer.getvalue())
         if not output and "result" in local_vars:
-            output = str(local_vars["result"])
+            output = self._cap_text(str(local_vars["result"]))
 
         return ExecutionResult(
             success=True,
@@ -174,8 +187,8 @@ class RestrictedPythonRuntime(BaseRuntime):
 
         effective_cwd = cwd or self.workspace_root
         if effective_cwd and self.workspace_root:
-            abs_cwd = os.path.abspath(effective_cwd)
-            if os.path.commonpath([self.workspace_root, abs_cwd]) != self.workspace_root:
+            real_cwd = os.path.realpath(effective_cwd)
+            if os.path.commonpath([self.workspace_root, real_cwd]) != self.workspace_root:
                 return ExecutionResult(
                     success=False,
                     output="",
@@ -202,8 +215,8 @@ class RestrictedPythonRuntime(BaseRuntime):
                     exit_code=124,
                 )
 
-            stdout_str = stdout.decode("utf-8", errors="replace")
-            stderr_str = stderr.decode("utf-8", errors="replace")
+            stdout_str = self._cap_text(stdout.decode("utf-8", errors="replace"))
+            stderr_str = self._cap_text(stderr.decode("utf-8", errors="replace"))
             exit_code = proc.returncode or 0
             success = exit_code == 0
 
@@ -217,14 +230,17 @@ class RestrictedPythonRuntime(BaseRuntime):
             return ExecutionResult(success=False, output="", error=str(e), exit_code=1)
 
     def _resolve_and_check_path(self, file_path: str) -> tuple[bool, str, Optional[str]]:
-        abs_path = os.path.abspath(file_path)
+        base = self.workspace_root or os.getcwd()
+        candidate = file_path if os.path.isabs(file_path) else os.path.join(base, file_path)
+        abs_path = os.path.abspath(candidate)
         if self.workspace_root:
             try:
-                if os.path.commonpath([self.workspace_root, abs_path]) != self.workspace_root:
+                real_path = os.path.realpath(abs_path)
+                if os.path.commonpath([self.workspace_root, real_path]) != self.workspace_root:
                     return (
                         False,
                         abs_path,
-                        f"Security Violation: Path '{file_path}' is outside workspace root '{self.workspace_root}'.",
+                        f"Security Violation: Path '{file_path}' resolves outside workspace root '{self.workspace_root}'.",
                     )
             except ValueError:
                 return False, abs_path, f"Security Violation: Invalid path '{file_path}'."
@@ -251,14 +267,14 @@ class RestrictedPythonRuntime(BaseRuntime):
                         os.makedirs(parent, exist_ok=True)
 
                     mode = "a" if operation == "append" else "w"
-                    with open(abs_path, mode, encoding="utf-8") as f:
+                    with open(abs_path, mode, encoding="utf-8", newline="") as f:
                         f.write(text_content)
                     return ExecutionResult(success=True, output=f"Successfully executed {operation} on {file_path}")
 
                 elif operation == "read":
                     if not os.path.exists(abs_path):
                         return ExecutionResult(success=False, output="", error=f"File not found: {file_path}", exit_code=1)
-                    with open(abs_path, "r", encoding="utf-8") as f:
+                    with open(abs_path, "r", encoding="utf-8", newline="") as f:
                         data = f.read()
                     return ExecutionResult(success=True, output=data)
 
