@@ -198,3 +198,14 @@ class LLMRouter(BaseLLM):
 
 MultiLLM = LLMRouter
 FallbackLLM = LLMRouter
+
+from phoenix.services.llm.moe import MoERouter, ExpertProfile, moe_route_context
+
+__all__ = [
+    "LLMRouter",
+    "MultiLLM",
+    "FallbackLLM",
+    "MoERouter",
+    "ExpertProfile",
+    "moe_route_context",
+]

@@ -14,6 +14,7 @@ from phoenix.framework.agent.cognition.schema import (
 )
 from phoenix.framework.agent.cognition.utils import parse_llm_json
 from phoenix.framework.agent.tools._fs_utils import get_workspace_snapshot
+from phoenix.services.llm.moe import moe_route_context
 
 
 class Thinker(BaseThinker):
@@ -133,7 +134,8 @@ class Thinker(BaseThinker):
             f"{self._get_profile_string()}\n"
             f"Context:\n{context}\n\nUser Prompt: {prompt}"
         )
-        return await self.llm.generate(analysis_prompt)
+        with moe_route_context(role="analyzer"):
+            return await self.llm.generate(analysis_prompt)
 
     async def generate_plan(
         self,
@@ -178,12 +180,13 @@ class Thinker(BaseThinker):
         system_prompt += self._get_profile_string()
 
         full_prompt = f"{system_prompt}{workspace_section}\n\nContext:\n{context}\n\nUser Request: {prompt}"
-        return await self._call_structured(
-            full_prompt,
-            PlanSchema,
-            session_id=session_id,
-            max_tokens=self._default_structured_budget(),
-        )
+        with moe_route_context(role="planner"):
+            return await self._call_structured(
+                full_prompt,
+                PlanSchema,
+                session_id=session_id,
+                max_tokens=self._default_structured_budget(),
+            )
 
     def _supports_native_tool_calling(self) -> bool:
         from phoenix.services.llm.base import BaseLLM
@@ -233,7 +236,8 @@ class Thinker(BaseThinker):
                 f"{system_prompt}{ws_ctx}\n\n"
                 f"Task ID: {task_id}\nTask Description: {task_desc}{expected_line}\n\nContext:\n{context}"
             )
-            return await self.llm.generate_with_tools(full_prompt, openai_tools, max_tokens=budget)
+            with moe_route_context(role="coder", requires_tools=True):
+                return await self.llm.generate_with_tools(full_prompt, openai_tools, max_tokens=budget)
 
         tools_list = self._get_tools_list()
         system_prompt = (
@@ -250,7 +254,8 @@ class Thinker(BaseThinker):
             f"{system_prompt}{ws_ctx}\n\n"
             f"Task ID: {task_id}\nTask Description: {task_desc}{expected_line}\n\nContext:\n{context}"
         )
-        return await self._call_structured(full_prompt, TaskExecutionSchema, max_tokens=budget)
+        with moe_route_context(role="coder", requires_tools=True):
+            return await self._call_structured(full_prompt, TaskExecutionSchema, max_tokens=budget)
 
     async def generate_reflection(self, runtime_output: Any, context: str = "") -> ReflectionSchema:
         """Brain Step 3: Evaluate runtime execution results and judge task completion."""
@@ -270,7 +275,8 @@ class Thinker(BaseThinker):
         system_prompt += self._get_profile_string()
 
         full_prompt = f"{system_prompt}\n\nFull Context:\n{context}\n\nRuntime Output:\n{runtime_output}"
-        return await self._call_structured(full_prompt, ReflectionSchema, max_tokens=min(1024, self._default_structured_budget()))
+        with moe_route_context(role="watcher"):
+            return await self._call_structured(full_prompt, ReflectionSchema, max_tokens=min(1024, self._default_structured_budget()))
 
     async def replan(
         self,
@@ -296,7 +302,8 @@ class Thinker(BaseThinker):
             f"Completed Work:\n{completed_summary}\n\n"
             f"Failed Task: {failed_desc}\nFailure Context:\n{failure_context}"
         )
-        return await self._call_structured(full_prompt, PlanSchema, max_tokens=self._default_structured_budget())
+        with moe_route_context(role="planner", escalate=True):
+            return await self._call_structured(full_prompt, PlanSchema, max_tokens=self._default_structured_budget())
 
     async def synthesize_final_answer(
         self,
@@ -324,7 +331,8 @@ class Thinker(BaseThinker):
         if context:
             full_prompt += f"\nAdditional Context:\n{context[:2000]}"
 
-        return await self.llm.generate(full_prompt)
+        with moe_route_context(role="synthesis"):
+            return await self.llm.generate(full_prompt)
 
     async def generate_deep_plan(
         self,
@@ -356,12 +364,13 @@ class Thinker(BaseThinker):
         )
         system_prompt += self._get_profile_string()
         full_prompt = f"{system_prompt}{ws_line}\n\nContext:\n{context}\n\nUser Request: {prompt}"
-        return await self._call_structured(
-            full_prompt,
-            PlanSchema,
-            session_id=session_id,
-            max_tokens=self._default_structured_budget(),
-        )
+        with moe_route_context(role="planner"):
+            return await self._call_structured(
+                full_prompt,
+                PlanSchema,
+                session_id=session_id,
+                max_tokens=self._default_structured_budget(),
+            )
 
     async def watch_action_results(
         self,
@@ -386,8 +395,9 @@ class Thinker(BaseThinker):
             f"ACTUAL TOOL OUTPUTS:\n{actual_digest}\n\n"
             f"VERIFIED ON-DISK STATE:\n{disk_checks or '(no disk file changes recorded)'}"
         )
-        return await self._call_structured(
-            full_prompt,
-            ActionWatchSchema,
-            max_tokens=min(1024, self._default_structured_budget()),
-        )
+        with moe_route_context(role="watcher"):
+            return await self._call_structured(
+                full_prompt,
+                ActionWatchSchema,
+                max_tokens=min(1024, self._default_structured_budget()),
+            )

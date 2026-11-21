@@ -24,6 +24,7 @@ from phoenix.framework.agent.cognition.actor.actor import MUTATING_FILE_TOOLS
 from phoenix.framework.agent.memory.budget import compact_value
 from phoenix.framework.agent.memory.manager import MemoryManager
 from phoenix.framework.agent.tools._fs_utils import get_workspace_snapshot, inspect_workspace_file
+from phoenix.services.llm.moe import moe_route_context
 
 
 def _is_async_callable(fn: Any) -> bool:
@@ -266,7 +267,8 @@ class AgentLoop:
                         "REJECTED",
                     )
 
-            actor_output = await self.actor.generate_and_execute(task, context=context)
+            with moe_route_context(role="coder", attempt=cell.attempts, escalate=(cell.attempts >= 2)):
+                actor_output = await self.actor.generate_and_execute(task, context=context)
             result_data = _model_to_dict(actor_output)
             cell.add_runtime_result(result_data)
 
@@ -795,7 +797,8 @@ class AgentLoop:
                 )
 
                 await _emit_phase("acting", {"task_id": task.task_id, "attempt": cell.attempts, "message": f"Executing {task.task_id} (attempt {cell.attempts})..."})
-                actor_output = await self.actor.generate_and_execute(task, context=acting_ctx, max_tool_steps=5)
+                with moe_route_context(role="coder", attempt=cell.attempts, escalate=(cell.attempts >= 2)):
+                    actor_output = await self.actor.generate_and_execute(task, context=acting_ctx, max_tool_steps=5)
                 cell.add_runtime_result(_model_to_dict(actor_output))
 
                 if hasattr(actor_output, "result") and isinstance(actor_output.result, dict):
@@ -1000,7 +1003,8 @@ class AgentLoop:
             step_context = "\n\n".join(ctx_parts)
 
             try:
-                task_exec = await self.thinker.solve_task(react_task, context=step_context)
+                with moe_route_context(role="coder", attempt=step, escalate=(step >= 3)):
+                    task_exec = await self.thinker.solve_task(react_task, context=step_context)
             except (ValueError, RuntimeError) as fmt_err:
                 if not isinstance(fmt_err, ValueError) and "json" not in str(fmt_err).lower():
                     raise
@@ -1198,7 +1202,8 @@ class AgentLoop:
                 context = active_memory.get_task_context(task.task_id)
 
                 yield {"type": "status", "content": f"Executing task {task.task_id} attempt {cell.attempts}..."}
-                actor_output = await self.actor.generate_and_execute(task, context=context)
+                with moe_route_context(role="coder", attempt=cell.attempts, escalate=(cell.attempts >= 2)):
+                    actor_output = await self.actor.generate_and_execute(task, context=context)
 
                 result_data = _model_to_dict(actor_output)
                 cell.add_runtime_result(result_data)

@@ -1,4 +1,11 @@
+import json
 from pydantic import BaseModel, Field
+
+try:
+    from pydantic import model_validator
+except ImportError:
+    model_validator = None
+
 from typing import Dict, List, Optional, Union, Any
 from enum import Enum
 from uuid import UUID, uuid4
@@ -210,11 +217,85 @@ class PlannerOutputSchema(BaseModel):
 # NEW BRAIN SCHEMAS
 # =========================================================================
 
+_TASK_TYPE_ALIASES: Dict[str, str] = {
+    "analyze": "read", "analyse": "read", "inspect": "read", "audit": "read",
+    "verify": "read", "check": "read", "review": "read", "test": "read", "view": "read", "explain": "read",
+    "create": "write", "new": "write", "add": "write", "implement": "write", "generate": "write", "build": "write", "save": "write",
+    "edit": "update", "modify": "update", "fix": "update", "refactor": "update", "patch": "update",
+    "secure": "update", "harden": "update", "upgrade": "update", "replace": "update", "enhance": "update",
+    "find": "search", "grep": "search", "lookup": "search", "locate": "search", "web_search": "search", "query": "search",
+    "remove": "delete", "rm": "delete", "unlink": "delete",
+}
+_VALID_TASK_TYPES = {"read", "write", "search", "update", "delete", "other"}
+_PRIORITY_ALIASES = {"urgent": "critical", "blocker": "critical", "p0": "critical", "important": "high", "p1": "high", "normal": "medium", "moderate": "medium", "default": "medium", "p2": "medium", "minor": "low", "p3": "low"}
+_STATUS_ALIASES = {"todo": "pending", "queued": "pending", "new": "pending", "running": "in_progress", "active": "in_progress", "retry": "in_progress", "incomplete": "in_progress", "complete": "done", "completed": "done", "success": "done", "finished": "done", "error": "failed", "fail": "failed", "skip": "skipped", "canceled": "cancelled"}
+
+
+def _coerce_str_list(val: Any) -> List[str]:
+    if val is None:
+        return []
+    if isinstance(val, (list, tuple, set)):
+        return [str(x).strip() for x in val if x is not None and str(x).strip()]
+    if isinstance(val, str):
+        s = val.strip()
+        if not s:
+            return []
+        if "," in s and not s.startswith("{"):
+            return [p.strip() for p in s.split(",") if p.strip()]
+        return [s]
+    return [str(val).strip()] if str(val).strip() else []
+
+
+def _normalize_enum(val: Any, valid: set, aliases: Dict[str, str], default: str) -> str:
+    if val is None:
+        return default
+    raw = str(getattr(val, "value", val)).strip().lower()
+    if raw in valid:
+        return raw
+    return aliases.get(raw, default)
+
+
+def _clamp_rating(val: Any, default: int = 8) -> int:
+    try:
+        return max(1, min(10, int(float(val))))
+    except Exception:
+        return default
+
+
 class ToolCall(BaseModel):
     tool_name: str = Field(..., description="Name of the tool to execute")
     arguments: Dict[str, Any] = Field(default_factory=dict, description="Arguments to pass to the tool")
 
+    if model_validator is not None:
+        @model_validator(mode="before")
+        @classmethod
+        def _coerce_tool_call(cls, data: Any) -> Any:
+            if not isinstance(data, dict):
+                return data
+            d = dict(data)
+            if "tool_name" not in d:
+                for alt in ("name", "tool", "function"):
+                    if alt in d and d[alt]:
+                        d["tool_name"] = d.pop(alt)
+                        break
+            if "arguments" not in d:
+                for alt in ("args", "kwargs", "parameters", "params", "input"):
+                    if alt in d:
+                        d["arguments"] = d.pop(alt)
+                        break
+            raw_args = d.get("arguments")
+            if raw_args is None:
+                d["arguments"] = {}
+            elif isinstance(raw_args, str):
+                try:
+                    parsed = json.loads(raw_args, strict=False)
+                    d["arguments"] = parsed if isinstance(parsed, dict) else {}
+                except Exception:
+                    d["arguments"] = {}
+            return d
+
 ToolCallSchema = ToolCall
+
 
 class TaskExecutionSchema(BaseModel):
     thought_process: str = Field(default="", description="Detailed analysis of the problem and the step-by-step approach to solve it")
@@ -222,6 +303,30 @@ class TaskExecutionSchema(BaseModel):
     tools_to_call: List[ToolCall] = Field(default_factory=list, description="Specific tool calls required to enact the solution")
     direct_response: Optional[str] = Field(default=None, description="Direct answer or finding when no further tool calls are needed")
     is_complete: bool = Field(default=False, description="Whether the task objective is satisfied by this step")
+
+    if model_validator is not None:
+        @model_validator(mode="before")
+        @classmethod
+        def _coerce_execution(cls, data: Any) -> Any:
+            if not isinstance(data, dict):
+                return data
+            d = dict(data)
+            if "tools_to_call" not in d:
+                for alt in ("tool_calls", "actions", "calls"):
+                    if alt in d:
+                        d["tools_to_call"] = d.pop(alt)
+                        break
+            tc = d.get("tools_to_call")
+            if tc is None:
+                d["tools_to_call"] = []
+            elif isinstance(tc, dict):
+                d["tools_to_call"] = [tc]
+            if d.get("direct_response") is None:
+                for alt in ("response", "answer", "final_answer"):
+                    if isinstance(d.get(alt), str) and d[alt].strip():
+                        d["direct_response"] = d[alt]
+                        break
+            return d
 
 
 class ActionWatchSchema(BaseModel):
@@ -231,12 +336,27 @@ class ActionWatchSchema(BaseModel):
     corrective_action: Optional[str] = Field(default=None, description="Concrete fix to apply on retry if mismatches exist")
     rating: int = Field(default=8, ge=1, le=10, description="Quality rating from 1 to 10")
 
+    if model_validator is not None:
+        @model_validator(mode="before")
+        @classmethod
+        def _coerce_watch(cls, data: Any) -> Any:
+            if not isinstance(data, dict):
+                return data
+            d = dict(data)
+            if "discrepancies" in d:
+                d["discrepancies"] = _coerce_str_list(d.get("discrepancies"))
+            if "rating" in d:
+                d["rating"] = _clamp_rating(d.get("rating"), default=8)
+            return d
+
+
 class ActionSchema(BaseModel):
     action_id: str = Field(default_factory=generate_unique_id, description="Unique ID for the action")
     task_id: str = Field(default="", description="Associated task ID")
     thought_process: str = Field(default="", description="Reasoning behind the action")
     action_plan: Optional[str] = Field(default=None, description="Summary of the action plan")
     tools_to_call: List[ToolCall] = Field(default_factory=list, description="Tools to execute")
+
 
 class ReflectionSchema(BaseModel):
     status: TaskStatus = Field(default=TaskStatus.DONE, description="The evaluation status: 'done', 'failed', or 'in_progress'")
@@ -248,6 +368,25 @@ class ReflectionSchema(BaseModel):
     confidence: float = Field(default=0.8, ge=0.0, le=1.0, description="Confidence score of evaluation")
     reasoning: str = Field(default="", description="Detailed reasoning for the evaluation")
 
+    if model_validator is not None:
+        @model_validator(mode="before")
+        @classmethod
+        def _coerce_reflection(cls, data: Any) -> Any:
+            if not isinstance(data, dict):
+                return data
+            d = dict(data)
+            if "status" in d:
+                d["status"] = _normalize_enum(d.get("status"), {e.value for e in TaskStatus}, _STATUS_ALIASES, "done")
+            if "rating" in d:
+                d["rating"] = _clamp_rating(d.get("rating"), default=8)
+            if "confidence" in d:
+                try:
+                    d["confidence"] = max(0.0, min(1.0, float(d["confidence"])))
+                except Exception:
+                    d["confidence"] = 0.8
+            return d
+
+
 class TaskSchema(BaseModel):
     task_id: str = Field(default_factory=generate_unique_id, description="Unique ID for the task")
     task_type: TaskType = Field(default=TaskType.OTHER, description="The operational archetype of the task")
@@ -258,9 +397,57 @@ class TaskSchema(BaseModel):
     status: TaskStatus = Field(default=TaskStatus.PENDING, description="Task workflow status")
     dependencies: List[str] = Field(default_factory=list, description="List of task_ids that must complete before this task")
 
+    if model_validator is not None:
+        @model_validator(mode="before")
+        @classmethod
+        def _coerce_task(cls, data: Any) -> Any:
+            if not isinstance(data, dict):
+                return data
+            d = dict(data)
+            if "task_id" in d and d["task_id"] is not None:
+                d["task_id"] = str(d["task_id"])
+            if "task_type" in d:
+                d["task_type"] = _normalize_enum(d.get("task_type"), _VALID_TASK_TYPES, _TASK_TYPE_ALIASES, "other")
+            if "priority" in d:
+                d["priority"] = _normalize_enum(d.get("priority"), {e.value for e in TaskPriority}, _PRIORITY_ALIASES, "medium")
+            if "status" in d:
+                d["status"] = _normalize_enum(d.get("status"), {e.value for e in TaskStatus}, _STATUS_ALIASES, "pending")
+            if "target_files" in d:
+                d["target_files"] = _coerce_str_list(d.get("target_files"))
+            if "dependencies" in d:
+                d["dependencies"] = _coerce_str_list(d.get("dependencies"))
+            if not d.get("description"):
+                for alt in ("task", "title", "name", "action", "goal"):
+                    if isinstance(d.get(alt), str) and d[alt].strip():
+                        d["description"] = d[alt].strip()
+                        break
+            return d
+
+
 class PlanSchema(BaseModel):
     objective: str = Field(..., description="The main overall objective")
     tasks: List[TaskSchema] = Field(default_factory=list, description="List of ordered tasks to complete the objective")
+
+    if model_validator is not None:
+        @model_validator(mode="before")
+        @classmethod
+        def _coerce_plan(cls, data: Any) -> Any:
+            if not isinstance(data, dict):
+                return data
+            d = dict(data)
+            if not d.get("objective"):
+                for alt in ("goal", "plan_objective", "summary"):
+                    if isinstance(d.get(alt), str) and d[alt].strip():
+                        d["objective"] = d[alt].strip()
+                        break
+                else:
+                    d["objective"] = "Execute user request"
+            raw_tasks = d.get("tasks")
+            if raw_tasks is None:
+                d["tasks"] = []
+            elif isinstance(raw_tasks, dict):
+                d["tasks"] = [raw_tasks]
+            return d
 
 ProblemSchema = Problem
 SolutionSchema = Solution

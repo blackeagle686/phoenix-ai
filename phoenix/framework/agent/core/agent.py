@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
 from phoenix.services.llm.openai import OpenAILLM
 from phoenix.services.llm.local import LocalLLM
 from phoenix.services.llm.router import LLMRouter
+from phoenix.services.llm.moe import MoERouter, moe_route_context
 from phoenix.services.observability.tracing import tracer
 from phoenix.framework.agent.memory.manager import MemoryManager
 from phoenix.framework.agent.memory.adapter import InteractiveMemoryAdapter
@@ -28,6 +29,7 @@ class Agent:
         llms: Optional[Iterable[Any]] = None,
         fallback_llm: Optional[Any] = None,
         fallback_llms: Optional[Iterable[Any]] = None,
+        experts: Optional[Union[Dict[str, Any], Iterable[Any]]] = None,
         memory=None,
         tools=None,
         custom_tools: Optional[Iterable[Any]] = None,
@@ -47,7 +49,13 @@ class Agent:
         on_event: Optional[Callable[[Dict[str, Any]], Any]] = None,
         fast_mode: Optional[bool] = None,
     ):
-        self.llm = self._prepare_llm(llm, llms=llms, fallback_llm=fallback_llm, fallback_llms=fallback_llms)
+        self.llm = self._prepare_llm(
+            llm,
+            llms=llms,
+            fallback_llm=fallback_llm,
+            fallback_llms=fallback_llms,
+            experts=experts,
+        )
         self.memory = self._prepare_memory(memory)
         self.runtime = runtime if runtime is not None else RestrictedPythonRuntime()
         self.profile = self._prepare_profile(profile)
@@ -154,6 +162,8 @@ class Agent:
             return True
         if isinstance(llm_obj, LLMRouter):
             return bool(llm_obj.providers) and all(isinstance(p, LocalLLM) for p in llm_obj.providers)
+        if isinstance(llm_obj, MoERouter):
+            return bool(llm_obj.experts) and all(isinstance(e.llm, LocalLLM) for e in llm_obj.experts)
         return False
 
     def _prepare_llm(
@@ -162,7 +172,13 @@ class Agent:
         llms: Optional[Iterable[Any]] = None,
         fallback_llm: Optional[Any] = None,
         fallback_llms: Optional[Iterable[Any]] = None,
+        experts: Optional[Union[Dict[str, Any], Iterable[Any]]] = None,
     ) -> Any:
+        if experts is not None:
+            return llm if isinstance(llm, MoERouter) else MoERouter(experts)
+        if isinstance(llm, MoERouter):
+            return llm
+
         candidates: List[Any] = []
         if llm is not None:
             candidates.append(llm)
@@ -423,6 +439,12 @@ class Agent:
         """Return token usage, latency, retries, failovers, and tool stats for the last run."""
         return dict(self.last_run_metrics) if self.last_run_metrics is not None else None
 
+    def get_moe_stats(self) -> Optional[Dict[str, Any]]:
+        """Return Mixture-of-Experts routing stats if the agent is using MoERouter."""
+        if isinstance(self.llm, MoERouter):
+            return self.llm.get_routing_stats()
+        return None
+
     async def run(self, prompt: str, session_id: str = None, max_iterations: int = 15, mode: str = "auto") -> str:
         """
         Run the agent with the given prompt.
@@ -449,13 +471,15 @@ class Agent:
                         actual_mode = "react"
                 else:
                     classification_prompt = self._build_auto_classification_prompt(prompt)
-                    classification = await self.llm.generate(classification_prompt, session_id=None, max_tokens=10)
+                    with moe_route_context(role="fast"):
+                        classification = await self.llm.generate(classification_prompt, session_id=None, max_tokens=10)
                     actual_mode = "plan" if "PLAN" in str(classification).upper() else "fast_ans"
 
             if actual_mode == "fast_ans":
                 context = await self.memory.get_full_context(session_id, query=prompt)
                 fast_prompt = f"Context:\n{context}\n\nUser: {prompt}\nAnswer directly:"
-                fast_answer = await self.llm.generate(fast_prompt, session_id=None)
+                with moe_route_context(role="fast"):
+                    fast_answer = await self.llm.generate(fast_prompt, session_id=None)
                 await self.memory.add_interaction(session_id, "assistant", fast_answer)
                 return fast_answer
             if actual_mode == "deep" and hasattr(self.loop, "run_deep"):
@@ -512,13 +536,15 @@ class Agent:
                         actual_mode = "react"
                 else:
                     classification_prompt = self._build_auto_classification_prompt(prompt)
-                    classification = await self.llm.generate(classification_prompt, session_id=None, max_tokens=10)
+                    with moe_route_context(role="fast"):
+                        classification = await self.llm.generate(classification_prompt, session_id=None, max_tokens=10)
                     actual_mode = "plan" if "PLAN" in str(classification).upper() else "fast_ans"
 
             if actual_mode == "fast_ans":
                 context = await self.memory.get_full_context(session_id, query=prompt)
                 fast_prompt = f"Context:\n{context}\n\nUser: {prompt}\nAnswer directly:"
-                fast_answer = await self.llm.generate(fast_prompt, session_id=None)
+                with moe_route_context(role="fast"):
+                    fast_answer = await self.llm.generate(fast_prompt, session_id=None)
                 await self.memory.add_interaction(session_id, "assistant", fast_answer)
                 yield {"type": "status", "content": "Fast answer mode"}
                 for line in fast_answer.splitlines() or [fast_answer]:

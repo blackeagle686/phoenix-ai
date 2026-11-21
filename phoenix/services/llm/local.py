@@ -65,6 +65,47 @@ class LocalLLM(BaseLLM):
 
     _model_cache: Dict[str, Dict[str, Any]] = {}
     _cache_lock = threading.Lock()
+    _max_cached_models: Optional[int] = None
+
+    @classmethod
+    def configure_cache(cls, max_models: Optional[int] = None) -> None:
+        """Limit cached local models (useful on small-VRAM GPUs when swapping MoE experts)."""
+        cls._max_cached_models = max(1, int(max_models)) if max_models is not None else None
+        if cls._max_cached_models is not None:
+            while len(cls._model_cache) > cls._max_cached_models:
+                cls._evict_oldest_cached_model()
+
+    @classmethod
+    def _evict_oldest_cached_model(cls) -> Optional[str]:
+        evicted_key = None
+        with cls._cache_lock:
+            if cls._model_cache:
+                evicted_key = next(iter(cls._model_cache))
+                cls._model_cache.pop(evicted_key, None)
+        if evicted_key is not None:
+            gc.collect()
+            try:
+                import torch
+
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
+        return evicted_key
+
+    @classmethod
+    def clear_cache(cls) -> None:
+        """Unload all cached local models and release GPU/CPU memory."""
+        with cls._cache_lock:
+            cls._model_cache.clear()
+        gc.collect()
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
 
     def __init__(
         self,
@@ -114,6 +155,17 @@ class LocalLLM(BaseLLM):
 
     def _cache_key(self) -> str:
         return f"{self.backend}:{self.model}:{self.gguf_filename or ''}:{self.quantization}:{self.device}:{self.n_ctx}"
+
+    def _customize_transformers_load_kwargs(
+        self,
+        load_kwargs: Dict[str, Any],
+        hw: Dict[str, Any],
+        *,
+        device: str,
+        has_accelerate: bool,
+    ) -> None:
+        """Subclass hook to customize model loading options (used by LocalMoELLM)."""
+        return None
 
     def _detect_runtime_profile(self) -> Dict[str, Any]:
         gpu_info = HardwareChecker.check_gpu()
@@ -285,6 +337,8 @@ class LocalLLM(BaseLLM):
             load_kwargs["torch_dtype"] = cpu_dtype
             quant_applied = "bf16_cpu" if cpu_dtype == torch.bfloat16 else "fp32_cpu"
 
+        self._customize_transformers_load_kwargs(load_kwargs, hw, device=device, has_accelerate=has_accelerate)
+
         tokenizer = AutoTokenizer.from_pretrained(self.model, trust_remote_code=self.trust_remote_code)
         if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
             tokenizer.pad_token_id = tokenizer.eos_token_id
@@ -360,14 +414,29 @@ class LocalLLM(BaseLLM):
                 try:
                     cached = await asyncio.to_thread(self._load_transformers_sync, hw)
                 except Exception as e:
-                    if self.backend == "transformers":
-                        raise RuntimeError(f"Failed to load HuggingFace model '{self.model}': {e}")
-                    logger.warning(f"Transformers local load failed ({e}); falling back to Ollama.")
-                    cached = {"type": "ollama", "device": hw["device"], "lock": threading.Lock()}
+                    err_low = str(e).lower()
+                    if ("out of memory" in err_low or "cuda" in err_low) and LocalLLM._model_cache:
+                        logger.warning("CUDA/memory pressure while loading expert model; evicting oldest cached LocalLLM and retrying...")
+                        LocalLLM._evict_oldest_cached_model()
+                        try:
+                            cached = await asyncio.to_thread(self._load_transformers_sync, hw)
+                        except Exception as e2:
+                            if self.backend == "transformers":
+                                raise RuntimeError(f"Failed to load HuggingFace model '{self.model}': {e2}")
+                            cached = None
+                    if cached is None:
+                        if self.backend == "transformers":
+                            raise RuntimeError(f"Failed to load HuggingFace model '{self.model}': {e}")
+                        logger.warning(f"Transformers local load failed ({e}); falling back to Ollama.")
+                        cached = {"type": "ollama", "device": hw["device"], "lock": threading.Lock()}
             else:
                 cached = {"type": "ollama", "device": hw["device"], "lock": threading.Lock()}
 
             with LocalLLM._cache_lock:
+                if LocalLLM._max_cached_models is not None and len(LocalLLM._model_cache) >= LocalLLM._max_cached_models:
+                    oldest = next(iter(LocalLLM._model_cache), None)
+                    if oldest and oldest != cache_key:
+                        LocalLLM._model_cache.pop(oldest, None)
                 LocalLLM._model_cache[cache_key] = cached
 
         self.active_backend = cached["type"]
@@ -622,15 +691,28 @@ class LocalLLM(BaseLLM):
             else (schema.schema() if hasattr(schema, "schema") else {})
         )
 
-        def _minify_schema(node: Any) -> Any:
+        defs_map = (schema_dict.get("$defs") or schema_dict.get("definitions") or {}) if isinstance(schema_dict, dict) else {}
+
+        def _minify_schema(node: Any, seen: Optional[set] = None) -> Any:
+            seen = seen or set()
             if isinstance(node, dict):
+                ref = node.get("$ref")
+                if isinstance(ref, str) and ref.startswith("#/"):
+                    ref_name = ref.split("/")[-1]
+                    if ref_name in defs_map and ref_name not in seen:
+                        resolved = _minify_schema(defs_map[ref_name], seen | {ref_name})
+                        merged = dict(resolved) if isinstance(resolved, dict) else {}
+                        for k, v in node.items():
+                            if k not in ("$ref", "title", "description", "additionalProperties"):
+                                merged[k] = _minify_schema(v, seen)
+                        return merged
                 return {
-                    k: _minify_schema(v)
+                    k: _minify_schema(v, seen)
                     for k, v in node.items()
-                    if k not in ("title", "description", "additionalProperties")
+                    if k not in ("title", "description", "additionalProperties", "$defs", "definitions")
                 }
             if isinstance(node, list):
-                return [_minify_schema(i) for i in node]
+                return [_minify_schema(i, seen) for i in node]
             return node
 
         prompt_schema = _minify_schema(schema_dict) if (self.active_backend == "transformers" and isinstance(schema_dict, dict)) else schema_dict
@@ -644,46 +726,33 @@ class LocalLLM(BaseLLM):
         if self.active_backend == "transformers":
             out_tokens = min(out_tokens, max(512, self.n_ctx // 3))
 
+        async def _call_backend(msgs: List[Dict[str, str]], tok_limit: int) -> Tuple[str, Dict[str, int]]:
+            if self.active_backend == "llama_cpp":
+                return await asyncio.to_thread(
+                    self._run_llama_cpp_sync, msgs, tok_limit, 0.0, schema_dict or None
+                )
+            if self.active_backend == "ollama":
+                msg_out, u = await self._run_ollama_chat(
+                    msgs, tok_limit, 0.0, json_schema=schema_dict or "json"
+                )
+                return (msg_out.get("content") or "").strip(), u
+            return await asyncio.to_thread(self._run_transformers_sync, msgs, tok_limit, 0.0)
+
         span_id = tracer.start_span(
             "LocalLLM.generate_structured",
             {"model": self.model, "backend": self.active_backend, "device": self.active_device},
         )
         try:
-            if self.active_backend == "llama_cpp":
-                raw, usage = await asyncio.to_thread(
-                    self._run_llama_cpp_sync, messages, out_tokens, 0.0, schema_dict or None
-                )
-            elif self.active_backend == "ollama":
-                msg, usage = await self._run_ollama_chat(
-                    messages, out_tokens, 0.0, json_schema=schema_dict or "json"
-                )
-                raw = (msg.get("content") or "").strip()
-            else:
-                raw, usage = await asyncio.to_thread(self._run_transformers_sync, messages, out_tokens, 0.0)
-
+            raw, usage = await _call_backend(messages, out_tokens)
             parsed = _extract_json_dict(raw)
             if not parsed:
-                # One deterministic repair attempt on malformed local output
                 repair_messages = self._build_messages(
                     prompt=f"Fix this broken output into valid raw JSON matching the schema.\nBroken output:\n{raw[:1400]}",
                     system_prompt=system_prompt,
                 )
-                if self.active_backend == "llama_cpp":
-                    raw, _ = await asyncio.to_thread(
-                        self._run_llama_cpp_sync, repair_messages, min(out_tokens, 1024), 0.0, schema_dict or None
-                    )
-                elif self.active_backend == "ollama":
-                    msg, _ = await self._run_ollama_chat(
-                        repair_messages, min(out_tokens, 1024), 0.0, json_schema=schema_dict or "json"
-                    )
-                    raw = (msg.get("content") or "").strip()
-                else:
-                    raw, _ = await asyncio.to_thread(
-                        self._run_transformers_sync, repair_messages, min(out_tokens, 1024), 0.0
-                    )
+                raw, _ = await _call_backend(repair_messages, min(out_tokens, 1024))
                 parsed = _extract_json_dict(raw)
 
-            tracer.end_span(span_id, status="success", usage=usage)
             if not parsed:
                 raw_text = (raw or "").strip()
                 looks_like_failed_json = any(
@@ -691,6 +760,7 @@ class LocalLLM(BaseLLM):
                     for tok in ('"tools_to_call"', '"tool_name"', "{", "file_write", "file_edit", "file_read")
                 )
                 if not looks_like_failed_json and raw_text and getattr(schema, "__name__", "") == "TaskExecutionSchema":
+                    tracer.end_span(span_id, status="success", usage=usage)
                     return schema(
                         thought_process="",
                         tools_to_call=[],
@@ -699,9 +769,24 @@ class LocalLLM(BaseLLM):
                     )
                 raise ValueError(f"Invalid or empty JSON returned by {self.model}: {raw_text[:200]}")
 
-            if hasattr(schema, "model_validate"):
-                return schema.model_validate(parsed)
-            return schema(**parsed)
+            try:
+                validated = schema.model_validate(parsed) if hasattr(schema, "model_validate") else schema(**parsed)
+            except Exception as val_err:
+                repair_messages = self._build_messages(
+                    prompt=(
+                        f"Your JSON failed schema validation: {str(val_err)[:400]}\n"
+                        f"Fix ONLY the invalid fields and return a valid JSON object matching the schema:\n{json.dumps(parsed)[:1400]}"
+                    ),
+                    system_prompt=system_prompt,
+                )
+                raw, _ = await _call_backend(repair_messages, min(out_tokens, 1024))
+                repaired = _extract_json_dict(raw)
+                if not repaired:
+                    raise ValueError(f"Schema validation repair failed for {self.model}: {val_err}") from val_err
+                validated = schema.model_validate(repaired) if hasattr(schema, "model_validate") else schema(**repaired)
+
+            tracer.end_span(span_id, status="success", usage=usage)
+            return validated
         except ValueError as ve:
             tracer.end_span(span_id, status="error", error=str(ve))
             raise
