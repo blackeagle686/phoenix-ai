@@ -4,6 +4,7 @@ import io
 import os
 import shutil
 import asyncio
+import traceback
 from typing import Optional
 from .base import BaseRuntime, ExecutionResult
 
@@ -111,7 +112,19 @@ class RestrictedPythonRuntime(BaseRuntime):
                 raise ImportError(f"Importing '{base_module}' is blocked in RestrictedPythonRuntime.")
             return _host_builtins.__import__(name, globals, locals, fromlist, level)
 
+        def _safe_hasattr(obj, name):
+            if not isinstance(name, str) or name.startswith("_") or name in self.BLOCKED_DUNDERS:
+                return False
+            return _host_builtins.hasattr(obj, name)
+
+        def _safe_getattr(obj, name, *default):
+            if not isinstance(name, str) or name.startswith("_") or name in self.BLOCKED_DUNDERS:
+                raise AttributeError(f"Access to private/restricted attribute '{name}' is blocked.")
+            return _host_builtins.getattr(obj, name, *default)
+
         safe_b["print"] = _safe_print
+        safe_b["hasattr"] = _safe_hasattr
+        safe_b["getattr"] = _safe_getattr
         safe_b["__import__"] = _safe_import
         safe_b["__build_class__"] = _host_builtins.__build_class__
         return safe_b
@@ -135,7 +148,8 @@ class RestrictedPythonRuntime(BaseRuntime):
 
         def _run():
             # Share module namespace so top-level imports & helper functions stay visible inside functions
-            exec(code, exec_globals, exec_globals)
+            compiled = compile(code, "<sandbox>", "exec")
+            exec(compiled, exec_globals, exec_globals)
 
         try:
             await asyncio.wait_for(asyncio.to_thread(_run), timeout=self.timeout)
@@ -147,10 +161,15 @@ class RestrictedPythonRuntime(BaseRuntime):
                 exit_code=124,
             )
         except Exception as e:
+            tb_frames = [
+                fr for fr in traceback.extract_tb(e.__traceback__)
+                if fr.filename == "<sandbox>"
+            ]
+            loc = f" at line {tb_frames[-1].lineno}" if tb_frames else ""
             return ExecutionResult(
                 success=False,
                 output=output_buffer.getvalue(),
-                error=f"Execution error: {str(e)}",
+                error=f"Execution error ({type(e).__name__}{loc}): {str(e)}",
                 exit_code=1,
             )
 

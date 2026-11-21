@@ -64,17 +64,18 @@ class VerificationReport:
     functional_outputs: List[str] = field(default_factory=list)
 
 
-def _prepare_module_for_sandbox(code: str, required_ops: List[str]) -> Tuple[str, List[str], List[str]]:
-    """Strip `if __name__ == '__main__':` + replace blocked `input(...)` stubs, and collect candidate callable names."""
+def _prepare_module_for_sandbox(code: str, required_ops: List[str]) -> Tuple[str, List[str], List[str], Dict[str, List[str]]]:
+    """Strip `if __name__ == '__main__':` + replace blocked `input(...)` stubs, and collect callable targets."""
     try:
         tree = ast.parse(code)
     except SyntaxError:
-        return code, [], []
+        return code, [], [], {}
 
     lines = code.splitlines()
     ranges_to_clear: List[Tuple[int, int]] = []
     discovered_funcs: List[str] = []
     discovered_classes: List[str] = []
+    class_methods: Dict[str, List[str]] = {}
 
     for node in tree.body:
         if isinstance(node, ast.If):
@@ -93,20 +94,26 @@ def _prepare_module_for_sandbox(code: str, required_ops: List[str]) -> Tuple[str
                     discovered_funcs.append(node.name)
         elif isinstance(node, ast.ClassDef):
             discovered_classes.append(node.name)
+            methods: List[str] = []
+            for item in node.body:
+                if isinstance(item, ast.FunctionDef) and not item.name.startswith("_"):
+                    if len(item.args.args) >= 2:  # self + at least 1 argument
+                        methods.append(item.name)
+            if methods:
+                class_methods[node.name] = methods
 
     for start, end in ranges_to_clear:
         for i in range(start, min(end + 1, len(lines))):
             lines[i] = "pass" if i == start else ""
 
     cleaned = "\n".join(lines)
-    # Neutralize `input(...)` inside non-tested CLI helper functions so AST filter lets pure logic execute cleanly
     cleaned = re.sub(r"\binput\s*\([^()\r\n]*\)", "'0'", cleaned)
 
     ordered_funcs: List[str] = []
     for name in list(_PREFERRED_EVAL_NAMES) + discovered_funcs:
         if name not in ordered_funcs:
             ordered_funcs.append(name)
-    return cleaned, ordered_funcs, discovered_classes
+    return cleaned, ordered_funcs, discovered_classes, class_methods
 
 
 def _build_sandbox_harness(
@@ -116,9 +123,11 @@ def _build_sandbox_harness(
     is_calculator: bool,
 ) -> str:
     """Build an isolated Python test harness compatible with RestrictedPythonRuntime AST constraints."""
-    safe_module_code, candidate_funcs, candidate_classes = _prepare_module_for_sandbox(module_code, required_ops)
+    safe_module_code, candidate_funcs, candidate_classes, class_methods = _prepare_module_for_sandbox(
+        module_code, required_ops
+    )
 
-    # Generate NameError-safe namespace binding without using restricted `globals()`/`vars()`/`dir()`
+    # Generate NameError-safe namespace binding without restricted `globals()`/`vars()`/`dir()`/`hasattr()`
     capture_lines: List[str] = ["    _ns = {}"]
     names_to_capture = list(dict.fromkeys(candidate_funcs + list(required_ops) + candidate_classes))
     for sym in names_to_capture:
@@ -126,12 +135,30 @@ def _build_sandbox_harness(
             capture_lines.append(f"    try:\n        _ns[{sym!r}] = {sym}\n    except Exception:\n        pass")
     capture_block = "\n".join(capture_lines)
 
+    # Discover callable instance methods directly from AST ClassDef without calling hasattr/getattr
+    class_probe_lines: List[str] = []
+    for cname in candidate_classes:
+        methods = class_methods.get(cname, [])
+        preferred = [m for m in _PREFERRED_EVAL_NAMES if m in methods] + [m for m in methods if m not in _PREFERRED_EVAL_NAMES]
+        for mname in preferred:
+            if cname.isidentifier() and mname.isidentifier():
+                class_probe_lines.append(
+                    f"        if _expr_fn is None:\n"
+                    f"            try:\n"
+                    f"                _inst = {cname}()\n"
+                    f"                _m = _inst.{mname}\n"
+                    f"                if callable(_m):\n"
+                    f"                    _expr_fn = _m\n"
+                    f"            except Exception:\n"
+                    f"                pass"
+                )
+    class_probe_block = "\n".join(class_probe_lines) if class_probe_lines else "        pass"
+
     harness_cfg = json.dumps({
         "required_ops": required_ops,
         "requires_security": requires_security,
         "is_calculator": is_calculator,
         "candidate_funcs": candidate_funcs,
-        "candidate_classes": candidate_classes,
         "probes": ADVERSARIAL_PROBES,
         "expectations": {k: list(v) for k, v in MATH_FUNC_EXPECTATIONS.items()},
     })
@@ -157,21 +184,7 @@ def _v_run_checks():
             break
 
     if _expr_fn is None:
-        for _cname in _cfg["candidate_classes"]:
-            _cls = _ns.get(_cname)
-            if isinstance(_cls, type):
-                for _mname in _cfg["candidate_funcs"]:
-                    if hasattr(_cls, _mname):
-                        try:
-                            _inst = _cls()
-                            _m = getattr(_inst, _mname)
-                            if callable(_m):
-                                _expr_fn = _m
-                                break
-                        except Exception:
-                            pass
-            if _expr_fn is not None:
-                break
+{class_probe_block}
 
     def _looks_like_safe_rejection(val):
         if val is None or isinstance(val, bool):
@@ -296,11 +309,18 @@ class ExecutionVerifier:
         score = 0
 
         py_files_checked = 0
-        for tf in targets[:4]:
+        seen_real_paths = set()
+        for tf in targets[:6]:
             ok, resolved, err, _ = resolve_existing_path(tf, runtime, allow_dir=False)
             if not ok or not os.path.isfile(resolved):
-                discrepancies.append(f"Expected file '{tf}' is missing on disk ({err or 'not found'}).")
+                if not any(tf in d for d in discrepancies):
+                    discrepancies.append(f"Expected file '{tf}' is missing on disk ({err or 'not found'}).")
                 continue
+
+            real_resolved = os.path.realpath(resolved)
+            if real_resolved in seen_real_paths:
+                continue
+            seen_real_paths.add(real_resolved)
 
             try:
                 with open(resolved, "r", encoding="utf-8", errors="replace") as f:
@@ -386,7 +406,14 @@ class ExecutionVerifier:
 
                 if not exec_res.success:
                     err_msg = exec_res.error or "Sandbox execution failed"
-                    discrepancies.append(f"Sandbox runtime error: {err_msg}")
+                    line_match = re.search(r"at line (\d+)", err_msg)
+                    src_snippet = ""
+                    if line_match:
+                        ln_no = int(line_match.group(1))
+                        h_lines = harness.splitlines()
+                        if 1 <= ln_no <= len(h_lines):
+                            src_snippet = f" -> `{h_lines[ln_no - 1].strip()}`"
+                    discrepancies.append(f"Sandbox runtime error in {os.path.basename(resolved)}: {err_msg}{src_snippet}")
                 elif parsed_out is not None:
                     checks_passed.extend(parsed_out.get("passed", []))
                     functional_outputs.extend(parsed_out.get("outputs", []))
@@ -405,7 +432,7 @@ class ExecutionVerifier:
         score = max(0, min(100, score))
         passed = (len(discrepancies) == 0) and (score >= 90 or (score >= 70 and not c.requires_security))
         rating = max(1, min(10, round(score / 10))) if not passed else max(8, min(10, round(score / 10)))
-        corrective = "; ".join(discrepancies[:3]) if discrepancies else None
+        corrective = "\n".join(f"- {d}" for d in discrepancies[:4]) if discrepancies else None
 
         return VerificationReport(
             passed=passed,

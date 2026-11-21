@@ -82,6 +82,8 @@ class NeuroSymbolicRunner:
         best_diff = ""
         healed_notes: List[str] = []
         previous_feedback = ""
+        last_written_code: Optional[str] = None
+        repeated_same_code = 0
 
         for attempt in range(1, max(1, max_attempts) + 1):
             # Re-analyze on retry from current disk state (which stays at best_snapshot)
@@ -112,9 +114,17 @@ class NeuroSymbolicRunner:
                 previous_feedback = apply_res.error or "Failed to parse or apply code output."
                 await _emit(
                     "reacting",
-                    {"task_id": "t1", "message": f"Patch apply failed on attempt {attempt}: {previous_feedback[:120]}"},
+                    {"task_id": "t1", "message": f"Patch apply failed on attempt {attempt}: {previous_feedback[:300]}"},
                 )
                 continue
+
+            current_code = ""
+            if os.path.isfile(apply_res.resolved_path):
+                with open(apply_res.resolved_path, "r", encoding="utf-8", errors="replace") as f:
+                    current_code = f.read()
+
+            is_duplicate_attempt = last_written_code is not None and current_code == last_written_code
+            last_written_code = current_code
 
             if apply_res.healed_actions:
                 for act in apply_res.healed_actions:
@@ -152,15 +162,34 @@ class NeuroSymbolicRunner:
                     "healed_actions": healed_notes,
                 }
 
-            previous_feedback = ver.corrective_action or "Verification failed."
+            passed_str = ", ".join(ver.checks_passed) if ver.checks_passed else "none"
+            failed_str = "\n".join(f"  * {d}" for d in ver.discrepancies) if ver.discrepancies else "  * Unknown check failure"
+            previous_feedback = (
+                f"- Score: {ver.score}/100\n"
+                f"- Passed checks: {passed_str}\n"
+                f"- Failed checks:\n{failed_str}"
+            )
+            if is_duplicate_attempt:
+                repeated_same_code += 1
+                previous_feedback += "\n- WARNING: Output matched previous failing code identically. Rewrite the failing parts explicitly."
+            else:
+                repeated_same_code = 0
+
             await _emit(
                 "reacting",
                 {
                     "task_id": "t1",
+                    "score": ver.score,
+                    "passed_checks": ver.checks_passed,
                     "discrepancies": ver.discrepancies,
-                    "message": f"Score {ver.score}/100 ({len(ver.discrepancies)} issues); repairing: {previous_feedback[:120]}",
+                    "message": (
+                        f"Score {ver.score}/100 ({len(ver.discrepancies)} issue(s)); "
+                        f"failed: {'; '.join(ver.discrepancies)[:320]}"
+                    ),
                 },
             )
+            if repeated_same_code >= 2:
+                break
 
         # Ensure highest-scoring snapshot stays on disk even if max_attempts exhausted
         cls._restore_snapshot(best_snapshot)

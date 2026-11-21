@@ -184,7 +184,11 @@ class PatchProtocol:
             lines.append(f"CURRENT CONTENT OF `{fd.requested_path}`:\n```python\n{fd.raw_content}\n```")
 
         if previous_feedback:
-            lines.append(f"PREVIOUS VERIFICATION FAILURE (Best score so far: {best_score}/100):\n{previous_feedback}")
+            lines.append(
+                f"VERIFICATION REPORT FROM PREVIOUS ATTEMPT (Best Score So Far: {best_score}/100):\n"
+                f"{previous_feedback}\n"
+                "Fix ALL listed issues directly. Do NOT repeat the exact same failing code."
+            )
 
         lines.append(
             "OUTPUT FORMAT: Return the complete updated Python file inside a single ```python ... ``` code block "
