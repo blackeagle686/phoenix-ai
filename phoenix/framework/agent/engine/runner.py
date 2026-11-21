@@ -83,6 +83,7 @@ class NeuroSymbolicRunner:
         best_diff = ""
         healed_notes: List[str] = []
         previous_feedback = ""
+        last_ver_feedback = ""
         last_written_code: Optional[str] = None
         repeated_same_code = 0
         focus_scope: Optional[Dict[str, Any]] = None
@@ -102,6 +103,7 @@ class NeuroSymbolicRunner:
                     "- Detected failing checks on disk:\n"
                     + "\n".join(f"  * {d}" for d in initial_ver.discrepancies)
                 )
+                last_ver_feedback = previous_feedback
 
         for attempt in range(1, max(1, max_attempts) + 1):
             attempts_run = attempt
@@ -114,7 +116,7 @@ class NeuroSymbolicRunner:
                 best_score=max(0, best_score),
                 focus_scope=focus_scope,
                 diagnosis_hints=diagnosis_hints,
-                force_search_replace=(repeated_same_code >= 1),
+                force_search_replace=False,
             )
             await _emit(
                 "acting",
@@ -122,11 +124,11 @@ class NeuroSymbolicRunner:
             )
 
             gen_kwargs: Dict[str, Any] = {"session_id": None}
-            if repeated_same_code >= 1 or attempt >= 3:
+            if repeated_same_code >= 1 or attempt >= 2:
                 try:
                     sig = inspect.signature(llm.generate)
                     if "temperature" in sig.parameters:
-                        gen_kwargs["temperature"] = 0.55 if repeated_same_code >= 1 else 0.3
+                        gen_kwargs["temperature"] = 0.45 if repeated_same_code >= 1 else 0.25
                 except (TypeError, ValueError):
                     pass
 
@@ -142,10 +144,18 @@ class NeuroSymbolicRunner:
             )
 
             if not apply_res.success:
-                previous_feedback = apply_res.error or "Failed to parse or apply code output."
+                apply_err = apply_res.error or "Failed to parse or apply code output."
+                # Reset repeated_same_code so next attempt falls back to standard ```python``` block format
+                # while preserving the underlying verification error context!
+                repeated_same_code = 0
+                base_fb = last_ver_feedback or previous_feedback
+                previous_feedback = (
+                    f"{base_fb}\n- FORMAT ERROR ON LAST ATTEMPT: {apply_err} "
+                    "Return valid Python code inside a ```python ... ``` code block."
+                ).strip()
                 await _emit(
                     "reacting",
-                    {"task_id": "t1", "message": f"Patch apply failed on attempt {attempt}: {previous_feedback[:300]}"},
+                    {"task_id": "t1", "message": f"Patch apply failed on attempt {attempt}: {apply_err[:300]}"},
                 )
                 continue
 
@@ -211,6 +221,7 @@ class NeuroSymbolicRunner:
                 f"- Passed checks: {passed_str}\n"
                 f"- Failed checks:\n{failed_str}"
             )
+            last_ver_feedback = previous_feedback
             if is_duplicate_attempt:
                 repeated_same_code += 1
                 previous_feedback += "\n- WARNING: Output matched previous failing code identically. Apply the exact AST/runtime fix above."

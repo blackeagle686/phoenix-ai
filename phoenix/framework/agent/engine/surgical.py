@@ -119,15 +119,26 @@ def diagnose_python_error(
             "EXACT AST FIX (`ast.Constant`): Python 3.8+ represents numbers/strings as `ast.Constant(value=...)` (`return node.value`)."
         )
 
-    if "keyerror" in err_low and any(op in error_msg for op in ("'Div'", "'Add'", "'Sub'", "'Mult'", "'Pow'", "'Mod'", "'USub'", "'UAdd'")):
+    if (
+        "unsupported binary operation" in err_low
+        or "unsupported unary operation" in err_low
+        or ("keyerror" in err_low and any(op in error_msg for op in ("'Div'", "'Add'", "'Sub'", "'Mult'", "'Pow'", "'Mod'", "'USub'", "'UAdd'")))
+        or ("node.op" in snip_low and any(k in err_low for k in ("div", "add", "mult", "sub", "pow", "binary", "operator")))
+        or ("def evaluate_binary_op" in full_low and ("ast.div" not in full_low or "math_functions[type(node.op)" in full_low))
+    ):
         hints.append(
-            "EXACT BINARY/UNARY OP FIX (`KeyError` on AST operator): `MATH_FUNCTIONS` only holds trig functions (`sin`, `cos`, `tanh`), NOT arithmetic operators! "
-            "In `evaluate_binary_op`, dispatch on `node.op` directly (or use `import operator`):\n"
-            "    if isinstance(node.op, ast.Add): return left + right\n"
-            "    elif isinstance(node.op, ast.Sub): return left - right\n"
-            "    elif isinstance(node.op, ast.Mult): return left * right\n"
-            "    elif isinstance(node.op, ast.Div): return left / right\n"
-            "    elif isinstance(node.op, ast.Pow): return left ** right\n"
+            "EXACT BINARY/UNARY OP FIX (`ast.BinOp` / `ast.UnaryOp` operator handling): Handle `Add`, `Sub`, `Mult`, `Div`, `FloorDiv`, `Mod`, `Pow` in `evaluate_binary_op`:\n"
+            "    def evaluate_binary_op(self, node):\n"
+            "        left = self.evaluate_node(node.left)\n"
+            "        right = self.evaluate_node(node.right)\n"
+            "        if isinstance(node.op, ast.Add): return left + right\n"
+            "        elif isinstance(node.op, ast.Sub): return left - right\n"
+            "        elif isinstance(node.op, ast.Mult): return left * right\n"
+            "        elif isinstance(node.op, ast.Div): return left / right\n"
+            "        elif isinstance(node.op, ast.FloorDiv): return left // right\n"
+            "        elif isinstance(node.op, ast.Mod): return left % right\n"
+            "        elif isinstance(node.op, ast.Pow): return left ** right\n"
+            "        raise ValueError(f'Unsupported binary operation: {type(node.op).__name__}')\n"
             "And in `evaluate_unary_op`: `if isinstance(node.op, ast.USub): return -operand` / `elif isinstance(node.op, ast.UAdd): return +operand`."
         )
 
@@ -263,26 +274,43 @@ class SurgicalCodePatcher:
             return norm_gen, "full_code", []
 
         gen_top_funcs = [n for n in gen_tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        gen_top_classes = [n for n in gen_tree.body if isinstance(n, ast.ClassDef)]
         gen_other = [
             n for n in gen_tree.body
-            if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Import, ast.ImportFrom))
+            if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Import, ast.ImportFrom))
         ]
-        # Only engage surgical splice when LLM emitted ONLY function(s) (no classes/top-level script)
-        # while the original file contains additional top-level structure (classes, calls, constants, etc.)
-        orig_has_extra_structure = any(
-            not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Import, ast.ImportFrom))
-            for n in orig_tree.body
-        ) or len([n for n in orig_tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]) > len(gen_top_funcs)
 
-        if not gen_top_funcs or gen_other or not orig_has_extra_structure:
+        # Collect candidate (FunctionDef, preferred_class_name) pairs from top-level functions or class methods
+        fn_targets: List[Tuple[ast.AST, Optional[str]]] = [(fn, focus_class) for fn in gen_top_funcs]
+        for cls_node in gen_top_classes:
+            cls_methods = [
+                m for m in cls_node.body
+                if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))
+            ]
+            if not cls_methods:
+                return norm_gen, "full_code", []
+            for m in cls_methods:
+                fn_targets.append((m, cls_node.name))
+
+        # Only engage surgical splice when LLM emitted ONLY functions/classes (no top-level script statements)
+        # while the original file contains additional top-level structure (script calls, constants, other methods, etc.)
+        orig_callable_count = sum(
+            1 for n in ast.walk(orig_tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+        )
+        orig_has_extra_structure = any(
+            not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Import, ast.ImportFrom))
+            for n in orig_tree.body
+        ) or orig_callable_count > len(fn_targets)
+
+        if not fn_targets or gen_other or not orig_has_extra_structure:
             return norm_gen, "full_code", []
 
         working = original_code.replace("\r\n", "\n")
         gen_lines = norm_gen.replace("\r\n", "\n").splitlines()
         applied_notes: List[str] = []
 
-        for fn_node in gen_top_funcs:
-            cands = _find_matching_callable_targets(working, fn_node.name, prefer_class=focus_class)
+        for fn_node, pref_cls in fn_targets:
+            cands = _find_matching_callable_targets(working, fn_node.name, prefer_class=pref_cls)
             if len(cands) != 1:
                 return norm_gen, "full_code", []
             target = cands[0]

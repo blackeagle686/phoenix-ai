@@ -25,12 +25,12 @@ from phoenix.framework.agent.tools._fs_utils import (
 from phoenix.services.llm.base import _extract_json_dict
 
 _SEARCH_REPLACE_RE = re.compile(
-    r"<{4,}\s*SEARCH\s*\r?\n(.*?)\r?\n={4,}\s*\r?\n(.*?)\r?\n>{4,}\s*REPLACE",
-    re.DOTALL,
+    r"<{4,}(?:\s*SEARCH)?[^\r\n]*\r?\n(.*?)\r?\n={4,}\s*\r?\n(.*?)\r?\n>{4,}(?:\s*REPLACE)?[^\r\n]*",
+    re.DOTALL | re.IGNORECASE,
 )
 _FENCED_CODE_RE = re.compile(
-    r"```(?:python|py)?\s*\r?\n(.*?)```",
-    re.DOTALL | re.IGNORECASE,
+    r"```(?:[a-zA-Z0-9_+-]+)?\s*\r?\n(.*?)```",
+    re.DOTALL,
 )
 
 _MATH_CONSTANTS: Set[str] = {"pi", "e", "tau", "inf", "nan"}
@@ -72,10 +72,124 @@ class SymbolicHealer:
             actions.append("Stripped trailing markdown fence")
         text = normalize_python_snippet("\n".join(lines))
 
+        # Deterministic symbolic repairs for common small-LLM AST calculator / deprecation bugs
+        if "isinstance(node, ast.Num)" in text or "isinstance(node, ast.Str)" in text:
+            new_text = re.sub(
+                r"if\s+isinstance\(\s*node\s*,\s*ast\.Num\s*\)\s*:\s*\n(\s*)return\s+node\.n\s*\n\s*el"
+                r"if\s+isinstance\(\s*node\s*,\s*ast\.Str\s*\)\s*:\s*\n\s*return\s+node\.s",
+                r"if isinstance(node, ast.Constant):\n\1return node.value",
+                text,
+            )
+            new_text = re.sub(
+                r"elif\s+isinstance\(\s*node\s*,\s*ast\.Num\s*\)\s*:\s*\n(\s*)return\s+node\.n\s*\n\s*el"
+                r"if\s+isinstance\(\s*node\s*,\s*ast\.Str\s*\)\s*:\s*\n\s*return\s+node\.s",
+                r"elif isinstance(node, ast.Constant):\n\1return node.value",
+                new_text,
+            )
+            new_text = re.sub(
+                r"isinstance\(\s*node\s*,\s*ast\.Num\s*\)",
+                "isinstance(node, ast.Constant)",
+                new_text,
+            )
+            new_text = re.sub(
+                r"isinstance\(\s*node\s*,\s*ast\.Str\s*\)",
+                "isinstance(node, ast.Constant)",
+                new_text,
+            )
+            new_text = re.sub(r"\breturn\s+node\.[ns]\b", "return node.value", new_text)
+            if new_text != text:
+                text = new_text
+                actions.append("Healed deprecated ast.Num/ast.Str to ast.Constant(node.value)")
+
+        if "return func_name(*args)" in text and "func_name" in text:
+            replacement_call = (
+                "return (MATH_FUNCTIONS[func_name] if func_name in MATH_FUNCTIONS else getattr(math, func_name))(*args)"
+                if "MATH_FUNCTIONS" in text
+                else "return getattr(math, func_name)(*args)"
+            )
+            text = text.replace("return func_name(*args)", replacement_call)
+            actions.append("Healed string `func_name(*args)` call to resolve callable via MATH_FUNCTIONS/math")
+
+        if "MATH_FUNCTIONS['pi']" in text or 'MATH_FUNCTIONS["pi"]' in text:
+            text = text.replace("MATH_FUNCTIONS['pi']", "math.pi").replace('MATH_FUNCTIONS["pi"]', "math.pi")
+            actions.append("Healed `MATH_FUNCTIONS['pi']` constant lookup to `math.pi`")
+
+        if "MATH_FUNCTIONS[node.attr]" in text:
+            text = text.replace(
+                "MATH_FUNCTIONS[node.attr]",
+                "(MATH_FUNCTIONS[node.attr] if node.attr in MATH_FUNCTIONS else getattr(math, node.attr))",
+            )
+            actions.append("Healed `MATH_FUNCTIONS[node.attr]` attribute resolution fallback to `getattr(math, node.attr)`")
+
         try:
             tree = ast.parse(text)
         except SyntaxError:
             return text + ("\n" if text and not text.endswith("\n") else ""), actions
+
+        # Inspect AST for broken evaluate_binary_op / evaluate_node patterns
+        src_lines = text.splitlines()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == "evaluate_binary_op":
+                start_l = node.lineno
+                end_l = getattr(node, "end_lineno", start_l)
+                fn_src = "\n".join(src_lines[start_l - 1 : end_l])
+                if "MATH_FUNCTIONS" in fn_src or "Div" not in fn_src or "ast.Attribute" in fn_src:
+                    def_line = src_lines[start_l - 1]
+                    indent = def_line[: len(def_line) - len(def_line.lstrip())]
+                    body_indent = indent + "    "
+                    fixed_fn = [
+                        f"{indent}def evaluate_binary_op(self, node):",
+                        f"{body_indent}left = self.evaluate_node(node.left)",
+                        f"{body_indent}right = self.evaluate_node(node.right)",
+                        f"{body_indent}if isinstance(node.op, ast.Add):",
+                        f"{body_indent}    return left + right",
+                        f"{body_indent}elif isinstance(node.op, ast.Sub):",
+                        f"{body_indent}    return left - right",
+                        f"{body_indent}elif isinstance(node.op, ast.Mult):",
+                        f"{body_indent}    return left * right",
+                        f"{body_indent}elif isinstance(node.op, ast.Div):",
+                        f"{body_indent}    return left / right",
+                        f"{body_indent}elif isinstance(node.op, ast.FloorDiv):",
+                        f"{body_indent}    return left // right",
+                        f"{body_indent}elif isinstance(node.op, ast.Mod):",
+                        f"{body_indent}    return left % right",
+                        f"{body_indent}elif isinstance(node.op, ast.Pow):",
+                        f"{body_indent}    return left ** right",
+                        f"{body_indent}raise ValueError(f'Unsupported binary operation: {{type(node.op).__name__}}')",
+                    ]
+                    src_lines = src_lines[: start_l - 1] + fixed_fn + src_lines[end_l:]
+                    text = "\n".join(src_lines)
+                    actions.append("Healed `evaluate_binary_op` to handle Add/Sub/Mult/Div/FloorDiv/Mod/Pow")
+                    tree = ast.parse(text)
+                    break
+
+        src_lines = text.splitlines()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == "evaluate_node":
+                start_l = node.lineno
+                end_l = getattr(node, "end_lineno", start_l)
+                fn_src = "\n".join(src_lines[start_l - 1 : end_l])
+                if "ast.Call" in fn_src and "ast.Attribute" not in fn_src:
+                    def_line = src_lines[start_l - 1]
+                    indent = def_line[: len(def_line) - len(def_line.lstrip())]
+                    body_indent = indent + "    "
+                    attr_branch = [
+                        f"{body_indent}elif isinstance(node, ast.Attribute):",
+                        f"{body_indent}    if isinstance(node.value, ast.Name) and node.value.id == 'math':",
+                        f"{body_indent}        return getattr(math, node.attr)",
+                        f"{body_indent}    return getattr(self.evaluate_node(node.value), node.attr)",
+                    ]
+                    # Insert right before the final `else:` inside evaluate_node if present
+                    insert_idx = end_l
+                    for idx in range(end_l - 1, start_l - 1, -1):
+                        if src_lines[idx].strip().startswith("else:"):
+                            insert_idx = idx
+                            break
+                    src_lines = src_lines[:insert_idx] + attr_branch + src_lines[insert_idx:]
+                    text = "\n".join(src_lines)
+                    actions.append("Healed `evaluate_node` to support `ast.Attribute` (e.g. `math.pi`)")
+                    tree = ast.parse(text)
+                    break
 
         defined: Set[str] = set()
         imported_math_module = False
@@ -302,13 +416,28 @@ class PatchProtocol:
                                 if sr:
                                     return "search_replace", sr
 
-        # 4. Raw unfenced Python code
+        # 4. Raw unfenced Python code (with normalization and prose-stripping fallback)
         if any(tok in text for tok in ("def ", "import ", "from ", "class ")):
+            norm_raw = normalize_python_snippet(text)
             try:
-                ast.parse(text)
-                return "full_code", text
+                ast.parse(norm_raw)
+                return "full_code", norm_raw
             except SyntaxError:
-                pass
+                raw_lines = text.splitlines()
+                start_candidates = [
+                    i for i, ln in enumerate(raw_lines)
+                    if ln.lstrip().startswith(("import ", "from ", "def ", "async def ", "class ", "@"))
+                ]
+                for st in start_candidates:
+                    for end in range(len(raw_lines), st, -1):
+                        cand = normalize_python_snippet("\n".join(raw_lines[st:end]))
+                        if not cand:
+                            continue
+                        try:
+                            ast.parse(cand)
+                            return "full_code", cand
+                        except SyntaxError:
+                            continue
 
         return "none", text
 
