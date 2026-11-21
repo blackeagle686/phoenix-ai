@@ -216,7 +216,7 @@ class Thinker(BaseThinker):
             "1. Existing file modifications/adding functions: call `file_read` FIRST, then `file_edit` (use `upsert=true` when adding a new block/function). Do NOT overwrite existing files blindly with `file_write`.\n"
             "2. Creating a brand-new file: use `file_write`. Finding symbols/files: use `file_search`.\n"
             "3. NEVER use `python_repl` or `execute_command` to create/edit project files (`python_repl` is only for quick in-memory calculation and blocks `input()`).\n"
-            "4. Set `expected_outcome` concisely before invoking tools; when done, leave `tools_to_call` empty and state ONLY verified tool/disk results in `direct_response`."
+            "4. Keep `thought_process` under 15 words, set `expected_outcome` concisely before invoking tools; when done, leave `tools_to_call` empty and state ONLY verified tool/disk results in `direct_response`."
         )
 
         use_native = (
@@ -295,7 +295,8 @@ class Thinker(BaseThinker):
 
         system_prompt = (
             "You are the master Thinker performing dynamic re-planning after an execution obstacle.\n"
-            "Given the overall objective, completed work so far, and the failure details, generate a minimal list of remaining/recovery tasks.\n"
+            "Given the overall objective, completed work so far, and the failure details, generate a minimal list of remaining/recovery tasks (max 3).\n"
+            "Every task MUST include a non-empty `description` and `target_files`; omit already-completed tasks.\n"
             f"{tools_list}\n"
             f"Valid task_type: {task_types} | Valid priority: {task_priorities}"
         )
@@ -356,7 +357,7 @@ class Thinker(BaseThinker):
 
         system_prompt = (
             "You are the Thinker running in DEEP COGNITIVE MODE (Tasking -> Planning with Expected Results -> Acting -> Watching -> Reacting).\n"
-            "Decompose the user's request into a clean, minimal sequence of cohesive tasks.\n"
+            "Decompose the user's request into ONLY 1 to 3 cohesive tasks (prefer 1 single task when modifying 1 file).\n"
             f"{tools_list}\n"
             "REQUIREMENTS FOR EVERY TASK:\n"
             " - Provide exact `description` + `target_files` (any workspace files touched or verified).\n"

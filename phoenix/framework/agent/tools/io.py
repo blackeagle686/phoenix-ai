@@ -9,7 +9,11 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from pydantic import BaseModel, Field
+try:
+    from pydantic import BaseModel, ConfigDict, Field
+except ImportError:  # pragma: no cover - Pydantic v1 fallback
+    from pydantic import BaseModel, Field
+    ConfigDict = None
 
 from phoenix.framework.agent.cognition.schema import (
     FileContent,
@@ -68,12 +72,25 @@ def get_blocks_from_lines(
     return blocks, total_lines
 
 
+def _coerce_int_arg(value: Any, default: Optional[int] = None) -> Optional[int]:
+    """Defensively normalize integer tool parameters passed as strings."""
+    if value is None or value == "" or isinstance(value, bool):
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 class _FileWriteArgs(BaseModel):
+    if ConfigDict is not None:
+        model_config = ConfigDict(extra="allow")
+    else:
+        class Config:
+            extra = "allow"
+
     file_path: str = Field(..., description="Target file path inside workspace")
-    content: str = Field(..., description="Text or code content to write")
-    from_line: int = Field(default=1, ge=1, description="Optional 1-indexed start line for partial replacement")
-    to_line: Optional[int] = Field(default=None, ge=1, description="Optional 1-indexed inclusive end line for partial replacement")
-    expected_target: Optional[str] = Field(default=None, description="Optional expected text inside [from_line:to_line] to prevent off-by-one overwrites")
+    content: str = Field(..., description="Full file content to create or overwrite")
     verify_syntax: bool = Field(default=True, description="Validate Python AST syntax before saving .py files (max 3 rollbacks)")
 
 
@@ -157,6 +174,10 @@ class FileReadTool(BaseTool):
     ) -> ToolResult:
         try:
             target = kwargs.get("path") or file_path or "."
+            from_line = max(1, _coerce_int_arg(from_line, 1) or 1)
+            to_line = _coerce_int_arg(to_line, None)
+            block_size = max(1, _coerce_int_arg(block_size, 200) or 200)
+            max_files = max(1, _coerce_int_arg(max_files, 80) or 80)
             ok, resolved_path, err, meta = await asyncio.to_thread(
                 resolve_existing_path, target, self.runtime, True
             )
@@ -242,8 +263,9 @@ class FileWriteTool(BaseTool):
     args_schema = _FileWriteArgs
     param_aliases = {"write_content": "content", "path": "file_path"}
     description = (
-        "Creates or overwrites a file (or replaces a line range when from_line/to_line are provided). "
-        "Inputs: 'file_path' (str), 'content' (str). Optional: 'from_line', 'to_line', 'expected_target', 'verify_syntax'."
+        "Creates or completely overwrites a file inside the workspace. "
+        "For partial line/text edits to an existing file, prefer 'file_edit'. "
+        "Inputs: 'file_path' (str), 'content' (str), optional 'verify_syntax' (bool=True)."
     )
 
     def __init__(self, runtime: Optional[Any] = None, max_syntax_rollbacks: int = 3):
@@ -264,6 +286,8 @@ class FileWriteTool(BaseTool):
         **kwargs,
     ) -> ToolResult:
         try:
+            from_line = max(1, _coerce_int_arg(from_line, 1) or 1)
+            to_line = _coerce_int_arg(to_line, None)
             actual_content = content if content is not None else write_content
             if actual_content is None:
                 return ToolResult(

@@ -1,8 +1,9 @@
 import asyncio
 import inspect
 import re
+import types
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Type, Union, get_args, get_origin
+from typing import Any, Callable, Dict, List, Optional, Type, Union, get_args, get_origin, get_type_hints
 from pydantic import BaseModel
 
 
@@ -36,7 +37,71 @@ def _resolve_json_refs(node: Any, defs: Dict[str, Any], seen: Optional[set] = No
     return node
 
 
+_PRIMITIVE_ANNOTATION_NAMES: Dict[str, Any] = {
+    "int": int,
+    "float": float,
+    "bool": bool,
+    "str": str,
+    "list": list,
+    "dict": dict,
+    "tuple": tuple,
+    "set": set,
+    "builtins.int": int,
+    "builtins.float": float,
+    "builtins.bool": bool,
+    "builtins.str": str,
+}
+
+
+def _is_union_origin(origin: Any) -> bool:
+    union_type = getattr(types, "UnionType", None)
+    return origin is Union or (union_type is not None and origin is union_type)
+
+
+def _get_resolved_type_hints(fn: Callable) -> Dict[str, Any]:
+    """Resolve PEP 563 postponed annotations via get_type_hints when available."""
+    try:
+        return get_type_hints(fn)
+    except Exception:
+        return {}
+
+
+def _resolve_annotation(annotation: Any) -> Any:
+    """Resolve simple PEP 563 stringified annotations (e.g. 'int', 'Optional[int]', 'int | None')."""
+    if not isinstance(annotation, str):
+        return annotation
+    text = annotation.strip()
+    if text in _PRIMITIVE_ANNOTATION_NAMES:
+        return _PRIMITIVE_ANNOTATION_NAMES[text]
+
+    opt_match = re.match(r"^(?:typing\.)?Optional\[(.+)\]$", text)
+    if opt_match:
+        return Optional[_resolve_annotation(opt_match.group(1))]
+
+    if "|" in text:
+        parts = [p.strip() for p in text.split("|") if p.strip() not in ("None", "NoneType")]
+        if len(parts) == 1:
+            return Optional[_resolve_annotation(parts[0])]
+
+    union_match = re.match(r"^(?:typing\.)?Union\[(.+)\]$", text)
+    if union_match:
+        parts = [p.strip() for p in union_match.group(1).split(",") if p.strip() not in ("None", "NoneType")]
+        if len(parts) == 1:
+            return Optional[_resolve_annotation(parts[0])]
+
+    list_match = re.match(r"^(?:typing\.)?(?:List|list)\[(.+)\]$", text)
+    if list_match:
+        return List[_resolve_annotation(list_match.group(1))]
+
+    dict_match = re.match(r"^(?:typing\.)?(?:Dict|dict)\[.+\]$", text)
+    if dict_match:
+        return dict
+
+    return annotation
+
+
 def _python_type_to_json_schema(annotation: Any) -> Dict[str, Any]:
+    annotation = _resolve_annotation(annotation)
     if annotation is inspect.Parameter.empty or annotation is Any:
         return {"type": "string"}
 
@@ -55,7 +120,7 @@ def _python_type_to_json_schema(annotation: Any) -> Dict[str, Any]:
             return base_schema
 
     # Handle Optional / Union (prefer BaseModel schema over raw dict when both exist)
-    if origin is Union:
+    if _is_union_origin(origin):
         non_none = [a for a in args if a is not type(None)]
         if non_none:
             model_choice = next(
@@ -163,6 +228,7 @@ def _extract_parameters_schema(fn: Callable, args_schema: Optional[Type[BaseMode
     except (ValueError, TypeError):
         return {"type": "object", "properties": {}, "required": []}
 
+    type_hints = _get_resolved_type_hints(fn)
     doc_descriptions = _parse_docstring_param_descriptions(inspect.getdoc(fn))
     properties: Dict[str, Any] = {}
     required: List[str] = []
@@ -173,7 +239,8 @@ def _extract_parameters_schema(fn: Callable, args_schema: Optional[Type[BaseMode
         if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
             continue
 
-        prop_info = dict(_python_type_to_json_schema(param.annotation))
+        resolved_ann = _resolve_annotation(type_hints.get(param_name, param.annotation))
+        prop_info = dict(_python_type_to_json_schema(resolved_ann))
         if param_name in doc_descriptions and "description" not in prop_info:
             prop_info["description"] = doc_descriptions[param_name]
 
@@ -193,6 +260,7 @@ def _extract_parameters_schema(fn: Callable, args_schema: Optional[Type[BaseMode
 
 def _coerce_value(value: Any, annotation: Any) -> Any:
     """Lightweight safe type coercion for LLM tool call arguments."""
+    annotation = _resolve_annotation(annotation)
     if value is None or annotation is inspect.Parameter.empty or annotation is Any:
         return value
 
@@ -203,7 +271,7 @@ def _coerce_value(value: Any, annotation: Any) -> Any:
         if args:
             return _coerce_value(value, args[0])
 
-    if origin is Union:
+    if _is_union_origin(origin):
         non_none = [a for a in args if a is not type(None)]
         if len(non_none) == 1:
             return _coerce_value(value, non_none[0])
@@ -264,18 +332,25 @@ def _prepare_call_kwargs(
             if hasattr(validated, "model_dump")
             else validated.dict()
         )
+        extra = getattr(validated, "model_extra", None) or getattr(validated, "__pydantic_extra__", None)
+        if isinstance(extra, dict):
+            for ek, ev in extra.items():
+                if ek not in kwargs:
+                    kwargs[ek] = ev
 
     try:
         sig = inspect.signature(fn)
     except (ValueError, TypeError):
         return kwargs
 
+    type_hints = _get_resolved_type_hints(fn)
     accepts_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
     bound: Dict[str, Any] = {}
     for k, v in kwargs.items():
         if k in sig.parameters:
             param = sig.parameters[k]
-            bound[k] = _coerce_value(v, param.annotation)
+            ann = _resolve_annotation(type_hints.get(k, param.annotation))
+            bound[k] = _coerce_value(v, ann)
         elif accepts_var_kw:
             bound[k] = v
 

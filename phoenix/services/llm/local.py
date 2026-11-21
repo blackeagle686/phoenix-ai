@@ -729,7 +729,8 @@ class LocalLLM(BaseLLM):
         schema_str = json.dumps(prompt_schema, separators=(",", ":")) if isinstance(prompt_schema, dict) else str(schema)
         system_prompt = (
             "You are a strict JSON generator. Return ONLY a single compact single-line raw JSON object matching this schema "
-            f"(no markdown, no indentation whitespace, no explanation):\n{schema_str}"
+            "(keep any 'thought_process' <= 15 words, no markdown, no indentation whitespace, no explanation):\n"
+            f"{schema_str}"
         )
         messages = self._build_messages(prompt=prompt, system_prompt=system_prompt)
         out_tokens = max_tokens or config.SECURITY_MAX_OUTPUT_LENGTH

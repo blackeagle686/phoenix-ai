@@ -471,6 +471,24 @@ class PlanSchema(BaseModel):
                             "target_files": inferred_targets,
                         })
                     elif isinstance(item, dict):
+                        has_desc = any(
+                            isinstance(item.get(k), str) and item[k].strip()
+                            for k in ("description", "task", "title", "name", "action", "goal")
+                        )
+                        status_norm = _normalize_enum(
+                            item.get("status"),
+                            {e.value for e in TaskStatus},
+                            _STATUS_ALIASES,
+                            "pending",
+                        )
+                        if not has_desc:
+                            # Skip completed task stubs echoed back without description during replanning
+                            if status_norm == TaskStatus.DONE.value:
+                                continue
+                            item = {
+                                **item,
+                                "description": f"Complete step {item.get('task_id') or idx}: {d['objective']}",
+                            }
                         if inferred_targets and not item.get("target_files"):
                             item = {**item, "target_files": inferred_targets}
                         norm_tasks.append(item)
