@@ -21,6 +21,9 @@ from phoenix.framework.agent.cognition.schema import (
     TaskStatus,
 )
 from phoenix.framework.agent.cognition.actor.actor import MUTATING_FILE_TOOLS
+from phoenix.framework.agent.engine.pre_analyzer import DiagnosticReport, PreAnalyzer
+from phoenix.framework.agent.engine.runner import NeuroSymbolicRunner
+from phoenix.framework.agent.engine.verifier import ExecutionVerifier
 from phoenix.framework.agent.memory.budget import compact_value
 from phoenix.framework.agent.memory.manager import MemoryManager
 from phoenix.framework.agent.tools._fs_utils import get_workspace_snapshot, inspect_workspace_file
@@ -644,13 +647,70 @@ class AgentLoop:
 
         return "\n".join(reports), issues
 
+    def _is_local_execution_engine(self) -> bool:
+        is_local_fn = getattr(self.thinker, "_is_local_model", None)
+        if callable(is_local_fn):
+            try:
+                return bool(is_local_fn())
+            except Exception:
+                return False
+        return False
+
+    async def _finalize_deep_response(
+        self,
+        prompt: str,
+        objective: str,
+        status_log: str,
+        digest: str,
+        disk_evidence_notes: List[str],
+        active_memory: MemoryManager,
+        memory: Any,
+        session_id: str,
+        mode_name: str = "deep",
+    ) -> str:
+        final_answer = status_log
+        if disk_evidence_notes:
+            digest = f"{digest}\n\nVERIFIED ON-DISK EVIDENCE:\n" + "\n".join(disk_evidence_notes[-3:])
+        if (
+            self.synthesize_answer
+            and hasattr(self.thinker, "synthesize_final_answer")
+            and _is_async_callable(self.thinker.synthesize_final_answer)
+        ):
+            try:
+                synthesized = await self.thinker.synthesize_final_answer(
+                    prompt=prompt,
+                    objective=objective,
+                    execution_digest=digest,
+                )
+                if synthesized and isinstance(synthesized, str) and synthesized.strip():
+                    final_answer = f"{synthesized.strip()}\n\n---\nDeep Execution Summary:\n{status_log.strip()}"
+            except Exception:
+                pass
+
+        if hasattr(memory, "add_interaction"):
+            await memory.add_interaction(session_id, "assistant", final_answer)
+        if hasattr(active_memory, "finalize_run"):
+            self._schedule_background(
+                active_memory.finalize_run(
+                    session_id,
+                    objective=objective,
+                    final_answer=final_answer,
+                    llm=getattr(self.reflector, "llm", None),
+                )
+            )
+        await self._flush_background()
+        await tracer.emit_event("complete", {"session_id": session_id, "mode": mode_name})
+        return final_answer
+
     async def _watch_deep_task(
         self,
         task: Any,
         actor_output: Any,
         expected_result: str,
+        diag_report: Optional[DiagnosticReport] = None,
+        prefer_deterministic_watch: bool = False,
     ) -> tuple[ActionWatchSchema, str]:
-        """Deep-mode Watching stage: verify actual results + on-disk state against expected outcome."""
+        """Deep-mode Watching stage: verify actual results + on-disk state + ExecutionVerifier."""
         disk_report, det_issues = self._collect_deep_disk_checks(actor_output, task)
 
         exec_results = []
@@ -680,6 +740,33 @@ class AgentLoop:
         if has_direct:
             actual_lines.append(f"- Direct Response: {compact_value(actor_output.result.get('direct_response'), max_chars=400)}")
         actual_digest = "\n".join(actual_lines) or "(no tool execution output)"
+
+        # Plan 3: Run deterministic AST, security policy, and live sandbox checks when code files exist
+        rt = self._active_runtime()
+        if not det_issues and diag_report is not None and rt is not None and task_type in ("write", "update"):
+            artifacts = getattr(actor_output, "artifacts", None) or {}
+            cand_files = list(artifacts.get("files_modified", []) or [])
+            ver = await ExecutionVerifier.verify(diag_report, rt, candidate_files=cand_files)
+            ver_summary = (
+                f"ExecutionVerifier Score: {ver.score}/100"
+                + (f" | Verified Outputs: {', '.join(ver.functional_outputs[:5])}" if ver.functional_outputs else "")
+                + (f" | Issues: {'; '.join(ver.discrepancies[:3])}" if ver.discrepancies else "")
+            )
+            disk_report = f"{disk_report}\n{ver_summary}".strip()
+            if prefer_deterministic_watch:
+                if not ver.passed:
+                    det_issues.extend(ver.discrepancies or ["Deterministic sandbox verification failed"])
+                else:
+                    return (
+                        ActionWatchSchema(
+                            matches_expectation=True,
+                            actual_summary=ver_summary[:500],
+                            discrepancies=[],
+                            corrective_action=None,
+                            rating=ver.rating,
+                        ),
+                        disk_report,
+                    )
 
         if det_issues:
             watch = ActionWatchSchema(
@@ -721,10 +808,11 @@ class AgentLoop:
         session_id: str,
         max_iterations: int = 15,
         status_queue: Optional[asyncio.Queue] = None,
+        force_engine: bool = False,
     ) -> str:
         """
-        Deep Cognitive Mode:
-        Tasking -> Planning (with Expected Outcomes) -> Acting -> Watching Results vs Expectations -> Reacting & Fixing.
+        Deep Cognitive Mode & Neuro-Symbolic Engine:
+        Pre-Analysis -> Tasking/Playbook -> Acting/PatchProtocol -> Sandbox Verification -> Reacting & Repair.
         """
         async def _emit_phase(phase: str, info: Optional[Dict[str, Any]] = None) -> None:
             payload = {"session_id": session_id, "phase": phase, **(info or {})}
@@ -739,18 +827,111 @@ class AgentLoop:
 
         rt = self._active_runtime()
         ws_snap = get_workspace_snapshot(rt, max_files=25) if rt else ""
-        await _emit_phase("tasking", {"message": "Analyzing workspace and decomposing request into verifiable tasks..."})
+        await _emit_phase("tasking", {"message": "Running deterministic workspace & AST/security pre-analysis..."})
 
-        try:
-            if hasattr(self.thinker, "generate_deep_plan") and _is_async_callable(self.thinker.generate_deep_plan):
-                plan = await self.thinker.generate_deep_plan(prompt, memory, session_id, workspace_snapshot=ws_snap)
-            else:
-                plan = await self.planner.generate_initial_plan(prompt, memory, session_id)
-        except (ValueError, RuntimeError):
-            plan = PlanSchema(
-                objective=prompt,
-                tasks=[TaskSchema(task_id="t1", description=prompt, expected_result=f"Fulfill request accurately: {prompt[:180]}")],
+        # Plan 1: Zero-LLM deterministic pre-analysis & file hydration
+        diag_report = PreAnalyzer.analyze(prompt, runtime=rt) if rt is not None else None
+        if diag_report and diag_report.pre_read_paths and hasattr(self.actor, "mark_files_pre_read"):
+            self.actor.mark_files_pre_read(diag_report.pre_read_paths)
+
+        is_local_engine = self._is_local_execution_engine()
+        use_ns_code_runner = (
+            diag_report is not None
+            and diag_report.contract.archetype in ("code_modify", "code_create")
+            and bool(diag_report.contract.target_files)
+            and (force_engine or is_local_engine)
+        )
+
+        # Plan 1+2+3 Integrated Neuro-Symbolic Code Workflow (0-JSON code synthesis + live sandbox verification)
+        if use_ns_code_runner and diag_report is not None:
+            playbook = PreAnalyzer.build_playbook_plan(prompt, diag_report)
+            plan_tasks = len(playbook.tasks) if playbook else 1
+            objective = playbook.objective if playbook else prompt[:240]
+            active_memory.objective = objective
+            if hasattr(memory, "session") and hasattr(memory.session, "set"):
+                memory.session.set("current_objective", objective)
+            if playbook:
+                for task in playbook.tasks:
+                    active_memory.create_cell(
+                        task_id=task.task_id,
+                        description=task.description,
+                        task_type=getattr(task, "task_type", "other"),
+                        priority=getattr(task, "priority", "medium"),
+                        dependencies=getattr(task, "dependencies", []),
+                    )
+            await _emit_phase("planning", {"tasks": plan_tasks, "message": f"Playbook prepared ({plan_tasks} cohesive task via Neuro-Symbolic Engine)."})
+
+            ns_res = await NeuroSymbolicRunner.run_code_workflow(
+                prompt=prompt,
+                llm=self.thinker.llm,
+                runtime=rt,
+                report=diag_report,
+                max_attempts=min(5, max(2, max_iterations)),
+                emit_phase=_emit_phase,
             )
+            ver = ns_res.get("verification")
+            score = getattr(ver, "score", 0) if ver else 0
+            rating = getattr(ver, "rating", 1) if ver else 1
+            func_outputs = getattr(ver, "functional_outputs", []) if ver else []
+            healed = ns_res.get("healed_actions") or []
+            diff_txt = ns_res.get("diff") or ""
+            status_log = (
+                f"Task t1 {'verified' if ns_res.get('success') else 'partial'} "
+                f"({rating}/10, sandbox score {score}/100, attempts={ns_res.get('attempts', 1)}).\n"
+            )
+            if func_outputs:
+                status_log += f"Verified execution probes: {', '.join(func_outputs)}\n"
+            if healed:
+                status_log += f"Auto-healed: {', '.join(healed)}\n"
+            if not ns_res.get("success") and ns_res.get("error"):
+                status_log += f"Remaining issues: {ns_res['error']}\n"
+
+            if playbook:
+                if ns_res.get("success"):
+                    active_memory.mark_complete("t1")
+                else:
+                    active_memory.mark_failed("t1", str(ns_res.get("error") or "Verification incomplete"))
+
+            digest_lines = [
+                f"Target File(s): {', '.join(ns_res.get('target_files', []))}",
+                f"Sandbox Verification Score: {score}/100 ({'PASSED' if ns_res.get('success') else 'INCOMPLETE'})",
+            ]
+            if func_outputs:
+                digest_lines.append("Sandbox Functional Checks: " + "; ".join(func_outputs))
+            if healed:
+                digest_lines.append("Deterministic Healer Fixes: " + "; ".join(healed))
+            if diff_txt:
+                digest_lines.append(f"On-Disk Diff:\n{diff_txt}")
+            if not ns_res.get("success") and ns_res.get("error"):
+                digest_lines.append(f"Remaining Gaps: {ns_res['error']}")
+
+            return await self._finalize_deep_response(
+                prompt=prompt,
+                objective=objective,
+                status_log=status_log,
+                digest="\n".join(digest_lines),
+                disk_evidence_notes=func_outputs,
+                active_memory=active_memory,
+                memory=memory,
+                session_id=session_id,
+                mode_name="engine" if force_engine else "deep",
+            )
+
+        plan = None
+        if (force_engine or is_local_engine) and diag_report is not None:
+            plan = PreAnalyzer.build_playbook_plan(prompt, diag_report)
+
+        if plan is None:
+            try:
+                if hasattr(self.thinker, "generate_deep_plan") and _is_async_callable(self.thinker.generate_deep_plan):
+                    plan = await self.thinker.generate_deep_plan(prompt, memory, session_id, workspace_snapshot=ws_snap)
+                else:
+                    plan = await self.planner.generate_initial_plan(prompt, memory, session_id)
+            except (ValueError, RuntimeError):
+                plan = PlanSchema(
+                    objective=prompt,
+                    tasks=[TaskSchema(task_id="t1", description=prompt, expected_result=f"Fulfill request accurately: {prompt[:180]}")],
+                )
 
         if not getattr(plan, "tasks", None):
             plan = PlanSchema(
@@ -780,6 +961,11 @@ class AgentLoop:
         iterations = 0
         replan_count = 0
         remaining = list(plan.tasks)
+        diag_brief_section = (
+            f"\n\n{diag_report.summary_brief}"
+            if diag_report is not None and diag_report.summary_brief
+            else ""
+        )
 
         while remaining and iterations < max_iterations:
             ready = [t for t in remaining if active_memory.are_dependencies_met(t.task_id)]
@@ -796,7 +982,7 @@ class AgentLoop:
                 ws_note = f"\nWorkspace Files: {ws_snap}" if ws_snap else ""
                 target_files = ", ".join(getattr(task, "target_files", []) or []) or "auto"
                 acting_ctx = (
-                    f"{base_ctx}{ws_note}\n\n"
+                    f"{base_ctx}{ws_note}{diag_brief_section}\n\n"
                     f"DEEP MODE PRE-ACTION CONTRACT:\n"
                     f"- Expected Outcome Before Acting: {expected_res}\n"
                     f"- Target Files: {target_files}"
@@ -826,9 +1012,14 @@ class AgentLoop:
                             )
 
                 await _emit_phase("watching", {"task_id": task.task_id, "message": f"Watching & verifying {task.task_id} against expectations..."})
-                watch, disk_report = await self._watch_deep_task(task, actor_output, expected_res)
+                watch, disk_report = await self._watch_deep_task(
+                    task,
+                    actor_output,
+                    expected_res,
+                    diag_report=diag_report,
+                    prefer_deterministic_watch=(force_engine or is_local_engine),
+                )
 
-                watch_dict = _model_to_dict(watch)
                 cell.add_reflection({
                     "status": "done" if watch.matches_expectation else "in_progress",
                     "rating": watch.rating,
@@ -892,40 +1083,17 @@ class AgentLoop:
             self._save_checkpoint_safe(active_memory, session_id, plan, prompt)
             remaining = [t for t in remaining if t.task_id != task.task_id and getattr(t, "status", "pending") != "done"]
 
-        final_answer = status_log
-        if (
-            self.synthesize_answer
-            and hasattr(self.thinker, "synthesize_final_answer")
-            and _is_async_callable(self.thinker.synthesize_final_answer)
-        ):
-            try:
-                digest = active_memory.get_execution_digest()
-                if disk_evidence_notes:
-                    digest = f"{digest}\n\nVERIFIED ON-DISK EVIDENCE:\n" + "\n".join(disk_evidence_notes[-3:])
-                synthesized = await self.thinker.synthesize_final_answer(
-                    prompt=prompt,
-                    objective=plan.objective,
-                    execution_digest=digest,
-                )
-                if synthesized and isinstance(synthesized, str) and synthesized.strip():
-                    final_answer = f"{synthesized.strip()}\n\n---\nDeep Execution Summary:\n{status_log.strip()}"
-            except Exception:
-                pass
-
-        if hasattr(memory, "add_interaction"):
-            await memory.add_interaction(session_id, "assistant", final_answer)
-        if hasattr(active_memory, "finalize_run"):
-            self._schedule_background(
-                active_memory.finalize_run(
-                    session_id,
-                    objective=plan.objective,
-                    final_answer=final_answer,
-                    llm=getattr(self.reflector, "llm", None),
-                )
-            )
-        await self._flush_background()
-        await tracer.emit_event("complete", {"session_id": session_id, "mode": "deep"})
-        return final_answer
+        return await self._finalize_deep_response(
+            prompt=prompt,
+            objective=plan.objective,
+            status_log=status_log,
+            digest=active_memory.get_execution_digest(),
+            disk_evidence_notes=disk_evidence_notes,
+            active_memory=active_memory,
+            memory=memory,
+            session_id=session_id,
+            mode_name="engine" if force_engine else "deep",
+        )
 
     async def run_deep(
         self,
@@ -937,17 +1105,35 @@ class AgentLoop:
         """Public entrypoint for `mode='deep'`."""
         return await self._run_deep_core(prompt, memory, session_id, max_iterations=max_iterations)
 
+    async def run_engine(
+        self,
+        prompt: str,
+        memory: Any,
+        session_id: str,
+        max_iterations: int = 15,
+    ) -> str:
+        """Public entrypoint for `mode='engine'` (Neuro-Symbolic Engine)."""
+        return await self._run_deep_core(prompt, memory, session_id, max_iterations=max_iterations, force_engine=True)
+
     async def run_deep_stream(
         self,
         prompt: str,
         memory: Any,
         session_id: str,
         max_iterations: int = 15,
+        force_engine: bool = False,
     ):
-        """Streaming entrypoint for `mode='deep'` yielding phase status updates and final response."""
+        """Streaming entrypoint for `mode='deep'` / `mode='engine'` yielding phase updates and final response."""
         q: asyncio.Queue = asyncio.Queue()
         task = asyncio.create_task(
-            self._run_deep_core(prompt, memory, session_id, max_iterations=max_iterations, status_queue=q)
+            self._run_deep_core(
+                prompt,
+                memory,
+                session_id,
+                max_iterations=max_iterations,
+                status_queue=q,
+                force_engine=force_engine,
+            )
         )
         while not task.done() or not q.empty():
             try:
@@ -958,6 +1144,17 @@ class AgentLoop:
         final_answer = await task
         for line in final_answer.splitlines() or [final_answer]:
             yield {"type": "chunk", "content": f"{line}\n"}
+
+    async def run_engine_stream(
+        self,
+        prompt: str,
+        memory: Any,
+        session_id: str,
+        max_iterations: int = 15,
+    ):
+        """Streaming entrypoint for `mode='engine'`."""
+        async for ev in self.run_deep_stream(prompt, memory, session_id, max_iterations=max_iterations, force_engine=True):
+            yield ev
 
     async def run_react(
         self,

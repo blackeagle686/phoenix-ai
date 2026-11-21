@@ -24,7 +24,7 @@ class RestrictedPythonRuntime(BaseRuntime):
         "math", "json", "re", "datetime", "collections", "itertools",
         "functools", "statistics", "random", "decimal", "fractions",
         "hashlib", "base64", "uuid", "string", "typing", "dataclasses",
-        "enum", "copy", "bisect", "heapq", "time", "operator",
+        "enum", "copy", "bisect", "heapq", "time", "operator", "ast",
     }
 
     BLOCKED_FUNCTIONS = {
@@ -47,6 +47,7 @@ class RestrictedPythonRuntime(BaseRuntime):
         "str", "sum", "super", "tuple", "type", "zip",
         "Exception", "ValueError", "TypeError", "KeyError", "IndexError",
         "ZeroDivisionError", "RuntimeError", "StopIteration", "AssertionError",
+        "NameError", "AttributeError", "ImportError", "ArithmeticError", "OverflowError",
         "True", "False", "None",
     )
 
@@ -131,10 +132,10 @@ class RestrictedPythonRuntime(BaseRuntime):
         output_buffer = io.StringIO()
         safe_builtins = self._build_safe_builtins(output_buffer)
         exec_globals = {"__builtins__": safe_builtins, "__name__": "__main__"}
-        local_vars: dict = {}
 
         def _run():
-            exec(code, exec_globals, local_vars)
+            # Share module namespace so top-level imports & helper functions stay visible inside functions
+            exec(code, exec_globals, exec_globals)
 
         try:
             await asyncio.wait_for(asyncio.to_thread(_run), timeout=self.timeout)
@@ -154,8 +155,8 @@ class RestrictedPythonRuntime(BaseRuntime):
             )
 
         output = self._cap_text(output_buffer.getvalue())
-        if not output and "result" in local_vars:
-            output = self._cap_text(str(local_vars["result"]))
+        if not output and "result" in exec_globals:
+            output = self._cap_text(str(exec_globals["result"]))
 
         return ExecutionResult(
             success=True,

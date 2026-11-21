@@ -5,6 +5,18 @@ from phoenix.services.llm.local import LocalLLM
 from phoenix.services.llm.local_moe import LocalMoELLM, local_moe_llm, MOE_MODEL_PRESETS
 from phoenix.services.llm.router import LLMRouter, MultiLLM, FallbackLLM
 from phoenix.services.llm.moe import MoERouter, ExpertProfile, moe_route_context
+from .engine import (
+    PreAnalyzer,
+    IntentContract,
+    FileDiagnostic,
+    DiagnosticReport,
+    PatchProtocol,
+    SymbolicHealer,
+    PatchApplyResult,
+    ExecutionVerifier,
+    VerificationReport,
+    NeuroSymbolicRunner,
+)
 
 __all__ = [
     "Agent",
@@ -26,5 +38,15 @@ __all__ = [
     "MoERouter",
     "ExpertProfile",
     "moe_route_context",
+    "PreAnalyzer",
+    "IntentContract",
+    "FileDiagnostic",
+    "DiagnosticReport",
+    "PatchProtocol",
+    "SymbolicHealer",
+    "PatchApplyResult",
+    "ExecutionVerifier",
+    "VerificationReport",
+    "NeuroSymbolicRunner",
 ]
 

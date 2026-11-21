@@ -403,9 +403,11 @@ class Agent:
             return "fast_ans"
         if raw in ("deep", "deep_mode", "deep_think"):
             return "deep"
+        if raw in ("engine", "neuro_symbolic", "smart"):
+            return "engine"
         if raw in ("auto", "plan", "react"):
             return raw
-        raise ValueError(f"Invalid agent mode '{mode}'. Supported modes: 'auto', 'fast_ans', 'react', 'plan', 'deep'.")
+        raise ValueError(f"Invalid agent mode '{mode}'. Supported modes: 'auto', 'fast_ans', 'react', 'plan', 'deep', 'engine'.")
 
     @staticmethod
     def _looks_like_casual_greeting(prompt: str) -> bool:
@@ -482,6 +484,8 @@ class Agent:
                     fast_answer = await self.llm.generate(fast_prompt, session_id=None)
                 await self.memory.add_interaction(session_id, "assistant", fast_answer)
                 return fast_answer
+            if actual_mode == "engine" and hasattr(self.loop, "run_engine"):
+                return await self.loop.run_engine(prompt, self.memory, session_id, max_iterations=max_iterations)
             if actual_mode == "deep" and hasattr(self.loop, "run_deep"):
                 return await self.loop.run_deep(prompt, self.memory, session_id, max_iterations=max_iterations)
             if actual_mode == "react" and hasattr(self.loop, "run_react"):
@@ -549,6 +553,11 @@ class Agent:
                 yield {"type": "status", "content": "Fast answer mode"}
                 for line in fast_answer.splitlines() or [fast_answer]:
                     yield {"type": "chunk", "content": f"{line}\n"}
+                return
+
+            if actual_mode == "engine" and hasattr(self.loop, "run_engine_stream"):
+                async for event in self.loop.run_engine_stream(prompt, self.memory, session_id, max_iterations=max_iterations):
+                    yield event
                 return
 
             if actual_mode == "deep" and hasattr(self.loop, "run_deep_stream"):

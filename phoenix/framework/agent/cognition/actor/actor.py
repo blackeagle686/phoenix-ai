@@ -49,6 +49,12 @@ class Actor(BaseActor):
         """Reset tracked read files at the start of a new top-level run when desired."""
         self._read_files.clear()
 
+    def mark_files_pre_read(self, paths: List[str]) -> None:
+        """Mark files already hydrated by PreAnalyzer so preflight guard recognizes inspection."""
+        for p in paths or []:
+            if p:
+                self._read_files.add(os.path.realpath(str(p)))
+
     def _active_runtime(self) -> Any:
         return getattr(self.tool_manager, "runtime", None) or self.runtime
 
