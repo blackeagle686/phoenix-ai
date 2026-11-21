@@ -166,10 +166,13 @@ class RestrictedPythonRuntime(BaseRuntime):
                 if fr.filename == "<sandbox>"
             ]
             loc = f" at line {tb_frames[-1].lineno}" if tb_frames else ""
+            chain = ""
+            if len(tb_frames) > 1:
+                chain = " [trace: " + " -> ".join(f"{fr.name}@L{fr.lineno}" for fr in tb_frames[-4:]) + "]"
             return ExecutionResult(
                 success=False,
                 output=output_buffer.getvalue(),
-                error=f"Execution error ({type(e).__name__}{loc}): {str(e)}",
+                error=f"Execution error ({type(e).__name__}{loc}{chain}): {str(e)}",
                 exit_code=1,
             )
 

@@ -9,6 +9,7 @@ Executes structured code modification/creation workflows with:
 
 from __future__ import annotations
 
+import inspect
 import os
 from typing import Any, Callable, Dict, List, Optional
 
@@ -119,8 +120,17 @@ class NeuroSymbolicRunner:
                 {"task_id": "t1", "attempt": attempt, "message": f"Synthesizing patch for {primary_target} (attempt {attempt})..."},
             )
 
+            gen_kwargs: Dict[str, Any] = {"session_id": None}
+            if repeated_same_code >= 1 or attempt >= 3:
+                try:
+                    sig = inspect.signature(llm.generate)
+                    if "temperature" in sig.parameters:
+                        gen_kwargs["temperature"] = 0.35 if repeated_same_code >= 1 else 0.25
+                except (TypeError, ValueError):
+                    pass
+
             with moe_route_context(role="coder", attempt=attempt, escalate=(attempt >= 2)):
-                raw_reply = await llm.generate(prompt_text, session_id=None)
+                raw_reply = await llm.generate(prompt_text, **gen_kwargs)
 
             apply_res = PatchProtocol.apply_output(
                 str(raw_reply or ""),

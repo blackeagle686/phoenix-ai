@@ -44,8 +44,12 @@ def diagnose_python_error(
 
     if "unsupported node type" in err_low and "ast.attribute" in err_low:
         hints.append(
-            "EXACT AST FIX (`ast.Attribute` like `math.pi`): When evaluating `ast.Attribute`, check "
-            "`isinstance(node.value, ast.Name) and node.value.id == 'math'` and look up `node.attr` cleanly."
+            "EXACT AST FIX (`ast.Attribute` like `math.pi`): Add an `elif isinstance(node, ast.Attribute):` branch "
+            "directly inside `evaluate_node` (at the SAME top indent level as `ast.BinOp`/`ast.Call`, BEFORE the final `raise ValueError`):\n"
+            "    elif isinstance(node, ast.Attribute):\n"
+            "        if isinstance(node.value, ast.Name) and node.value.id == 'math' and not node.attr.startswith('_'):\n"
+            "            return getattr(math, node.attr)\n"
+            "        raise ValueError(f'Unsupported attribute: {node.attr}')"
         )
 
     if "unsupported node type" in err_low and "ast.constant" in err_low:

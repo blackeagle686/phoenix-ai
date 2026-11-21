@@ -531,6 +531,20 @@ class ExecutionVerifier:
                             if c_line.strip() == src_line_txt:
                                 focus_line = c_idx
                                 break
+                    if mod_begin_idx >= 0:
+                        # Map any sandbox frame markers `@L<n>` in trace back to user file line numbers
+                        def _map_trace_ln(m: re.Match) -> str:
+                            raw_ln = int(m.group(1))
+                            u_ln = raw_ln - (mod_begin_idx + 1)
+                            return f"@L{u_ln}" if 1 <= u_ln <= len(code.splitlines()) else f"@sandboxL{raw_ln}"
+
+                        err_msg = re.sub(r"@L(\d+)", _map_trace_ln, err_msg)
+                        if line_match:
+                            raw_err_ln = int(line_match.group(1))
+                            u_err_ln = raw_err_ln - (mod_begin_idx + 1)
+                            if 1 <= u_err_ln <= len(code.splitlines()):
+                                err_msg = re.sub(r"at line \d+", f"at line {u_err_ln}", err_msg, count=1)
+
                     if focus_line is not None and focus_scope is None:
                         focus_scope = find_enclosing_callable(code, focus_line)
                     for hint in diagnose_python_error(err_msg, src_line_txt, focus_line):
