@@ -741,10 +741,16 @@ class AgentLoop:
         ws_snap = get_workspace_snapshot(rt, max_files=25) if rt else ""
         await _emit_phase("tasking", {"message": "Analyzing workspace and decomposing request into verifiable tasks..."})
 
-        if hasattr(self.thinker, "generate_deep_plan") and _is_async_callable(self.thinker.generate_deep_plan):
-            plan = await self.thinker.generate_deep_plan(prompt, memory, session_id, workspace_snapshot=ws_snap)
-        else:
-            plan = await self.planner.generate_initial_plan(prompt, memory, session_id)
+        try:
+            if hasattr(self.thinker, "generate_deep_plan") and _is_async_callable(self.thinker.generate_deep_plan):
+                plan = await self.thinker.generate_deep_plan(prompt, memory, session_id, workspace_snapshot=ws_snap)
+            else:
+                plan = await self.planner.generate_initial_plan(prompt, memory, session_id)
+        except (ValueError, RuntimeError):
+            plan = PlanSchema(
+                objective=prompt,
+                tasks=[TaskSchema(task_id="t1", description=prompt, expected_result=f"Fulfill request accurately: {prompt[:180]}")],
+            )
 
         if not getattr(plan, "tasks", None):
             plan = PlanSchema(

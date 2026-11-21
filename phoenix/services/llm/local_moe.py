@@ -45,6 +45,24 @@ MOE_MODEL_PRESETS: Dict[str, Dict[str, Any]] = {
         "ram_gguf_q4_gb": 4.4,
         "trust_remote_code": False,
     },
+    "ibm-granite/granite-3.1-1b-a400m-instruct": {
+        "aliases": ("granite-moe-1b", "granite-1b-moe", "granite-400m"),
+        "hf_repo": "ibm-granite/granite-3.1-1b-a400m-instruct",
+        "total_params": "1.3B",
+        "active_params": "0.4B",
+        "vram_fp16_gb": 2.7,
+        "vram_4bit_gb": 1.2,
+        "trust_remote_code": False,
+    },
+    "ibm-granite/granite-3.1-3b-a800m-instruct": {
+        "aliases": ("granite-moe", "granite-moe-3b", "granite-3b-moe", "granite-800m"),
+        "hf_repo": "ibm-granite/granite-3.1-3b-a800m-instruct",
+        "total_params": "3.3B",
+        "active_params": "0.8B",
+        "vram_fp16_gb": 6.6,
+        "vram_4bit_gb": 2.4,
+        "trust_remote_code": False,
+    },
     "mistralai/Mixtral-8x7B-Instruct-v0.1": {
         "aliases": ("mixtral", "mixtral-8x7b"),
         "hf_repo": "mistralai/Mixtral-8x7B-Instruct-v0.1",
@@ -156,6 +174,15 @@ class LocalMoELLM(LocalLLM):
                         f"{preset.get('active_params', '?')} active). Install `llama-cpp-python` to auto-run Q4_K_M GGUF with ~3x less RAM."
                     )
 
+        # For small sparse MoEs (<= 4B total) whose full FP16 fits comfortably inside half of GPU VRAM,
+        # native FP16/BF16 avoids per-expert 4-bit NF4 dequantization overhead and runs ~3-5x faster.
+        chosen_quant = (quantization or "auto").lower()
+        if chosen_quant == "auto" and detected_device == "cuda" and chosen_backend != "llama_cpp":
+            vram_gb = float(gpu_info.get("vram_gb") or 0.0)
+            est_fp16 = float(preset.get("vram_fp16_gb") or 0.0)
+            if 0.0 < est_fp16 <= vram_gb * 0.50:
+                chosen_quant = "bf16" if gpu_info.get("bf16_supported") else "fp16"
+
         # Adjust GGUF GPU layers conservatively if VRAM is tighter than MoE 4-bit footprint
         if detected_device == "cuda" and chosen_gpu_layers is None and preset.get("vram_4bit_gb"):
             vram_gb = float(gpu_info.get("vram_gb") or 0.0)
@@ -168,7 +195,7 @@ class LocalMoELLM(LocalLLM):
         super().__init__(
             model=chosen_model,
             backend=chosen_backend,
-            quantization=quantization,
+            quantization=chosen_quant,
             device=device,
             gguf_filename=chosen_gguf,
             n_ctx=n_ctx,

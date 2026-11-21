@@ -529,7 +529,11 @@ class LocalLLM(BaseLLM):
 
             prompt_len = int(inputs["input_ids"].shape[1])
             new_tokens = generated_ids[0][prompt_len:]
-            text = self.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+            text = self.tokenizer.decode(
+                new_tokens,
+                skip_special_tokens=True,
+                clean_up_tokenization_spaces=False,
+            ).strip()
             comp_len = int(len(new_tokens))
             usage = {
                 "prompt_tokens": prompt_len,
@@ -724,8 +728,8 @@ class LocalLLM(BaseLLM):
         prompt_schema = _minify_schema(schema_dict) if (self.active_backend == "transformers" and isinstance(schema_dict, dict)) else schema_dict
         schema_str = json.dumps(prompt_schema, separators=(",", ":")) if isinstance(prompt_schema, dict) else str(schema)
         system_prompt = (
-            "You are a strict JSON generator. Return ONLY a single valid raw JSON object matching this schema "
-            f"(no markdown, no explanation):\n{schema_str}"
+            "You are a strict JSON generator. Return ONLY a single compact single-line raw JSON object matching this schema "
+            f"(no markdown, no indentation whitespace, no explanation):\n{schema_str}"
         )
         messages = self._build_messages(prompt=prompt, system_prompt=system_prompt)
         out_tokens = max_tokens or config.SECURITY_MAX_OUTPUT_LENGTH

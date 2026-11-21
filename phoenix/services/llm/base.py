@@ -4,6 +4,55 @@ import json
 import re
 
 
+def _repair_truncated_json(candidate: str) -> dict:
+    """Recover a valid dict prefix when a small local model hits max_new_tokens mid-JSON."""
+    start = candidate.find("{")
+    if start == -1:
+        return {}
+    s = candidate[start:].strip()
+    if not s:
+        return {}
+
+    def _close_json(text: str) -> str:
+        in_str = False
+        esc = False
+        stack = []
+        for ch in text:
+            if esc:
+                esc = False
+                continue
+            if ch == "\\" and in_str:
+                esc = True
+                continue
+            if ch == '"':
+                in_str = not in_str
+            elif not in_str:
+                if ch == "{":
+                    stack.append("}")
+                elif ch == "[":
+                    stack.append("]")
+                elif ch in ("}", "]") and stack and stack[-1] == ch:
+                    stack.pop()
+        out = text
+        if in_str:
+            if out.endswith("\\"):
+                out = out[:-1]
+            out += '"'
+        out = re.sub(r",\s*$", "", out.rstrip())
+        if re.search(r':\s*$', out):
+            out += "null"
+        out += "".join(reversed(stack))
+        return re.sub(r",\s*([}\]])", r"\1", out)
+
+    try:
+        data = json.loads(_close_json(s), strict=False)
+        if isinstance(data, dict) and data:
+            return data
+    except Exception:
+        pass
+    return {}
+
+
 def _try_parse_json_dict(candidate: str) -> dict:
     for strict_mode in (True, False):
         try:
@@ -40,8 +89,11 @@ def _extract_json_dict(raw_output: str) -> dict:
     start = text.find("{")
     end = text.rfind("}")
     if start != -1 and end != -1 and end > start:
-        return _try_parse_json_dict(text[start : end + 1])
-    return {}
+        parsed = _try_parse_json_dict(text[start : end + 1])
+        if parsed:
+            return parsed
+
+    return _repair_truncated_json(text)
 
 
 class BaseLLM(BaseService):

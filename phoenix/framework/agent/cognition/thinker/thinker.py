@@ -24,10 +24,12 @@ class Thinker(BaseThinker):
         super().__init__(llm, profile=profile, tool_manager=tool_manager)
 
     def _is_local_model(self) -> bool:
-        return type(self.llm).__name__ == "LocalLLM"
+        from phoenix.services.llm.local import LocalLLM
+
+        return isinstance(self.llm, LocalLLM) or type(self.llm).__name__ in ("LocalLLM", "LocalMoELLM")
 
     def _default_structured_budget(self) -> int:
-        return 2048 if self._is_local_model() else 4096
+        return 1536 if self._is_local_model() else 4096
 
     def _get_workspace_context(self) -> str:
         rt = getattr(self.tool_manager, "runtime", None) if self.tool_manager else None
@@ -185,7 +187,7 @@ class Thinker(BaseThinker):
                 full_prompt,
                 PlanSchema,
                 session_id=session_id,
-                max_tokens=self._default_structured_budget(),
+                max_tokens=min(1024, self._default_structured_budget()),
             )
 
     def _supports_native_tool_calling(self) -> bool:
@@ -369,7 +371,7 @@ class Thinker(BaseThinker):
                 full_prompt,
                 PlanSchema,
                 session_id=session_id,
-                max_tokens=self._default_structured_budget(),
+                max_tokens=min(1024, self._default_structured_budget()),
             )
 
     async def watch_action_results(

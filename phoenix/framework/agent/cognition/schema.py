@@ -435,18 +435,48 @@ class PlanSchema(BaseModel):
             if not isinstance(data, dict):
                 return data
             d = dict(data)
-            if not d.get("objective"):
-                for alt in ("goal", "plan_objective", "summary"):
+            raw_obj = d.get("objective")
+            inferred_targets: List[str] = []
+            if isinstance(raw_obj, dict):
+                inferred_targets = _coerce_str_list(raw_obj.get("target_files"))
+                d["objective"] = (
+                    raw_obj.get("description")
+                    or raw_obj.get("goal")
+                    or raw_obj.get("summary")
+                    or raw_obj.get("title")
+                    or "Execute user request"
+                )
+            elif not raw_obj:
+                for alt in ("goal", "plan_objective", "summary", "description"):
                     if isinstance(d.get(alt), str) and d[alt].strip():
                         d["objective"] = d[alt].strip()
                         break
                 else:
                     d["objective"] = "Execute user request"
+            else:
+                d["objective"] = str(raw_obj)
+
             raw_tasks = d.get("tasks")
             if raw_tasks is None:
                 d["tasks"] = []
             elif isinstance(raw_tasks, dict):
                 d["tasks"] = [raw_tasks]
+            elif isinstance(raw_tasks, list):
+                norm_tasks = []
+                for idx, item in enumerate(raw_tasks, start=1):
+                    if isinstance(item, str) and item.strip():
+                        norm_tasks.append({
+                            "task_id": f"t{idx}",
+                            "description": item.strip(),
+                            "target_files": inferred_targets,
+                        })
+                    elif isinstance(item, dict):
+                        if inferred_targets and not item.get("target_files"):
+                            item = {**item, "target_files": inferred_targets}
+                        norm_tasks.append(item)
+                    else:
+                        norm_tasks.append(item)
+                d["tasks"] = norm_tasks
             return d
 
 ProblemSchema = Problem
