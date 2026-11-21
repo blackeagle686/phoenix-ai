@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from phoenix.framework.agent.engine.pre_analyzer import DiagnosticReport, FileDiagnostic, KNOWN_MATH_OPS
-from phoenix.framework.agent.engine.surgical import SurgicalCodePatcher
+from phoenix.framework.agent.engine.surgical import SurgicalCodePatcher, normalize_python_snippet
 from phoenix.framework.agent.tools._fs_utils import (
     SyntaxGuard,
     build_compact_diff,
@@ -62,7 +62,7 @@ class SymbolicHealer:
         if target_path and not target_path.lower().endswith(".py"):
             return text + ("\n" if text else ""), actions
 
-        # Remove accidentally captured markdown fence edges if unbalanced
+        # Remove accidentally captured markdown fence edges and normalize leading indentation
         lines = text.splitlines()
         while lines and lines[0].strip().startswith("```"):
             lines.pop(0)
@@ -70,7 +70,7 @@ class SymbolicHealer:
         while lines and lines[-1].strip().startswith("```"):
             lines.pop()
             actions.append("Stripped trailing markdown fence")
-        text = "\n".join(lines)
+        text = normalize_python_snippet("\n".join(lines))
 
         try:
             tree = ast.parse(text)
@@ -209,17 +209,18 @@ class PatchProtocol:
         if diagnosis_hints:
             lines.append("SYSTEM ERROR DIAGNOSIS (APPLY THIS FIX):\n" + "\n".join(f"- {h}" for h in diagnosis_hints))
 
-        if surgical_mode and focus_scope is not None:
-            lines.append(
-                f"SURGICAL FOCUS (`{focus_scope['qualname']}`, L{focus_scope['start_line']}-L{focus_scope['end_line']}):\n"
-                f"```python\n{focus_scope['source']}\n```"
-            )
-        elif fd is not None:
+        if fd is not None and (not surgical_mode or fd.line_count <= 220):
             if fd.security_findings:
                 lines.append("DETECTED RISKS IN CURRENT FILE: " + "; ".join(fd.security_findings[:6]))
             if fd.missing_ops:
                 lines.append("CURRENTLY MISSING OPS: " + ", ".join(fd.missing_ops))
             lines.append(f"CURRENT CONTENT OF `{fd.requested_path}`:\n```python\n{fd.raw_content}\n```")
+
+        if surgical_mode and focus_scope is not None:
+            lines.append(
+                f"SURGICAL FOCUS (`{focus_scope['qualname']}`, L{focus_scope['start_line']}-L{focus_scope['end_line']}):\n"
+                f"```python\n{focus_scope['source']}\n```"
+            )
 
         if previous_feedback:
             lines.append(
@@ -236,8 +237,8 @@ class PatchProtocol:
             )
         elif surgical_mode and focus_scope is not None:
             lines.append(
-                f"OUTPUT FORMAT: Return ONLY the fixed `def {focus_scope['func_name']}(...):` function inside a ```python ... ``` block "
-                f"(the system will splice it safely back into `{primary_path}` without touching other lines). Do NOT wrap in JSON."
+                f"OUTPUT FORMAT: Return either the complete fixed file OR ONLY the fixed `def {focus_scope['func_name']}(...):` function(s) "
+                f"inside a ```python ... ``` block (the system will splice standalone functions safely back into `{primary_path}`). Do NOT wrap in JSON."
             )
         else:
             lines.append(
@@ -261,22 +262,22 @@ class PatchProtocol:
             if pairs:
                 return "search_replace", pairs
 
-        # 2. Markdown code fences (prefer longest Python-parseable block)
+        # 2. Markdown code fences (normalize indentation and prefer longest Python-parseable block)
         fences = [m.group(1) for m in _FENCED_CODE_RE.finditer(text) if m.group(1).strip()]
         if fences:
             valid_fences = []
             for blk in fences:
+                norm_blk = normalize_python_snippet(blk)
                 try:
-                    ast.parse(blk)
-                    valid_fences.append((len(blk), blk))
+                    ast.parse(norm_blk)
+                    valid_fences.append((len(norm_blk), norm_blk))
                 except SyntaxError:
                     pass
             if valid_fences:
                 valid_fences.sort(reverse=True)
                 return "full_code", valid_fences[0][1]
-            # Fallback to longest fence even if syntax needs guard
             fences.sort(key=len, reverse=True)
-            return "full_code", fences[0]
+            return "full_code", normalize_python_snippet(fences[0])
 
         # 3. Fallback if model emitted structured JSON tool output anyway
         if text.startswith("{"):

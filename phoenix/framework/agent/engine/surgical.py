@@ -16,15 +16,77 @@ from phoenix.framework.agent.tools.base import BaseTool, ToolResult
 from phoenix.framework.agent.tools._fs_utils import resolve_existing_path
 
 
+def normalize_python_snippet(code: str) -> str:
+    """Normalize indentation on LLM-emitted Python functions, methods, or files so `ast.parse` succeeds."""
+    text = (code or "").replace("\r\n", "\n").strip("\r\n")
+    if not text:
+        return ""
+
+    lines = text.splitlines()
+    while lines and lines[0].strip().startswith("```"):
+        lines.pop(0)
+    while lines and lines[-1].strip().startswith("```"):
+        lines.pop()
+    text = "\n".join(lines).strip("\r\n")
+    if not text:
+        return ""
+
+    dedented = textwrap.dedent(text)
+    try:
+        ast.parse(dedented)
+        return dedented
+    except SyntaxError:
+        pass
+
+    # Case A: First line(s) had stray indentation (e.g. `    import ast`) while later lines were at column 0
+    raw_lines = dedented.splitlines()
+    stripped_imports: List[str] = []
+    body_start = 0
+    for idx, ln in enumerate(raw_lines):
+        s = ln.strip()
+        if not s or s.startswith("#"):
+            stripped_imports.append(s)
+            body_start = idx + 1
+        elif s.startswith("import ") or s.startswith("from "):
+            stripped_imports.append(s)
+            body_start = idx + 1
+        else:
+            break
+
+    if body_start > 0 and body_start < len(raw_lines):
+        rest_dedented = textwrap.dedent("\n".join(raw_lines[body_start:]))
+        candidate = "\n".join(stripped_imports + [rest_dedented])
+        try:
+            ast.parse(candidate)
+            return candidate
+        except SyntaxError:
+            pass
+
+    # Case B: First non-empty line itself has unexpected leading whitespace
+    first_non_empty = next((i for i, l in enumerate(raw_lines) if l.strip()), None)
+    if first_non_empty is not None and raw_lines[first_non_empty][:1].isspace():
+        raw_lines[first_non_empty] = raw_lines[first_non_empty].lstrip()
+        candidate2 = textwrap.dedent("\n".join(raw_lines))
+        try:
+            ast.parse(candidate2)
+            return candidate2
+        except SyntaxError:
+            pass
+
+    return dedented
+
+
 def diagnose_python_error(
     error_msg: str,
     code_snippet: str = "",
     line_no: Optional[int] = None,
+    full_code: str = "",
 ) -> List[str]:
-    """Map Python AST/runtime tracebacks into concrete, actionable repair rules."""
+    """Map Python AST/runtime tracebacks and static anti-patterns into concrete repair rules."""
     hints: List[str] = []
     err_low = (error_msg or "").lower()
     snip_low = (code_snippet or "").lower()
+    full_low = (full_code or code_snippet or "").lower()
 
     if "'attribute' object has no attribute 'id'" in err_low or (
         "no attribute 'id'" in err_low and ("func" in snip_low or "attribute" in err_low)
@@ -55,6 +117,33 @@ def diagnose_python_error(
     if "unsupported node type" in err_low and "ast.constant" in err_low:
         hints.append(
             "EXACT AST FIX (`ast.Constant`): Python 3.8+ represents numbers/strings as `ast.Constant(value=...)` (`return node.value`)."
+        )
+
+    if "keyerror" in err_low and any(op in error_msg for op in ("'Div'", "'Add'", "'Sub'", "'Mult'", "'Pow'", "'Mod'", "'USub'", "'UAdd'")):
+        hints.append(
+            "EXACT BINARY/UNARY OP FIX (`KeyError` on AST operator): `MATH_FUNCTIONS` only holds trig functions (`sin`, `cos`, `tanh`), NOT arithmetic operators! "
+            "In `evaluate_binary_op`, dispatch on `node.op` directly (or use `import operator`):\n"
+            "    if isinstance(node.op, ast.Add): return left + right\n"
+            "    elif isinstance(node.op, ast.Sub): return left - right\n"
+            "    elif isinstance(node.op, ast.Mult): return left * right\n"
+            "    elif isinstance(node.op, ast.Div): return left / right\n"
+            "    elif isinstance(node.op, ast.Pow): return left ** right\n"
+            "And in `evaluate_unary_op`: `if isinstance(node.op, ast.USub): return -operand` / `elif isinstance(node.op, ast.UAdd): return +operand`."
+        )
+
+    if "'str' object is not callable" in err_low or "return func_name(*args)" in full_low:
+        hints.append(
+            "EXACT CALLABLE FIX (`func_name` is a `str`, NOT a function): In `evaluate_call`, do NOT call `func_name(*args)` directly! "
+            "Resolve the function from `MATH_FUNCTIONS` or `math` first:\n"
+            "    fn = MATH_FUNCTIONS.get(func_name) or (getattr(math, func_name, None) if not func_name.startswith('_') else None)\n"
+            "    if not callable(fn): raise ValueError(f'Unsupported function: {func_name}')\n"
+            "    return fn(*args)"
+        )
+
+    if "ast.num" in full_low or "ast.str" in full_low:
+        hints.append(
+            "DEPRECATION FIX (`ast.Num` / `ast.Str` deprecated in Python 3.12+): Replace `isinstance(node, ast.Num)` (`node.n`) "
+            "and `isinstance(node, ast.Str)` (`node.s`) with `isinstance(node, ast.Constant): return node.value`."
         )
 
     if "is not defined" in err_low:
@@ -104,7 +193,7 @@ def find_enclosing_callable(code: str, target_line: int) -> Optional[Dict[str, A
                     "start_line": start,
                     "end_line": end,
                     "indent": indent,
-                    "source": "\n".join(lines[start - 1 : end]),
+                    "source": textwrap.dedent("\n".join(lines[start - 1 : end])),
                 }
                 _visit(node.body, class_name=class_name)
 
@@ -161,16 +250,17 @@ class SurgicalCodePatcher:
         If `original_code` is non-empty and `generated_code` consists strictly of one (or a few)
         standalone function definition(s) matching existing function/method names inside `original_code`
         (without classes/top-level script lines), surgically splice them into `original_code` at the
-        exact AST span with preserved indentation. Otherwise return `generated_code` unchanged.
+        exact AST span with preserved indentation. Otherwise return normalized `generated_code`.
         """
-        if not original_code.strip() or not generated_code.strip():
-            return generated_code, "full_code", []
+        norm_gen = normalize_python_snippet(generated_code)
+        if not original_code.strip() or not norm_gen.strip():
+            return norm_gen or generated_code, "full_code", []
 
         try:
-            gen_tree = ast.parse(generated_code)
+            gen_tree = ast.parse(norm_gen)
             orig_tree = ast.parse(original_code)
         except SyntaxError:
-            return generated_code, "full_code", []
+            return norm_gen, "full_code", []
 
         gen_top_funcs = [n for n in gen_tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
         gen_other = [
@@ -185,16 +275,16 @@ class SurgicalCodePatcher:
         ) or len([n for n in orig_tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]) > len(gen_top_funcs)
 
         if not gen_top_funcs or gen_other or not orig_has_extra_structure:
-            return generated_code, "full_code", []
+            return norm_gen, "full_code", []
 
         working = original_code.replace("\r\n", "\n")
-        gen_lines = generated_code.replace("\r\n", "\n").splitlines()
+        gen_lines = norm_gen.replace("\r\n", "\n").splitlines()
         applied_notes: List[str] = []
 
         for fn_node in gen_top_funcs:
             cands = _find_matching_callable_targets(working, fn_node.name, prefer_class=focus_class)
             if len(cands) != 1:
-                return generated_code, "full_code", []
+                return norm_gen, "full_code", []
             target = cands[0]
             fn_src = textwrap.dedent("\n".join(gen_lines[fn_node.lineno - 1 : getattr(fn_node, "end_lineno", fn_node.lineno)]))
             indented_lines = [
@@ -214,14 +304,14 @@ class SurgicalCodePatcher:
 
         # Preserve any new imports declared inside the snippet that aren't already in original
         gen_imports = [
-            "\n".join(gen_lines[n.lineno - 1 : getattr(n, "end_lineno", n.lineno)])
+            "\n".join(gen_lines[n.lineno - 1 : getattr(n, "end_lineno", n.lineno)]).strip()
             for n in gen_tree.body
             if isinstance(n, (ast.Import, ast.ImportFrom))
         ]
         for imp_stmt in reversed(gen_imports):
-            if imp_stmt.strip() and imp_stmt.strip() not in working:
-                working = imp_stmt.strip() + "\n" + working
-                applied_notes.append(f"Preserved import `{imp_stmt.strip()}`")
+            if imp_stmt and imp_stmt not in working:
+                working = imp_stmt + "\n" + working
+                applied_notes.append(f"Preserved import `{imp_stmt}`")
 
         return working, "ast_surgical_method", applied_notes
 

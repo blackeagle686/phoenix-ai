@@ -334,13 +334,16 @@ def _v_run_checks():
                 except Exception:
                     _out["passed"].append("blocked_probe:" + _probe[:24])
     elif _node_fn is not None:
-        # AST node visitor check (handles ast.Expression AND ast.Expr from ast.parse(...).body[0])
+        # AST node visitor check (test inner expression node .body first, or full ast.Expression)
         try:
-            _ast_eval_node = _v_ast.parse("2 + 3 * 4", mode="eval")
-            _r_node = _node_fn(_ast_eval_node)
+            _parsed_eval = _v_ast.parse("2 + 3 * 4", mode="eval")
+            try:
+                _r_node = _node_fn(_parsed_eval.body)
+            except Exception:
+                _r_node = _node_fn(_parsed_eval)
             if abs(float(_r_node) - 14.0) < 1e-6:
                 _out["passed"].append("ast_eval: 2+3*4 == 14")
-                _out["outputs"].append("evaluate_node(ast.parse('2 + 3 * 4', mode='eval')) -> " + repr(_r_node))
+                _out["outputs"].append("evaluate_node(ast.parse('2 + 3 * 4')) -> " + repr(_r_node))
             else:
                 _out["failed"].append("AST node check failed: returned " + repr(_r_node) + " for 2+3*4 instead of 14")
         except Exception as _e:
@@ -547,7 +550,7 @@ class ExecutionVerifier:
 
                     if focus_line is not None and focus_scope is None:
                         focus_scope = find_enclosing_callable(code, focus_line)
-                    for hint in diagnose_python_error(err_msg, src_line_txt, focus_line):
+                    for hint in diagnose_python_error(err_msg, src_line_txt, focus_line, full_code=code):
                         if hint not in diagnosis_hints:
                             diagnosis_hints.append(hint)
                     loc_label = f"line {focus_line}" if focus_line is not None else "sandbox"
@@ -561,7 +564,7 @@ class ExecutionVerifier:
                     sb_failures = parsed_out.get("failed", [])
                     if sb_failures:
                         discrepancies.extend(sb_failures[:4])
-                        for hint in diagnose_python_error("\n".join(sb_failures), code, focus_line):
+                        for hint in diagnose_python_error("\n".join(sb_failures), code, focus_line, full_code=code):
                             if hint not in diagnosis_hints:
                                 diagnosis_hints.append(hint)
                     else:
