@@ -366,6 +366,10 @@ class PatchProtocol:
     def parse_model_output(raw_output: str) -> Tuple[str, Any]:
         """Parse model output into ('search_replace', pairs) | ('full_code', code_str) | ('json_tool', payload) | ('none', raw)."""
         text = (raw_output or "").strip()
+        if "<think>" in text:
+            stripped = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+            if stripped:
+                text = stripped
         if not text:
             return "none", ""
 

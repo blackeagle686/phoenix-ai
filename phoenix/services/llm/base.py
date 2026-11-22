@@ -75,7 +75,8 @@ def _try_parse_json_dict(candidate: str) -> dict:
 def _extract_json_dict(raw_output: str) -> dict:
     if not raw_output or not isinstance(raw_output, str):
         return {}
-    text = raw_output.strip()
+    # Strip reasoning model `<think>...</think>` blocks cleanly before JSON extraction (e.g., Qwen3 / DeepSeek-R1)
+    text = re.sub(r"<think>.*?</think>", "", raw_output, flags=re.DOTALL).strip() or raw_output.strip()
     match = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
     if match:
         parsed = _try_parse_json_dict(match.group(1).strip())

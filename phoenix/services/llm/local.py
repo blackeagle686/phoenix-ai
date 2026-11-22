@@ -3,6 +3,7 @@ import gc
 import inspect
 import json
 import os
+import sys
 import threading
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
@@ -78,19 +79,22 @@ class LocalLLM(BaseLLM):
 
     @classmethod
     def _reclaim_memory(cls) -> None:
-        """Aggressively reclaim Python RAM and all CUDA GPU cached/fragmented memory."""
+        """Aggressively reclaim Python RAM and all active CUDA GPU cached/fragmented memory."""
         gc.collect()
         gc.collect()
         try:
-            import torch
-
-            if torch.cuda.is_available():
-                for dev_idx in range(max(1, int(torch.cuda.device_count()))):
+            torch_mod = sys.modules.get("torch")
+            if (
+                torch_mod is not None
+                and hasattr(torch_mod, "cuda")
+                and getattr(torch_mod.cuda, "is_initialized", lambda: False)()
+            ):
+                for dev_idx in range(max(1, int(torch_mod.cuda.device_count()))):
                     try:
-                        with torch.cuda.device(dev_idx):
-                            torch.cuda.empty_cache()
-                            if hasattr(torch.cuda, "ipc_collect"):
-                                torch.cuda.ipc_collect()
+                        with torch_mod.cuda.device(dev_idx):
+                            torch_mod.cuda.empty_cache()
+                            if hasattr(torch_mod.cuda, "ipc_collect"):
+                                torch_mod.cuda.ipc_collect()
                     except Exception:
                         pass
         except Exception:
@@ -289,26 +293,62 @@ class LocalLLM(BaseLLM):
                 "with `pip install bitsandbytes accelerate`, or install a CUDA-enabled llama-cpp-python wheel."
             )
 
+        gpu_layers = hw["n_gpu_layers"] if supports_gpu else 0
+        if supports_gpu and gpu_layers == -1 and os.path.isfile(self.model):
+            try:
+                file_gb = os.path.getsize(self.model) / (1024 ** 3)
+                tot_free = float(hw.get("total_free_vram_gb") or hw.get("total_vram_gb") or hw.get("vram_gb") or 0.0)
+                # Leave ~2.0 GiB headroom across GPUs for KV cache & compute buffers on large GGUF files (e.g. Qwen3-32B)
+                if tot_free > 0 and file_gb + 1.8 > tot_free:
+                    ratio = max(0.15, min(0.85, (tot_free - 1.8) / max(file_gb, 0.1)))
+                    est_total_layers = 64 if file_gb >= 16.0 else 36
+                    gpu_layers = max(1, int(est_total_layers * ratio))
+                    logger.info(
+                        f"GGUF file ({file_gb:.1f} GB) exceeds available CUDA VRAM ({tot_free:.1f} GB); "
+                        f"auto-offloading ~{gpu_layers} layers to GPU and remaining layers to CPU RAM."
+                    )
+            except Exception:
+                pass
+
         common_kwargs = {
             "n_ctx": self.n_ctx,
             "n_batch": 512,
             "n_threads": hw["n_threads"],
-            "n_gpu_layers": hw["n_gpu_layers"] if supports_gpu else 0,
+            "n_gpu_layers": gpu_layers,
             "verbose": False,
         }
-        if os.path.isfile(self.model):
-            llama = Llama(model_path=self.model, **common_kwargs)
-        elif self.gguf_filename:
-            llama = Llama.from_pretrained(
-                repo_id=self.model,
-                filename=self.gguf_filename,
-                **common_kwargs,
-            )
-        else:
+
+        def _create_llama(kw: Dict[str, Any]):
+            if os.path.isfile(self.model):
+                return Llama(model_path=self.model, **kw)
+            if self.gguf_filename:
+                return Llama.from_pretrained(
+                    repo_id=self.model,
+                    filename=self.gguf_filename,
+                    **kw,
+                )
             raise ValueError(
                 "For `llama_cpp` backend, pass either a local `.gguf` file path in `model` "
                 "or a HuggingFace repo ID in `model` along with `gguf_filename` (e.g. '*Q4_K_M.gguf')."
             )
+
+        try:
+            llama = _create_llama(common_kwargs)
+        except Exception as gguf_err:
+            err_l = str(gguf_err).lower()
+            if supports_gpu and gpu_layers != 0 and any(k in err_l for k in ("memory", "alloc", "cuda", "vram", "ggml")):
+                logger.warning(f"GGUF GPU load hit memory limit ({gguf_err}); retrying with reduced GPU layers...")
+                self._reclaim_memory()
+                fallback_layers = 16 if (gpu_layers < 0 or gpu_layers > 20) else max(0, gpu_layers // 2)
+                retry_kw = {**common_kwargs, "n_gpu_layers": fallback_layers, "n_batch": 256}
+                try:
+                    llama = _create_llama(retry_kw)
+                except Exception:
+                    self._reclaim_memory()
+                    actual_device = "cpu"
+                    llama = _create_llama({**common_kwargs, "n_gpu_layers": 0, "n_batch": 256})
+            else:
+                raise
         return {
             "type": "llama_cpp",
             "llama_model": llama,
