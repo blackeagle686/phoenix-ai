@@ -22,6 +22,7 @@ Whether you are building with FastAPI, Django, or a custom event-driven service,
 ## Why Phoenix AI?
 
 - **Autonomous Agents**: Single-line creation of thinking, planning, and executing AI agents.
+- **Micron CV Agent (`CVAgent`)**: Ultra-low-RAM edge/phone agent built to run side-by-side with Computer Vision systems (YOLO, OpenCV, ONNX) using strictly `<= 1B` MoE models, user-modifiable CV tools, alerts, local files, and local SQLite databases.
 - **High-Level ChatBot**: Turnkey conversational AI with native RAG, Vision, and Memory.
 - **"Everything as a Service"**: A unified Dependency Injection container handles Vector DBs, Redis caching, and LLMs seamlessly.
 - **Fail-Loud & Recover**: Auto-fallbacks from Local (Ollama/Transformers) to Cloud (OpenAI) to prevent system crashes.
@@ -158,6 +159,46 @@ async def rag_demo():
 asyncio.run(rag_demo())
 ```
 
+### 4. Micron CV Agent (Phone CPU / Edge Computer Vision)
+Built to run side-by-side with Computer Vision detectors (YOLO, OpenCV, ONNX, TFLite) on **phone CPUs and very low-RAM devices**. Uses zero heavy startup imports, bounded sliding-window memory, strictly **`<= 1B` MoE models only** (e.g. `ibm-granite/granite-3.1-1b-a400m-instruct`), user-modifiable CV tools, alerts with cooldown, local file read/write, and local SQLite record lookups.
+
+```python
+from phoenix.framework.cv_agent import CVAgent, CVAgentConfig, CVEvent, Detection
+
+# Strictly enforces MoE models <= 1B (or model=None for <2 MB RAM deterministic mode)
+agent = CVAgent(
+    model="ibm-granite/granite-3.1-1b-a400m-instruct",  # alias: "granite-1b-moe" (400M active)
+    config=CVAgentConfig(workspace_root="./cv_edge", auto_log_file="logs/decisions.jsonl"),
+    db_path="./cv_edge/security.db",
+    on_alert=lambda a: print(f"[ALERT][{a['severity']}] {a['message']}"),
+)
+
+# Users can freely add or modify tools for CV events
+@agent.tool(name="lock_gate", description="Engage physical barrier lock on intrusion.")
+def lock_gate(zone: str):
+    return {"locked": zone}
+
+# Connect local SQLite records to enrich every CV event context
+agent.set_db_enricher(
+    lambda ev, db: db.read_records("plates", where={"plate": ev.metadata["plate"]}, limit=3)["records"]
+    if ev.metadata.get("plate") else []
+)
+
+# Handle events from YOLO (`CVEvent.from_yolo`), OpenCV (`CVEvent.from_boxes`), or dicts
+event = CVEvent(
+    event_type="vehicle_plate_detected",
+    camera_id="cam_gate_1",
+    zone="north_gate",
+    detections=[Detection(label="car", confidence=0.95, track_id="v_7")],
+    metadata={"plate": "BAD-999"},
+)
+res = agent.handle_event_sync(event)  # or `await agent.handle_event(event)` in async/notebooks
+print(res.decision_group.to_dict())
+```
+
+> [!TIP]
+> See the full **[Micron CV Agent Documentation](docs/micron_cv/README.md)**, **[Supported `<= 1B` MoE Model IDs](docs/micron_cv/01_supported_models.md)**, and **[Real-World CV Scenarios](docs/micron_cv/03_real_world_scenarios.md)**.
+
 ---
 
 ## 🏗️ Advanced Architecture
@@ -205,9 +246,8 @@ async def read_temp():
 
 If you run Phoenix using **Local LLMs/VLMs** (via Ollama or native Transformers), ensure your machine meets the following specifications to prevent system instability:
 
-- **RAM**: 8GB Minimum (16GB+ recommended).
-- **GPU**: 4GB+ VRAM required for Vision/VLM models (utilizing built-in 4-bit quantization).
-- **Disk Space**: 10GB+ free space for model weights.
+- **Full Local Agents / VLMs**: 8GB RAM minimum (16GB+ recommended), 4GB+ VRAM for Vision/VLM models, 10GB+ disk space.
+- **Micron CV Agent (`phoenix.framework.cv_agent`)**: Designed for **Phone CPUs & Low-RAM Edge devices** — core footprint is `< 2 MB` RAM (stdlib only, `model=None`), or `~220–780 MB` RAM when running quantized `<= 1B` MoE GGUF models (`ibm-granite/granite-3.1-1b-a400m-instruct`, `micro-moe-500m-a150m`, `micro-moe-300m-a100m`). See [Supported Models](docs/micron_cv/01_supported_models.md).
 
 > [!WARNING]
 > High-resource models may cause system crashes on CPU-only devices. The SDK prioritizes stability and will pause to prompt for user confirmation in the terminal before booting large local providers.
@@ -227,6 +267,10 @@ Ready to dive deeper? Explore our dedicated guides to master the Phoenix ecosyst
 
 ###  Autonomous Agents
 - **[Agent Framework Architecture](docs/AGENT_GUIDE.md)**
+- **[Micron CV Agent (Edge/Phone `<= 1B` MoE)](docs/micron_cv/README.md)**
+  - **[Supported `<= 1B` MoE Model IDs](docs/micron_cv/01_supported_models.md)**
+  - **[Tools, Alerts, Local Files & SQLite DB](docs/micron_cv/02_tools_database_and_files.md)**
+  - **[Real-World CV Scenarios & Code Recipes](docs/micron_cv/03_real_world_scenarios.md)**
 - **[Multi-Agent Teams](docs/framework/multi_agent.md)**
 - **[The Phoenix Tool Bank](docs/tool_bank_usage.md)**
 - **[Custom Specialized Agents](docs/different_scenarios_usage.md)**

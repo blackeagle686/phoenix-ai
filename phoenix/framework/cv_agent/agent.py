@@ -15,6 +15,7 @@ import asyncio
 import inspect
 import json
 import sys
+import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -469,15 +470,35 @@ class CVAgent:
         force_moe: bool = False,
         extra_context: Optional[Dict[str, Any]] = None,
     ) -> CVAgentResult:
-        """Synchronous entrypoint for classic OpenCV `while cap.isOpened():` frame loops."""
-        coro = self.handle_event(event, force_moe=force_moe, extra_context=extra_context)
+        """Synchronous entrypoint for OpenCV loops AND Jupyter/Kaggle notebooks (even inside a running event loop)."""
         try:
             asyncio.get_running_loop()
+            in_running_loop = True
         except RuntimeError:
-            return asyncio.run(coro)
-        raise RuntimeError(
-            "handle_event_sync() cannot be called inside an active event loop; use `await handle_event(...)`."
-        )
+            in_running_loop = False
+
+        if not in_running_loop:
+            return asyncio.run(
+                self.handle_event(event, force_moe=force_moe, extra_context=extra_context)
+            )
+
+        # Jupyter/Kaggle/Colab already runs an event loop on the main thread: execute cleanly in a helper thread.
+        box: Dict[str, Any] = {}
+
+        def _worker() -> None:
+            try:
+                box["result"] = asyncio.run(
+                    self.handle_event(event, force_moe=force_moe, extra_context=extra_context)
+                )
+            except BaseException as exc:
+                box["error"] = exc
+
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
+        t.join()
+        if "error" in box:
+            raise box["error"]
+        return box["result"]
 
     async def process_stream(
         self,
