@@ -1,5 +1,6 @@
 import asyncio
 import gc
+import inspect
 import json
 import os
 import threading
@@ -76,36 +77,54 @@ class LocalLLM(BaseLLM):
                 cls._evict_oldest_cached_model()
 
     @classmethod
+    def _reclaim_memory(cls) -> None:
+        """Aggressively reclaim Python RAM and all CUDA GPU cached/fragmented memory."""
+        gc.collect()
+        gc.collect()
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                for dev_idx in range(max(1, int(torch.cuda.device_count()))):
+                    try:
+                        with torch.cuda.device(dev_idx):
+                            torch.cuda.empty_cache()
+                            if hasattr(torch.cuda, "ipc_collect"):
+                                torch.cuda.ipc_collect()
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    @classmethod
+    def _release_entry(cls, entry: Optional[Dict[str, Any]]) -> None:
+        if isinstance(entry, dict):
+            entry.pop("hf_model", None)
+            entry.pop("llama_model", None)
+            entry.pop("tokenizer", None)
+
+    @classmethod
     def _evict_oldest_cached_model(cls) -> Optional[str]:
         evicted_key = None
+        evicted_entry = None
         with cls._cache_lock:
             if cls._model_cache:
                 evicted_key = next(iter(cls._model_cache))
-                cls._model_cache.pop(evicted_key, None)
+                evicted_entry = cls._model_cache.pop(evicted_key, None)
         if evicted_key is not None:
-            gc.collect()
-            try:
-                import torch
-
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-            except Exception:
-                pass
+            cls._release_entry(evicted_entry)
+            cls._reclaim_memory()
         return evicted_key
 
     @classmethod
     def clear_cache(cls) -> None:
         """Unload all cached local models and release GPU/CPU memory."""
         with cls._cache_lock:
+            entries = list(cls._model_cache.values())
             cls._model_cache.clear()
-        gc.collect()
-        try:
-            import torch
-
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except Exception:
-            pass
+        for entry in entries:
+            cls._release_entry(entry)
+        cls._reclaim_memory()
 
     def __init__(
         self,
@@ -167,8 +186,8 @@ class LocalLLM(BaseLLM):
         """Subclass hook to customize model loading options (used by LocalMoELLM)."""
         return None
 
-    def _detect_runtime_profile(self) -> Dict[str, Any]:
-        gpu_info = HardwareChecker.check_gpu()
+    def _detect_runtime_profile(self, use_cache: bool = True) -> Dict[str, Any]:
+        gpu_info = HardwareChecker.check_gpu(use_cache=use_cache)
         cpu_info = HardwareChecker.check_cpu()
         detected_device = gpu_info.get("device", "cpu") if self.device == "auto" else self.device
         threads = self.n_threads or cpu_info.get("recommended_threads", max(1, (os.cpu_count() or 2) // 2))
@@ -179,10 +198,47 @@ class LocalLLM(BaseLLM):
             "device": detected_device,
             "has_gpu": detected_device in ("cuda", "mps"),
             "vram_gb": gpu_info.get("vram_gb", 0.0),
+            "free_vram_gb": gpu_info.get("free_vram_gb", gpu_info.get("vram_gb", 0.0)),
+            "total_vram_gb": gpu_info.get("total_vram_gb", gpu_info.get("vram_gb", 0.0)),
+            "total_free_vram_gb": gpu_info.get("total_free_vram_gb", gpu_info.get("vram_gb", 0.0)),
+            "gpu_count": gpu_info.get("gpu_count", 1 if detected_device in ("cuda", "mps") else 0),
+            "gpus": gpu_info.get("gpus") or [],
             "bf16_supported": gpu_info.get("bf16_supported", False),
             "n_threads": threads,
             "n_gpu_layers": gpu_layers,
         }
+
+    @staticmethod
+    def _build_safe_max_memory(
+        hw: Dict[str, Any],
+        *,
+        safety_ratio: float = 0.78,
+        min_reserve_gb: float = 2.4,
+        cpu_ratio: float = 0.65,
+    ) -> Dict[Any, str]:
+        """Compute per-GPU & CPU memory caps leaving headroom for weight conversion & KV cache."""
+        max_mem: Dict[Any, str] = {}
+        gpus = list(hw.get("gpus") or [])
+        if not gpus and float(hw.get("vram_gb") or 0.0) > 0:
+            gpus = [{
+                "index": 0,
+                "total_gb": float(hw.get("vram_gb") or 0.0),
+                "free_gb": float(hw.get("free_vram_gb") or hw.get("vram_gb") or 0.0),
+            }]
+        for gpu in gpus:
+            idx = int(gpu.get("index", 0))
+            tot = float(gpu.get("total_gb") or 0.0)
+            free = float(gpu.get("free_gb") or tot)
+            if tot <= 0:
+                continue
+            reserve = min_reserve_gb if tot >= 8.0 else max(0.8, tot * 0.25)
+            cap = max(1, int(min(max(1.0, free - reserve), tot * safety_ratio)))
+            max_mem[idx] = f"{cap}GiB"
+
+        avail_ram_gb = float(HardwareChecker.check_ram().get("available_gb", 8.0) or 8.0)
+        cpu_cap = max(2, int(avail_ram_gb * cpu_ratio))
+        max_mem["cpu"] = f"{cpu_cap}GiB"
+        return max_mem
 
     def _resolve_backend(self) -> str:
         aliases = {
@@ -260,9 +316,46 @@ class LocalLLM(BaseLLM):
             "lock": threading.Lock(),
         }
 
+    @staticmethod
+    def _set_dtype_kwarg(load_kwargs: Dict[str, Any], from_pretrained_fn: Any, dtype_val: Any) -> None:
+        """Pass `dtype` on transformers >=4.56 (avoiding deprecation warning) and `torch_dtype` on older releases."""
+        use_new_dtype = False
+        try:
+            import transformers as _tf
+            ver_parts = tuple(int(p) for p in str(getattr(_tf, "__version__", "4.0")).split(".")[:2] if p.isdigit())
+            use_new_dtype = ver_parts >= (4, 56)
+        except Exception:
+            use_new_dtype = False
+        if not use_new_dtype:
+            try:
+                sig = inspect.signature(from_pretrained_fn)
+                if "dtype" in sig.parameters and "torch_dtype" not in sig.parameters:
+                    use_new_dtype = True
+            except (TypeError, ValueError):
+                pass
+        key = "dtype" if use_new_dtype else "torch_dtype"
+        other_key = "torch_dtype" if key == "dtype" else "dtype"
+        load_kwargs.pop(other_key, None)
+        load_kwargs[key] = dtype_val
+
+    @staticmethod
+    def _is_oom_error(exc: Exception) -> bool:
+        msg = str(exc or "").lower()
+        return (
+            "out of memory" in msg
+            or "outofmemory" in type(exc).__name__.lower()
+            or ("cuda" in msg and ("alloc" in msg or "memory" in msg))
+            or "some modules are dispatched on the cpu or the disk" in msg
+        )
+
     def _load_transformers_sync(self, hw: Dict[str, Any]) -> Dict[str, Any]:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+        os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+        self._reclaim_memory()
+        hw = self._detect_runtime_profile(use_cache=False) if hw.get("device") == "cuda" else hw
 
         device = hw["device"]
         if device == "cuda":
@@ -289,19 +382,27 @@ class LocalLLM(BaseLLM):
 
         load_kwargs: Dict[str, Any] = {
             "trust_remote_code": self.trust_remote_code,
+            "low_cpu_mem_usage": True,
         }
-        if has_accelerate:
-            load_kwargs["low_cpu_mem_usage"] = True
 
         quant_applied = "none"
+        default_offload_dir = getattr(
+            self,
+            "offload_folder",
+            os.path.join(os.path.expanduser("~"), ".cache", "phoenix", "hf_offload"),
+        )
         if device == "cuda":
             compute_dtype = torch.bfloat16 if hw["bf16_supported"] else torch.float16
+            self._set_dtype_kwarg(load_kwargs, AutoModelForCausalLM.from_pretrained, compute_dtype)
             if self.quantization in ("auto", "4bit", "8bit"):
                 try:
                     import bitsandbytes  # noqa: F401
                     from transformers import BitsAndBytesConfig
                     if self.quantization == "8bit":
-                        load_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
+                        load_kwargs["quantization_config"] = BitsAndBytesConfig(
+                            load_in_8bit=True,
+                            llm_int8_enable_fp32_cpu_offload=True,
+                        )
                         quant_applied = "bnb_8bit"
                     else:
                         load_kwargs["quantization_config"] = BitsAndBytesConfig(
@@ -309,32 +410,41 @@ class LocalLLM(BaseLLM):
                             bnb_4bit_quant_type="nf4",
                             bnb_4bit_use_double_quant=True,
                             bnb_4bit_compute_dtype=compute_dtype,
+                            llm_int8_enable_fp32_cpu_offload=True,
                         )
                         quant_applied = "bnb_nf4"
                 except Exception as q_err:
                     logger.warning(f"bitsandbytes unavailable ({q_err}); loading in {compute_dtype} (tip: `pip install bitsandbytes accelerate` for 4-bit).")
-                    load_kwargs["torch_dtype"] = compute_dtype
                     quant_applied = str(compute_dtype)
             elif self.quantization == "bf16":
-                load_kwargs["torch_dtype"] = torch.bfloat16
+                self._set_dtype_kwarg(load_kwargs, AutoModelForCausalLM.from_pretrained, torch.bfloat16)
                 quant_applied = "bf16"
             elif self.quantization == "fp16":
-                load_kwargs["torch_dtype"] = torch.float16
+                self._set_dtype_kwarg(load_kwargs, AutoModelForCausalLM.from_pretrained, torch.float16)
                 quant_applied = "fp16"
             else:
-                load_kwargs["torch_dtype"] = compute_dtype
+                quant_applied = str(compute_dtype)
+
             if has_accelerate:
                 load_kwargs["device_map"] = "auto"
+                load_kwargs["offload_state_dict"] = True
+                # Reserve headroom on multi-GPU setups so tensor concatenation/conversion never OOMs
+                if int(hw.get("gpu_count") or 1) > 1:
+                    os.makedirs(default_offload_dir, exist_ok=True)
+                    load_kwargs["offload_folder"] = default_offload_dir
+                    load_kwargs["max_memory"] = self._build_safe_max_memory(
+                        hw, safety_ratio=0.76, min_reserve_gb=2.6, cpu_ratio=0.65
+                    )
             load_kwargs["attn_implementation"] = "sdpa"
         elif device == "mps":
-            load_kwargs["torch_dtype"] = torch.float16
+            self._set_dtype_kwarg(load_kwargs, AutoModelForCausalLM.from_pretrained, torch.float16)
             if has_accelerate:
                 load_kwargs["device_map"] = "mps"
             quant_applied = "fp16_mps"
         else:
             # Memory-safe CPU path: NEVER load in FP32 when bfloat16 is available (cuts RAM usage by 50%!)
             cpu_dtype = torch.bfloat16 if self.quantization in ("auto", "bf16", "4bit", "8bit") else torch.float32
-            load_kwargs["torch_dtype"] = cpu_dtype
+            self._set_dtype_kwarg(load_kwargs, AutoModelForCausalLM.from_pretrained, cpu_dtype)
             quant_applied = "bf16_cpu" if cpu_dtype == torch.bfloat16 else "fp32_cpu"
 
         self._customize_transformers_load_kwargs(load_kwargs, hw, device=device, has_accelerate=has_accelerate)
@@ -343,20 +453,114 @@ class LocalLLM(BaseLLM):
         if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
             tokenizer.pad_token_id = tokenizer.eos_token_id
 
+        def _invoke_from_pretrained(kwargs_dict: Dict[str, Any]):
+            kw = dict(kwargs_dict)
+            while True:
+                try:
+                    return AutoModelForCausalLM.from_pretrained(self.model, **kw)
+                except TypeError as type_err:
+                    err_s = str(type_err)
+                    stripped = False
+                    for opt_k in ("offload_buffers", "offload_state_dict", "low_cpu_mem_usage", "attn_implementation"):
+                        if opt_k in kw and (opt_k in err_s or "unexpected keyword argument" in err_s):
+                            kw.pop(opt_k, None)
+                            stripped = True
+                            break
+                    if not stripped and "dtype" in kw and ("dtype" in err_s or "unexpected keyword argument" in err_s):
+                        kw["torch_dtype"] = kw.pop("dtype")
+                        stripped = True
+                    if not stripped:
+                        raise
+
+        hf_model = None
+        last_err: Optional[Exception] = None
         try:
-            hf_model = AutoModelForCausalLM.from_pretrained(self.model, **load_kwargs)
+            hf_model = _invoke_from_pretrained(load_kwargs)
         except Exception as load_err:
-            gc.collect()
-            if "attn_implementation" in load_kwargs:
-                load_kwargs.pop("attn_implementation", None)
-                hf_model = AutoModelForCausalLM.from_pretrained(self.model, **load_kwargs)
-            else:
-                raise load_err
+            last_err = load_err
+            self._reclaim_memory()
+            if not self._is_oom_error(load_err) and "attn_implementation" in load_kwargs:
+                retry_kw = dict(load_kwargs)
+                retry_kw.pop("attn_implementation", None)
+                try:
+                    hf_model = _invoke_from_pretrained(retry_kw)
+                    load_kwargs = retry_kw
+                    last_err = None
+                except Exception as retry_err:
+                    last_err = retry_err
+                    self._reclaim_memory()
+
+        if hf_model is None and last_err is not None and self._is_oom_error(last_err) and device == "cuda":
+            # Stage 1 & Stage 2 progressive OOM recovery: evict other cached models, enforce strict GPU reserve,
+            # spill overflow tensors to CPU RAM + NVMe offload_folder.
+            LocalLLM.clear_cache()
+            self._reclaim_memory()
+            hw_live = self._detect_runtime_profile(use_cache=False)
+            recovery_tiers = [
+                (0.60, 3.4, 0.60),
+                (0.42, 4.8, 0.50),
+            ]
+            for tier_idx, (s_ratio, rsv_gb, c_ratio) in enumerate(recovery_tiers, start=1):
+                if not has_accelerate:
+                    break
+                logger.warning(
+                    f"CUDA/RAM pressure loading '{self.model}' ({last_err}); retrying recovery tier {tier_idx} "
+                    f"(strict max_memory headroom + CPU/disk offload)..."
+                )
+                os.makedirs(default_offload_dir, exist_ok=True)
+                tier_kw = dict(load_kwargs)
+                tier_kw.pop("attn_implementation", None)
+                tier_kw["device_map"] = "auto"
+                tier_kw["low_cpu_mem_usage"] = True
+                tier_kw["offload_state_dict"] = True
+                tier_kw["offload_buffers"] = True
+                tier_kw["offload_folder"] = default_offload_dir
+                tier_kw["max_memory"] = self._build_safe_max_memory(
+                    hw_live, safety_ratio=s_ratio, min_reserve_gb=rsv_gb, cpu_ratio=c_ratio
+                )
+                qcfg = tier_kw.get("quantization_config")
+                if qcfg is not None and hasattr(qcfg, "llm_int8_enable_fp32_cpu_offload"):
+                    try:
+                        qcfg.llm_int8_enable_fp32_cpu_offload = True
+                    except Exception:
+                        pass
+                try:
+                    hf_model = _invoke_from_pretrained(tier_kw)
+                    load_kwargs = tier_kw
+                    last_err = None
+                    if hasattr(self, "_hybrid_offload_used"):
+                        self._hybrid_offload_used = True
+                    break
+                except Exception as tier_err:
+                    last_err = tier_err
+                    self._reclaim_memory()
+
+        if hf_model is None and last_err is not None:
+            preset = getattr(self, "_moe_preset", {}) or {}
+            gguf_repo = preset.get("gguf_repo")
+            if gguf_repo and self._is_oom_error(last_err):
+                try:
+                    import importlib.util
+                    if importlib.util.find_spec("llama_cpp") is not None:
+                        logger.warning(
+                            f"HuggingFace load exhausted GPU/RAM for '{self.model}'; switching automatically to compact Q4_K_M GGUF '{gguf_repo}'."
+                        )
+                        orig_model, orig_gguf = self.model, self.gguf_filename
+                        self.model = gguf_repo
+                        self.gguf_filename = preset.get("gguf_filename", "*Q4_K_M.gguf")
+                        try:
+                            return self._load_llama_cpp_sync(hw)
+                        except Exception:
+                            self.model, self.gguf_filename = orig_model, orig_gguf
+                except Exception:
+                    pass
+            raise last_err
 
         if device in ("cuda", "mps") and not has_accelerate and "quantization_config" not in load_kwargs:
             hf_model = hf_model.to(device)
 
         hf_model.eval()
+        self._reclaim_memory()
 
         # Only apply dynamic INT8 on CPU if user explicitly requested `8bit` AND there is plenty of free RAM
         # (because quantize_dynamic temporarily duplicates linear weights in RAM during conversion).
@@ -376,8 +580,17 @@ class LocalLLM(BaseLLM):
                 "Running Transformers on CPU in bfloat16. For 4-bit ~2GB RAM on CPU, use a GGUF model with `backend='llama_cpp'` or `backend='ollama'`."
             )
 
+        dev_summary = ""
+        dmap = getattr(hf_model, "hf_device_map", None)
+        if isinstance(dmap, dict) and dmap:
+            counts: Dict[str, int] = {}
+            for loc in dmap.values():
+                k = str(loc)
+                counts[k] = counts.get(k, 0) + 1
+            dev_summary = ", placements=" + json.dumps(counts, separators=(",", ":"))
+
         logger.info(
-            f"Loaded LocalLLM ({self.model}) on {device} via transformers [quant={quant_applied}, threads={hw['n_threads']}]"
+            f"Loaded LocalLLM ({self.model}) on {device} via transformers [quant={quant_applied}, threads={hw['n_threads']}{dev_summary}]"
         )
         return {
             "type": "transformers",
@@ -416,10 +629,10 @@ class LocalLLM(BaseLLM):
                     cached = await asyncio.to_thread(self._load_transformers_sync, hw)
                 except Exception as e:
                     final_err = e
-                    err_low = str(e).lower()
-                    if ("out of memory" in err_low or "cuda" in err_low) and LocalLLM._model_cache:
-                        logger.warning("CUDA/memory pressure while loading expert model; evicting oldest cached LocalLLM and retrying...")
-                        LocalLLM._evict_oldest_cached_model()
+                    if self._is_oom_error(e) and LocalLLM._model_cache:
+                        logger.warning("CUDA/memory pressure while loading model; clearing cached LocalLLMs and retrying...")
+                        LocalLLM.clear_cache()
+                        hw = self._detect_runtime_profile(use_cache=False)
                         try:
                             cached = await asyncio.to_thread(self._load_transformers_sync, hw)
                             final_err = None
@@ -510,6 +723,8 @@ class LocalLLM(BaseLLM):
                 max_length=max(256, self.n_ctx - reserved_out),
             )
             model_device = getattr(self.hf_model, "device", torch.device("cpu"))
+            if str(model_device) == "meta":
+                model_device = next((p.device for p in self.hf_model.parameters() if p.device.type != "meta"), torch.device("cpu"))
             inputs = {k: v.to(model_device) for k, v in inputs.items()}
 
             gen_kwargs: Dict[str, Any] = {
@@ -540,6 +755,7 @@ class LocalLLM(BaseLLM):
                 "completion_tokens": comp_len,
                 "total_tokens": prompt_len + comp_len,
             }
+            del inputs, generated_ids, new_tokens
             return text, usage
 
     def _run_llama_cpp_sync(
@@ -1015,16 +1231,3 @@ class LocalLLM(BaseLLM):
         if self._http_client is not None and not self._http_client.is_closed:
             await self._http_client.aclose()
             self._http_client = None
-
-    @classmethod
-    def clear_cache(cls) -> None:
-        """Unload cached local models and reclaim CPU RAM / GPU VRAM."""
-        with cls._cache_lock:
-            cls._model_cache.clear()
-        gc.collect()
-        try:
-            import torch
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except Exception:
-            pass

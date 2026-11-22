@@ -29,6 +29,7 @@ MOE_MODEL_PRESETS: Dict[str, Dict[str, Any]] = {
         "num_experts": 60,
         "experts_per_tok": 4,
         "vram_4bit_gb": 9.2,
+        "vram_peak_gb": 16.0,
         "ram_gguf_q4_gb": 8.5,
         "trust_remote_code": False,
     },
@@ -42,6 +43,7 @@ MOE_MODEL_PRESETS: Dict[str, Dict[str, Any]] = {
         "num_experts": 64,
         "experts_per_tok": 8,
         "vram_4bit_gb": 4.6,
+        "vram_peak_gb": 6.8,
         "ram_gguf_q4_gb": 4.4,
         "trust_remote_code": False,
     },
@@ -52,6 +54,7 @@ MOE_MODEL_PRESETS: Dict[str, Dict[str, Any]] = {
         "active_params": "0.4B",
         "vram_fp16_gb": 2.7,
         "vram_4bit_gb": 1.2,
+        "vram_peak_gb": 2.7,
         "trust_remote_code": False,
     },
     "ibm-granite/granite-3.1-3b-a800m-instruct": {
@@ -61,6 +64,7 @@ MOE_MODEL_PRESETS: Dict[str, Dict[str, Any]] = {
         "active_params": "0.8B",
         "vram_fp16_gb": 6.6,
         "vram_4bit_gb": 2.4,
+        "vram_peak_gb": 6.6,
         "trust_remote_code": False,
     },
     "mistralai/Mixtral-8x7B-Instruct-v0.1": {
@@ -71,6 +75,7 @@ MOE_MODEL_PRESETS: Dict[str, Dict[str, Any]] = {
         "num_experts": 8,
         "experts_per_tok": 2,
         "vram_4bit_gb": 26.0,
+        "vram_peak_gb": 30.0,
         "ram_gguf_q4_gb": 26.5,
         "trust_remote_code": False,
     },
@@ -82,6 +87,7 @@ MOE_MODEL_PRESETS: Dict[str, Dict[str, Any]] = {
         "num_experts": 64,
         "experts_per_tok": 6,
         "vram_4bit_gb": 10.5,
+        "vram_peak_gb": 17.5,
         "ram_gguf_q4_gb": 10.0,
         "trust_remote_code": True,
     },
@@ -217,14 +223,16 @@ class LocalMoELLM(LocalLLM):
         device: str,
         has_accelerate: bool,
     ) -> None:
-        """Apply MoE-safe GPU+CPU expert offloading only when hardware VRAM/RAM genuinely requires it."""
+        """Apply MoE-safe GPU+CPU+disk expert offloading with multi-GPU scratch headroom."""
         if not self.cpu_offload:
             return
 
         ram_info = HardwareChecker.check_ram()
-        avail_ram_gb = max(4, int(float(ram_info.get("available_gb", 8.0)) * 0.85))
+        avail_ram_gb = max(2, int(float(ram_info.get("available_gb", 8.0)) * 0.65))
         vram_gb = float(hw.get("vram_gb") or 0.0)
+        gpu_count = int(hw.get("gpu_count") or (1 if vram_gb > 0 else 0))
         est_needed = float(self._moe_preset.get("vram_4bit_gb") or 0.0)
+        est_peak = float(self._moe_preset.get("vram_peak_gb") or est_needed or 0.0)
         force_offload = self.cpu_offload is True
 
         need_gpu_offload = (
@@ -232,8 +240,9 @@ class LocalMoELLM(LocalLLM):
             and vram_gb > 0
             and (
                 force_offload
-                or (est_needed > 0 and vram_gb < est_needed * 1.15)
-                or (est_needed == 0.0 and vram_gb < 10.0)
+                or gpu_count > 1
+                or (est_peak > 0 and vram_gb < est_peak * 1.15)
+                or (est_peak == 0.0 and vram_gb < 10.0)
             )
         )
 
@@ -250,16 +259,20 @@ class LocalMoELLM(LocalLLM):
 
         if need_gpu_offload:
             os.makedirs(self.offload_folder, exist_ok=True)
-            safe_vram = max(2, int(vram_gb * 0.88))
             load_kwargs["device_map"] = "auto"
             load_kwargs["offload_folder"] = self.offload_folder
-            load_kwargs["max_memory"] = {0: f"{safe_vram}GiB", "cpu": f"{avail_ram_gb}GiB"}
+            load_kwargs["offload_state_dict"] = True
+            load_kwargs["offload_buffers"] = True
+            load_kwargs["max_memory"] = self._build_safe_max_memory(
+                hw, safety_ratio=0.72, min_reserve_gb=3.0, cpu_ratio=0.65
+            )
             self._hybrid_offload_used = True
         elif device == "cpu":
             # Prevent large MoE CPU tensors from crashing system RAM
             os.makedirs(self.offload_folder, exist_ok=True)
             load_kwargs["device_map"] = "auto"
             load_kwargs["offload_folder"] = self.offload_folder
+            load_kwargs["offload_state_dict"] = True
             load_kwargs["max_memory"] = {"cpu": f"{avail_ram_gb}GiB"}
             self._hybrid_offload_used = True
 
