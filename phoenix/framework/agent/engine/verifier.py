@@ -23,7 +23,7 @@ from phoenix.framework.agent.engine.surgical import (
     find_enclosing_callable,
 )
 from phoenix.framework.agent.runtime.restricted_python import RestrictedPythonRuntime
-from phoenix.framework.agent.tools._fs_utils import resolve_existing_path
+from phoenix.framework.agent.tools._fs_utils import check_runtime_path, resolve_existing_path
 
 ADVERSARIAL_PROBES: List[str] = [
     "__import__('os').system('echo PWNED')",
@@ -507,6 +507,146 @@ _v_run_checks()
 """
 
 
+_EXTERNAL_PY_FRAMEWORKS = frozenset({
+    "fastapi", "flask", "django", "starlette", "uvicorn", "pydantic",
+    "sqlalchemy", "aiohttp", "tornado", "streamlit", "gradio",
+    "requests", "httpx", "numpy", "pandas", "scipy", "torch", "sklearn",
+})
+
+
+def _find_external_py_frameworks(code: str) -> List[str]:
+    """Return sorted third-party framework imports that RestrictedPythonRuntime intentionally blocks."""
+    found: List[str] = []
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return found
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                root = alias.name.split(".")[0]
+                if root in _EXTERNAL_PY_FRAMEWORKS and root not in found:
+                    found.append(root)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            root = node.module.split(".")[0]
+            if root in _EXTERNAL_PY_FRAMEWORKS and root not in found:
+                found.append(root)
+    return sorted(found)
+
+
+def _check_balanced_delimiters(code: str, pairs: str = "{}()[]") -> Optional[str]:
+    """Lightweight string/comment-aware delimiter balance validator for JS/TS/CSS."""
+    stack: List[str] = []
+    open_to_close = {pairs[i]: pairs[i + 1] for i in range(0, len(pairs), 2)}
+    closers = set(open_to_close.values())
+    i, n = 0, len(code)
+    in_str: Optional[str] = None
+    in_line_comment = False
+    in_block_comment = False
+    while i < n:
+        ch = code[i]
+        nxt = code[i + 1] if i + 1 < n else ""
+        if in_line_comment:
+            if ch == "\n":
+                in_line_comment = False
+            i += 1
+            continue
+        if in_block_comment:
+            if ch == "*" and nxt == "/":
+                in_block_comment = False
+                i += 2
+                continue
+            i += 1
+            continue
+        if in_str:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == in_str:
+                in_str = None
+            i += 1
+            continue
+        if ch == "/" and nxt == "/":
+            in_line_comment = True
+            i += 2
+            continue
+        if ch == "/" and nxt == "*":
+            in_block_comment = True
+            i += 2
+            continue
+        if ch in ("'", '"', "`"):
+            in_str = ch
+            i += 1
+            continue
+        if ch in open_to_close:
+            stack.append(open_to_close[ch])
+        elif ch in closers:
+            if not stack or stack[-1] != ch:
+                return f"Unexpected closing '{ch}'"
+            stack.pop()
+        i += 1
+    if stack:
+        return f"Unclosed delimiter(s), expected {''.join(reversed(stack))}"
+    return None
+
+
+def _verify_non_python_file(resolved: str, code: str) -> Tuple[int, List[str], List[str], List[str]]:
+    """Deterministic structural verification for HTML, CSS, JS/TS, JSON, and config/doc files."""
+    fname = os.path.basename(resolved)
+    ext = os.path.splitext(fname.lower())[1]
+    passed: List[str] = [f"exists:{fname}"]
+    failed: List[str] = []
+    outputs: List[str] = []
+
+    if ext in (".html", ".htm"):
+        low = code.lower()
+        if "<" not in code or ">" not in code:
+            failed.append(f"{fname}: Missing valid HTML tags.")
+            return 30, passed, failed, outputs
+        if re.search(r"^\s*(?:from\s+\w+\s+import|def\s+\w+\s*\()", code, flags=re.MULTILINE):
+            failed.append(f"{fname}: Contains Python code instead of HTML markup.")
+            return 25, passed, failed, outputs
+        passed.append(f"html_valid:{fname}")
+        outputs.append(f"{fname}: HTML markup verified ({len(code.splitlines())} lines)")
+        return 100, passed, failed, outputs
+
+    if ext in (".css", ".scss", ".sass", ".less"):
+        if "{" not in code or ":" not in code or "}" not in code:
+            failed.append(f"{fname}: Missing valid CSS rules (`selector {{ prop: val; }}`).")
+            return 35, passed, failed, outputs
+        err = _check_balanced_delimiters(code, pairs="{}()")
+        if err:
+            failed.append(f"{fname}: CSS syntax error ({err}).")
+            return 45, passed, failed, outputs
+        passed.append(f"css_valid:{fname}")
+        outputs.append(f"{fname}: CSS rules verified ({len(code.splitlines())} lines)")
+        return 100, passed, failed, outputs
+
+    if ext in (".js", ".jsx", ".ts", ".tsx"):
+        if re.search(r"^\s*(?:from\s+\w+\s+import|def\s+\w+\s*\()", code, flags=re.MULTILINE):
+            failed.append(f"{fname}: Contains Python syntax instead of JavaScript/TypeScript.")
+            return 25, passed, failed, outputs
+        err = _check_balanced_delimiters(code, pairs="{}()[]")
+        if err:
+            failed.append(f"{fname}: JavaScript syntax error ({err}).")
+            return 45, passed, failed, outputs
+        passed.append(f"js_valid:{fname}")
+        outputs.append(f"{fname}: JS syntax verified ({len(code.splitlines())} lines)")
+        return 100, passed, failed, outputs
+
+    if ext == ".json":
+        try:
+            json.loads(code)
+            passed.append(f"json_valid:{fname}")
+            return 100, passed, failed, outputs
+        except Exception as exc:
+            failed.append(f"{fname}: Invalid JSON ({exc}).")
+            return 30, passed, failed, outputs
+
+    outputs.append(f"{fname}: verified ({len(code.splitlines())} lines)")
+    return 95, passed, failed, outputs
+
+
 class ExecutionVerifier:
     """Deterministic multi-gate verifier executing AST, security, and live sandbox checks."""
 
@@ -515,10 +655,12 @@ class ExecutionVerifier:
         report: DiagnosticReport,
         runtime: Any,
         candidate_files: Optional[List[str]] = None,
+        only_candidates: bool = False,
     ) -> VerificationReport:
         c = report.contract
         targets: List[str] = []
-        for fp in (candidate_files or []) + list(c.target_files or []):
+        raw_pool = list(candidate_files or []) if only_candidates and candidate_files else (list(candidate_files or []) + list(c.target_files or []))
+        for fp in raw_pool:
             if fp and fp not in targets:
                 targets.append(fp)
 
@@ -536,12 +678,20 @@ class ExecutionVerifier:
         focus_line: Optional[int] = None
         focus_scope: Optional[Dict[str, Any]] = None
         diagnosis_hints: List[str] = []
-        score = 0
-
-        py_files_checked = 0
+        total_score = 0
+        files_checked = 0
         seen_real_paths = set()
-        for tf in targets[:6]:
-            ok, resolved, err, _ = resolve_existing_path(tf, runtime, allow_dir=False)
+
+        for tf in targets[:12]:
+            norm_tf = tf.replace("\\", "/")
+            if "/" in norm_tf and not os.path.isabs(tf):
+                allowed, abs_direct, sec_err = check_runtime_path(runtime, tf)
+                ok = allowed and os.path.isfile(abs_direct)
+                resolved = abs_direct
+                err = sec_err or (None if ok else f"Path not found: '{tf}'")
+            else:
+                ok, resolved, err, _ = resolve_existing_path(tf, runtime, allow_dir=False)
+
             if not ok or not os.path.isfile(resolved):
                 if not any(tf in d for d in discrepancies):
                     discrepancies.append(f"Expected file '{tf}' is missing on disk ({err or 'not found'}).")
@@ -563,12 +713,16 @@ class ExecutionVerifier:
                 discrepancies.append(f"File '{os.path.basename(resolved)}' is empty.")
                 continue
 
+            files_checked += 1
             if not resolved.lower().endswith(".py"):
-                checks_passed.append(f"exists:{os.path.basename(resolved)}")
-                score = max(score, 80)
+                f_score, f_passed, f_failed, f_outputs = _verify_non_python_file(resolved, code)
+                total_score += f_score
+                checks_passed.extend(f_passed)
+                discrepancies.extend(f_failed)
+                functional_outputs.extend(f_outputs)
                 continue
 
-            py_files_checked += 1
+            file_score = 0
             ast_info = scan_python_ast(
                 code,
                 requires_security=c.requires_security,
@@ -579,7 +733,7 @@ class ExecutionVerifier:
             if not ast_info["ast_valid"]:
                 discrepancies.append(f"{os.path.basename(resolved)}: {ast_info['ast_error']}")
                 continue
-            score += 25
+            file_score += 25
             checks_passed.append(f"ast_valid:{os.path.basename(resolved)}")
 
             # Gate 2: Security AST Gate (+25)
@@ -589,7 +743,7 @@ class ExecutionVerifier:
                     f"Security policy violation in {os.path.basename(resolved)}: {'; '.join(sec_findings[:4])}"
                 )
             else:
-                score += 25
+                file_score += 25
                 checks_passed.append("security_ast_clean")
 
             # Gate 3: Required Ops / Symbols (+20)
@@ -607,11 +761,19 @@ class ExecutionVerifier:
                     f"Missing required symbols in {os.path.basename(resolved)}: {', '.join(missing_syms)}"
                 )
             else:
-                score += 20
+                file_score += 20
                 checks_passed.append("required_symbols_present")
 
             # Gate 4: Live Functional + Adversarial Sandbox Execution (+30)
-            if not sec_findings:
+            ext_frameworks = _find_external_py_frameworks(code)
+            if ext_frameworks and not c.requires_security and not sec_findings:
+                file_score += 30
+                fw_label = ",".join(ext_frameworks[:4])
+                checks_passed.append(f"framework_ast_verified:{fw_label}")
+                functional_outputs.append(
+                    f"{os.path.basename(resolved)}: AST & framework structure verified ({fw_label}, {len(code.splitlines())} lines)"
+                )
+            elif not sec_findings:
                 sb_rt = (
                     runtime
                     if isinstance(runtime, RestrictedPythonRuntime)
@@ -702,9 +864,9 @@ class ExecutionVerifier:
                             if hint not in diagnosis_hints:
                                 diagnosis_hints.append(hint)
                     else:
-                        score += 30
+                        file_score += 30
                 else:
-                    score += 30
+                    file_score += 30
                     checks_passed.append("sandbox_import_ok")
             elif not c.requires_security:
                 checks_passed.append("static_ast_verified_sandbox_skipped")
@@ -714,6 +876,8 @@ class ExecutionVerifier:
                     + ")"
                 )
 
+            total_score += file_score
+
             if discrepancies and focus_scope is None and c.traceback_lines:
                 for tb_ln in reversed(c.traceback_lines):
                     scope_cand = find_enclosing_callable(code, tb_ln)
@@ -722,9 +886,7 @@ class ExecutionVerifier:
                         focus_scope = scope_cand
                         break
 
-        if py_files_checked > 1:
-            score = min(100, score // py_files_checked)
-
+        score = (total_score // files_checked) if files_checked > 0 else 0
         score = max(0, min(100, score))
         passed = (len(discrepancies) == 0) and (score >= 90 or (score >= 70 and not c.requires_security))
         rating = max(1, min(10, round(score / 10))) if not passed else max(8, min(10, round(score / 10)))

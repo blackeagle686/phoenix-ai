@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from phoenix.framework.agent.cognition.schema import PlanSchema, TaskSchema, TaskType
 from phoenix.framework.agent.tools._fs_utils import (
+    check_runtime_path,
     get_workspace_root,
     is_ignored_dir,
     resolve_existing_path,
@@ -58,10 +59,169 @@ _CALC_ONLY_KEYWORDS = (
 )
 
 _FILENAME_REGEX = re.compile(
-    r"(?<![A-Za-z0-9_./\\-])([A-Za-z0-9_./\\-]+\.(?:py|js|jsx|ts|tsx|json|ya?ml|toml|md|txt|sql|sh|csv))(?![A-Za-z0-9_])",
+    r"(?<![A-Za-z0-9_./\\-])([A-Za-z0-9_./\\-]+\.(?:py|js|jsx|ts|tsx|html|htm|css|scss|sass|less|json|ya?ml|toml|md|txt|sql|sh|csv|xml|svg|vue|svelte))(?![A-Za-z0-9_])",
     re.IGNORECASE,
 )
+_DIR_SLASH_REGEX = re.compile(
+    r"(?<![A-Za-z0-9_.:/\\-])([A-Za-z0-9_][A-Za-z0-9_.-]*(?:/[A-Za-z0-9_.-]+)*/)(?![A-Za-z0-9_])"
+)
+_NAMED_FOLDER_REGEX = re.compile(
+    r"\b(?:folder|directory|dir)\s+(?:called|named)\s+[`'\"]?([A-Za-z0-9_][A-Za-z0-9_.-]*)/?[`'\"]?",
+    re.IGNORECASE,
+)
+_COMMON_SUBDIR_NAMES: Set[str] = {
+    "front", "frontend", "client", "web", "ui", "public", "static", "templates",
+    "assets", "styles", "css", "js", "scripts", "back", "backend", "server",
+    "api", "app", "src", "lib", "core", "routes", "models", "schemas",
+    "services", "utils", "helpers", "tests", "test", "components", "pages",
+    "views", "controllers", "db", "database", "config", "docs",
+}
 _BACKTICK_SYMBOL_REGEX = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*)(?:\(\))?`")
+
+
+def _damerau_levenshtein(a: str, b: str) -> int:
+    """Edit distance supporting single adjacent character transposition (e.g. `cacl_proj` <-> `calc_proj`)."""
+    la, lb = len(a), len(b)
+    if a == b:
+        return 0
+    if abs(la - lb) > 2:
+        return abs(la - lb)
+    d = [[0] * (lb + 1) for _ in range(la + 1)]
+    for i in range(la + 1):
+        d[i][0] = i
+    for j in range(lb + 1):
+        d[0][j] = j
+    for i in range(1, la + 1):
+        for j in range(1, lb + 1):
+            cost = 0 if a[i - 1] == b[j - 1] else 1
+            d[i][j] = min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost)
+            if i > 1 and j > 1 and a[i - 1] == b[j - 2] and a[i - 2] == b[j - 1]:
+                d[i][j] = min(d[i][j], d[i - 2][j - 2] + 1)
+    return d[la][lb]
+
+
+def _extract_structured_paths(text: str, *, has_traceback: bool = False) -> List[str]:
+    """Extract target file paths while preserving natural-language folder hierarchies (e.g. `calc_proj/front/c.html`)."""
+    raw_files: List[Tuple[int, str]] = []
+    for m in _FILENAME_REGEX.finditer(text):
+        cand = m.group(1).strip().strip("'\",.;:")
+        if not cand or cand.lower().startswith(("http://", "https://")):
+            continue
+        # Skip URL hostnames like `example.com/a.js`
+        prefix = text[max(0, m.start() - 10) : m.start()].lower()
+        if "://" in prefix:
+            continue
+        raw_files.append((m.start(), cand.replace("\\", "/")))
+
+    if not raw_files:
+        return []
+    if has_traceback:
+        seen_tb: List[str] = []
+        for _, f in raw_files:
+            if f not in seen_tb:
+                seen_tb.append(f)
+        return seen_tb
+
+    # Collect directory cues (explicit `foo/` tokens + `folder called foo`)
+    raw_dirs: List[Tuple[int, str, str]] = []
+    covered_spans: List[Tuple[int, int]] = []
+    for m in _DIR_SLASH_REGEX.finditer(text):
+        d_raw = m.group(1).strip("/")
+        if not d_raw or "." in d_raw.split("/")[-1]:
+            continue
+        # Skip if immediately preceded by `:` or `://` or `/` (URL or absolute system path like `/kaggle/working/...`)
+        prev_ch = text[m.start() - 1] if m.start() > 0 else ""
+        if prev_ch in ("/", ":"):
+            continue
+        ctx_before = text[max(0, m.start() - 45) : m.start()].lower()
+        raw_dirs.append((m.start(), d_raw, ctx_before))
+        covered_spans.append((m.start(), m.end()))
+
+    for m in _NAMED_FOLDER_REGEX.finditer(text):
+        if any(s <= m.start(1) <= e for s, e in covered_spans):
+            continue
+        d_raw = m.group(1).strip("/")
+        if d_raw and "." not in d_raw:
+            ctx_before = text[max(0, m.start() - 30) : m.start()].lower()
+            raw_dirs.append((m.start(1), d_raw, ctx_before + " called"))
+
+    if not raw_dirs:
+        seen_flat: List[str] = []
+        for _, f in raw_files:
+            if f not in seen_flat:
+                seen_flat.append(f)
+        return seen_flat
+
+    # Canonicalize single-typo duplicate root directory names (e.g. `cacl_proj` + `calc_proj` -> `calc_proj`)
+    low_prompt = text.lower()
+    single_dirs = [d for _, d, _ in raw_dirs if "/" not in d]
+    unique_single = list(dict.fromkeys(single_dirs))
+    alias_map: Dict[str, str] = {}
+    for i in range(len(unique_single)):
+        for j in range(i + 1, len(unique_single)):
+            a, b = unique_single[i], unique_single[j]
+            al, bl = a.lower(), b.lower()
+            if len(al) >= 5 and len(bl) >= 5 and al not in _COMMON_SUBDIR_NAMES and bl not in _COMMON_SUBDIR_NAMES:
+                if _damerau_levenshtein(al, bl) <= 1:
+                    # Prefer spelling whose root stem appears elsewhere in prompt (e.g. `calc` in `calculator`), else later spelling
+                    a_stem = al.split("_")[0].split("-")[0]
+                    b_stem = bl.split("_")[0].split("-")[0]
+                    a_hits = len(re.findall(re.escape(a_stem), low_prompt)) if len(a_stem) >= 3 else 0
+                    b_hits = len(re.findall(re.escape(b_stem), low_prompt)) if len(b_stem) >= 3 else 0
+                    canon = a if a_hits > b_hits else b
+                    alias_map[a] = canon
+                    alias_map[b] = canon
+
+    def _canon_dir(d: str) -> str:
+        parts = [alias_map.get(seg, seg) for seg in d.split("/") if seg]
+        return "/".join(parts)
+
+    events: List[Tuple[int, str, str, str]] = []
+    for pos, d_raw, ctx in raw_dirs:
+        events.append((pos, "dir", _canon_dir(d_raw), ctx))
+    for pos, f_raw in raw_files:
+        events.append((pos, "file", f_raw, ""))
+    events.sort(key=lambda e: e[0])
+
+    root_dir: Optional[str] = None
+    active_dir: Optional[str] = None
+    resolved: List[str] = []
+    sub_cues = ("contain", "inside", "under", "subfolder", "called", "named", "with", "into")
+
+    for _, kind, val, ctx in events:
+        if kind == "dir":
+            if "/" in val:
+                active_dir = val
+                if root_dir is None:
+                    root_dir = val.split("/")[0]
+            else:
+                vlow = val.lower()
+                if root_dir is not None and val == root_dir:
+                    active_dir = root_dir
+                elif root_dir is not None and (
+                    vlow in _COMMON_SUBDIR_NAMES
+                    or active_dir == root_dir
+                    or any(cue in ctx for cue in sub_cues)
+                ):
+                    active_dir = f"{root_dir}/{val}"
+                elif root_dir is None and vlow not in _COMMON_SUBDIR_NAMES:
+                    root_dir = val
+                    active_dir = val
+                else:
+                    active_dir = val
+        else:
+            if "/" in val:
+                segs = val.split("/")
+                segs[0] = alias_map.get(segs[0], segs[0])
+                final_path = "/".join(segs)
+            elif active_dir:
+                final_path = f"{active_dir}/{val}"
+            else:
+                final_path = val
+            if final_path not in resolved:
+                resolved.append(final_path)
+
+    return resolved
 
 
 @dataclass
@@ -283,12 +443,8 @@ class PreAnalyzer:
             if sym not in KNOWN_MATH_OPS and "." not in sym and sym not in required_symbols:
                 required_symbols.append(sym)
 
-        # File extraction from prompt (explicit extensions, workspace stems, or single .py workspace fallback)
-        candidates: List[str] = []
-        for m in _FILENAME_REGEX.finditer(text):
-            cand = m.group(1).strip().strip("'\",.;:")
-            if cand and cand not in candidates:
-                candidates.append(cand)
+        # File extraction from prompt (structured folder hierarchies, explicit extensions, workspace stems, or single .py fallback)
+        candidates: List[str] = _extract_structured_paths(text, has_traceback=has_traceback)
 
         ws_root = get_workspace_root(runtime) if runtime is not None else None
         if not candidates and runtime is not None and getattr(runtime, "workspace_root", None) and os.path.isdir(ws_root):
@@ -313,18 +469,35 @@ class PreAnalyzer:
                 candidates.append(py_files[0])
 
         resolved_targets: List[str] = []
+        existing_targets: List[str] = []
         for cand in candidates:
+            # Explicit relative subdirectory path (e.g. `calc_proj/front/c.js`): check exact location so a stray root `c.js` never hijacks it!
+            if "/" in cand and not os.path.isabs(cand) and not has_traceback:
+                allowed, abs_direct, _ = check_runtime_path(runtime, cand)
+                if allowed and os.path.isfile(abs_direct):
+                    rel = os.path.relpath(abs_direct, ws_root).replace("\\", "/") if ws_root else cand
+                    if rel not in resolved_targets:
+                        resolved_targets.append(rel)
+                    if rel not in existing_targets:
+                        existing_targets.append(rel)
+                else:
+                    if cand not in resolved_targets:
+                        resolved_targets.append(cand)
+                continue
+
             ok, resolved, _, _ = resolve_existing_path(cand, runtime, allow_dir=False)
-            if ok:
-                rel = os.path.relpath(resolved, ws_root) if ws_root else resolved
+            if ok and os.path.isfile(resolved):
+                rel = os.path.relpath(resolved, ws_root).replace("\\", "/") if ws_root else resolved
                 if rel not in resolved_targets:
                     resolved_targets.append(rel)
+                if rel not in existing_targets:
+                    existing_targets.append(rel)
             else:
                 if cand not in resolved_targets:
                     resolved_targets.append(cand)
 
         # Detect archetype cleanly
-        create_verbs = ("create", "new file", "write a new", "generate file", "أنشئ", "انشئ")
+        create_verbs = ("create", "new file", "write a new", "generate file", "scaffold", "build a ", "build simple", "أنشئ", "انشئ")
         qa_verbs = ("explain", "summarize", "what does", "read ", "inspect ", "analyze ", "اشرح", "اقرأ")
         modify_verbs = (
             "update", "fix", "edit", "modify", "make it", "secure", "harden",
@@ -333,14 +506,11 @@ class PreAnalyzer:
             "عدل", "صلح", "حسن", "دعم",
         )
 
-        existing_targets = []
-        for tf in resolved_targets:
-            ok, abs_p, _, _ = resolve_existing_path(tf, runtime, allow_dir=False)
-            if ok and os.path.isfile(abs_p):
-                existing_targets.append(tf)
-
-        if existing_targets and any(v in low for v in qa_verbs) and not (any(v in low for v in modify_verbs) or has_traceback):
+        has_missing_targets = len(existing_targets) < len(resolved_targets)
+        if existing_targets and not has_missing_targets and any(v in low for v in qa_verbs) and not (any(v in low for v in modify_verbs) or has_traceback):
             archetype = "code_qa"
+        elif resolved_targets and has_missing_targets and (any(v in low for v in create_verbs) or not existing_targets):
+            archetype = "code_create"
         elif existing_targets and (any(v in low for v in modify_verbs) or requires_security or required_ops or has_traceback):
             archetype = "code_modify"
         elif resolved_targets and (any(v in low for v in create_verbs) or not existing_targets):
