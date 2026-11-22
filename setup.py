@@ -58,6 +58,13 @@ EXTRAS = {
     ],
     "brain": [
         "maturin>=1.0.0"
+    ],
+    "ml": [
+        "scikit-learn>=1.3.0",
+        "scipy>=1.10.0",
+        "joblib>=1.3.0",
+        "lightgbm>=4.0.0",
+        "onnxruntime>=1.16.0"
     ]
 }
 

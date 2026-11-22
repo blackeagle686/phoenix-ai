@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import os
+import time
 from typing import Dict, Any, Optional, Callable, List
 
 from phoenix.services.observability.tracing import tracer
@@ -24,6 +25,13 @@ from phoenix.framework.agent.cognition.actor.actor import MUTATING_FILE_TOOLS
 from phoenix.framework.agent.engine.pre_analyzer import DiagnosticReport, PreAnalyzer
 from phoenix.framework.agent.engine.runner import NeuroSymbolicRunner
 from phoenix.framework.agent.engine.verifier import ExecutionVerifier
+from phoenix.framework.agent.kernel import (
+    DecisionSource,
+    OutcomeStatus,
+    PHXKernel,
+    RecoveryStrategy,
+    WorldStateSnapshot,
+)
 from phoenix.framework.agent.memory.budget import compact_value
 from phoenix.framework.agent.memory.manager import MemoryManager
 from phoenix.framework.agent.tools._fs_utils import get_workspace_snapshot, inspect_workspace_file
@@ -75,6 +83,8 @@ class AgentLoop:
         approval_callback: Optional[Callable[..., Any]] = None,
         checkpoint_dir: Optional[str] = None,
         fast_reflect: bool = False,
+        kernel: Optional[Any] = None,
+        capsule_registry: Optional[Any] = None,
     ):
         self.thinker = thinker
         self.planner = planner
@@ -90,6 +100,8 @@ class AgentLoop:
         self.approval_callback = approval_callback
         self.checkpoint_dir = checkpoint_dir
         self.fast_reflect = fast_reflect
+        self.kernel = kernel
+        self.capsule_registry = capsule_registry
         self._bootstrap_pipeline: Optional[CognitionPipeline] = None
         self._background_tasks = set()
 
@@ -1282,7 +1294,37 @@ class AgentLoop:
                 t_name = tc.tool_name
                 t_args = tc.arguments or {}
                 await tracer.emit_event("tool_call", {"step": step, "tool": t_name})
-                rec = await self.actor._invoke_tool(t_name, t_args)
+                t0 = time.perf_counter()
+                if self.kernel is not None:
+                    safe_ok, _, safe_reason, _ = self.kernel.gate_tool_execution(t_name, t_args, prompt=prompt)
+                    if not safe_ok:
+                        rec = {"tool": t_name, "arguments": t_args, "success": False, "output": None, "error": safe_reason}
+                        self.kernel.record_execution(
+                            episode_id=session_id,
+                            prompt=prompt,
+                            decision=None,
+                            action_id=t_name,
+                            action_args=t_args,
+                            status=OutcomeStatus.BLOCKED,
+                            verifier_passed=False,
+                            actual_latency_ms=(time.perf_counter() - t0) * 1000.0,
+                            error_message=safe_reason,
+                        )
+                    else:
+                        rec = await self.actor._invoke_tool(t_name, t_args)
+                        self.kernel.record_execution(
+                            episode_id=session_id,
+                            prompt=prompt,
+                            decision=None,
+                            action_id=t_name,
+                            action_args=t_args,
+                            status=OutcomeStatus.SUCCESS if rec.get("success") else OutcomeStatus.RETRYABLE_ERR,
+                            verifier_passed=bool(rec.get("success")),
+                            actual_latency_ms=(time.perf_counter() - t0) * 1000.0,
+                            error_message=rec.get("error"),
+                        )
+                else:
+                    rec = await self.actor._invoke_tool(t_name, t_args)
                 if not rec.get("success", False):
                     step_all_succeeded = False
                 cell.add_tool_record(
@@ -1338,6 +1380,305 @@ class AgentLoop:
         yield {"type": "status", "content": "Fast ReAct mode..."}
         final = await self.run_react(prompt, memory, session_id, max_iterations=max_iterations)
         yield {"type": "status", "content": "ReAct loop finished."}
+        for line in final.splitlines() or [final]:
+            yield {"type": "chunk", "content": f"{line}\n"}
+
+    def _infer_deterministic_tool_args(self, tool_name: str, prompt: str) -> Dict[str, Any]:
+        """Extract simple deterministic arguments (e.g. file_path / query) for zero-LLM RF tool calls."""
+        import re as _re
+
+        tool_obj = self.actor._get_registered_tool(tool_name) if hasattr(self.actor, "_get_registered_tool") else None
+        schema = tool_obj.get_parameters_schema() if (tool_obj is not None and hasattr(tool_obj, "get_parameters_schema")) else {}
+        props = schema.get("properties", {}) if isinstance(schema, dict) else {}
+        if not props:
+            return {}
+        args: Dict[str, Any] = {}
+        file_m = _re.search(r"([A-Za-z0-9_./-]+\.(?:py|js|ts|json|md|txt|sql|ya?ml))", prompt or "")
+        if "file_path" in props and file_m:
+            args["file_path"] = file_m.group(1)
+        elif "path" in props and file_m:
+            args["path"] = file_m.group(1)
+        if "query" in props and not args:
+            args["query"] = (prompt or "").strip()[:180]
+        return args
+
+    async def _ensure_llm_ready(self) -> None:
+        llm_obj = getattr(self.thinker, "llm", None)
+        if llm_obj is not None and hasattr(llm_obj, "client") and llm_obj.client is None:
+            if hasattr(llm_obj, "init"):
+                await llm_obj.init()
+
+    async def run_kernel(
+        self,
+        prompt: str,
+        memory: Any,
+        session_id: str,
+        max_iterations: int = 8,
+    ) -> str:
+        """
+        PHX v2 Kernel-First Hybrid Execution Loop (Sub-5ms CPU Hot Path + Stateless LLM Battery):
+          1. FeatureExtractor -> Regime/OOD Guard -> CompiledSkill / Calibrated RF Router
+          2. Zero-LLM deterministic execution when high-confidence skill/RF hits
+          3. RF Context Pruner + Stateless LLM Battery only on OOD / low-confidence / Shadow Mode
+          4. SafetyGatekeeper (Hard Invariants > RF Risk) + Adaptive Recovery + ExecutionTrace emission
+        """
+        kernel: PHXKernel = self.kernel if isinstance(self.kernel, PHXKernel) else PHXKernel()
+        self.kernel = kernel
+
+        active_memory = self._resolve_memory_manager(memory)
+        active_memory.set_session(session_id, prompt)
+        if hasattr(self.actor, "reset_session_tracking"):
+            self.actor.reset_session_tracking()
+
+        rt = self._active_runtime()
+        ws_snap = get_workspace_snapshot(rt, max_files=25) if rt else ""
+        ws_file_count = len([ln for ln in ws_snap.splitlines() if ln.strip()]) if ws_snap else 0
+        avail_tools: List[str] = []
+        if getattr(self.actor, "tool_manager", None) and hasattr(self.actor.tool_manager, "get_available_tools_info"):
+            avail_tools = [str(t.get("name", "")) for t in (self.actor.tool_manager.get_available_tools_info() or []) if isinstance(t, dict)]
+
+        world_state = WorldStateSnapshot(
+            episode_id=session_id,
+            step_index=0,
+            consecutive_failures=0,
+            last_tool_id="",
+            workspace_file_count=ws_file_count,
+            available_tools=avail_tools,
+        )
+
+        # Hot Path decision (< 5ms CPU)
+        decision = kernel.decide(prompt, world_state=world_state)
+        await tracer.emit_event(
+            "kernel_decision",
+            {
+                "session_id": session_id,
+                "source": decision.source.value,
+                "action_id": decision.action_id,
+                "confidence": decision.confidence,
+                "regime_id": decision.regime_id,
+                "ood_distance": decision.ood_distance,
+                "is_ood": decision.is_ood,
+                "graduation_stage": decision.graduation_stage.name,
+                "hot_path_latency_ms": decision.hot_path_latency_ms,
+                "top_attributions": [a.model_dump() for a in decision.top_attributions],
+            },
+        )
+
+        # Path A: Hard Rule / Safety Block before touching tools or LLM
+        if not decision.safety_allowed:
+            kernel.record_execution(
+                episode_id=session_id,
+                prompt=prompt,
+                decision=decision,
+                action_id=decision.action_id or "blocked_action",
+                status=OutcomeStatus.BLOCKED,
+                verifier_passed=False,
+                actual_latency_ms=decision.hot_path_latency_ms,
+                error_message=decision.safety_reason,
+            )
+            blocked_msg = f"[PHX v2 Safety Gate Blocked]: {decision.safety_reason}"
+            if hasattr(memory, "add_interaction"):
+                await memory.add_interaction(session_id, "assistant", blocked_msg)
+            await tracer.emit_event("complete", {"session_id": session_id, "mode": "kernel", "source": decision.source.value})
+            return blocked_msg
+
+        # Path B: Zero-LLM Autonomous Execution via Compiled Skill (FR-09)
+        if decision.source == DecisionSource.COMPILED_SKILL and decision.matched_skill is not None:
+            skill = decision.matched_skill
+            step_outputs: List[str] = []
+            all_ok = True
+            t_start = time.perf_counter()
+            for idx, act_name in enumerate(skill.action_sequence):
+                tpl_args = dict(skill.default_arg_templates[idx]) if idx < len(skill.default_arg_templates) else self._infer_deterministic_tool_args(act_name, prompt)
+                safe_ok, _, safe_reason, _ = kernel.gate_tool_execution(act_name, tpl_args, prompt=prompt, world_state=world_state)
+                if not safe_ok:
+                    all_ok = False
+                    step_outputs.append(f"[{act_name} BLOCKED]: {safe_reason}")
+                    break
+                await tracer.emit_event("tool_call", {"step": idx + 1, "tool": act_name, "source": "COMPILED_SKILL"})
+                rec = await self.actor._invoke_tool(act_name, tpl_args)
+                world_state.step_index += 1
+                world_state.last_tool_id = act_name
+                if not rec.get("success"):
+                    all_ok = False
+                    step_outputs.append(f"[{act_name} FAIL]: {rec.get('error')}")
+                    break
+                step_outputs.append(str(rec.get("output")))
+
+            total_ms = (time.perf_counter() - t_start) * 1000.0
+            kernel.record_execution(
+                episode_id=session_id,
+                prompt=prompt,
+                decision=decision,
+                action_id=skill.action_sequence[0] if skill.action_sequence else skill.skill_id,
+                action_sequence=list(skill.action_sequence),
+                status=OutcomeStatus.SUCCESS if all_ok else OutcomeStatus.RETRYABLE_ERR,
+                verifier_passed=all_ok,
+                actual_latency_ms=total_ms,
+                error_message=None if all_ok else "; ".join(step_outputs[-1:]),
+            )
+            if all_ok:
+                ans = "\n".join(step_outputs)
+                if hasattr(memory, "add_interaction"):
+                    await memory.add_interaction(session_id, "assistant", ans)
+                await tracer.emit_event("complete", {"session_id": session_id, "mode": "kernel", "source": "COMPILED_SKILL"})
+                return ans
+            # Skill failed -> circuit breaker recorded outcome; fall through to LLM Battery cleanly!
+
+        # Path C: Zero-LLM High-Confidence Calibrated RF Action Router (FR-03)
+        if decision.source == DecisionSource.RF_ROUTER and decision.action_id and not decision.should_wake_llm:
+            act_name = decision.action_id
+            inferred_args = self._infer_deterministic_tool_args(act_name, prompt)
+            t_start = time.perf_counter()
+            await tracer.emit_event("tool_call", {"step": 1, "tool": act_name, "source": "RF_ROUTER"})
+            rec = await self.actor._invoke_tool(act_name, inferred_args)
+            if not rec.get("success"):
+                strat, _, backoff = kernel.classify_failure_recovery(str(rec.get("error") or ""), prompt=prompt, attempt=1, world_state=world_state)
+                if strat == RecoveryStrategy.WAIT_AND_RETRY:
+                    await asyncio.sleep(min(0.25, backoff))
+                    rec = await self.actor._invoke_tool(act_name, inferred_args)
+            elapsed_ms = (time.perf_counter() - t_start) * 1000.0
+            ok = bool(rec.get("success"))
+            kernel.record_execution(
+                episode_id=session_id,
+                prompt=prompt,
+                decision=decision,
+                action_id=act_name,
+                action_args=inferred_args,
+                action_sequence=[act_name],
+                status=OutcomeStatus.SUCCESS if ok else OutcomeStatus.RETRYABLE_ERR,
+                verifier_passed=ok,
+                actual_latency_ms=elapsed_ms,
+                error_message=rec.get("error"),
+            )
+            if ok:
+                ans = str(rec.get("output"))
+                if hasattr(memory, "add_interaction"):
+                    await memory.add_interaction(session_id, "assistant", ans)
+                kernel.check_drift()
+                await tracer.emit_event("complete", {"session_id": session_id, "mode": "kernel", "source": "RF_ROUTER"})
+                return ans
+            # RF route failed -> seamlessly escalate to Stateless LLM Battery!
+
+        # Path D: Stateless Semantic Co-Processor (LLM Battery) with RF Context Pruning (FR-04, FR-05)
+        await self._ensure_llm_ready()
+        raw_context = ""
+        if hasattr(memory, "get_full_context"):
+            res_ctx = memory.get_full_context(session_id, query=prompt)
+            raw_context = await res_ctx if inspect.isawaitable(res_ctx) else str(res_ctx or "")
+
+        # FR-04: Prune noisy memory lines before waking the LLM Battery
+        pruned_ctx = raw_context
+        if raw_context.strip():
+            cand_items = [{"content": ln.strip(), "regime_id": decision.regime_id} for ln in raw_context.splitlines() if ln.strip()]
+            kept_items, prune_meta = kernel.prune_context(prompt, cand_items, regime_id=decision.regime_id, max_items=8)
+            if kept_items:
+                pruned_ctx = "\n".join(str(it["content"]) for it in kept_items)
+            await tracer.emit_event("context_pruned", {"session_id": session_id, **prune_meta})
+
+        if ws_snap and "Workspace Files:" not in pruned_ctx:
+            pruned_ctx = f"{pruned_ctx}\n\nWorkspace Files: {ws_snap}".strip()
+
+        kernel_task = TaskSchema(task_id="kernel_llm", description=prompt)
+        observations: List[str] = []
+        executed_actions: List[str] = []
+        final_answer = ""
+
+        for step in range(1, max(1, max_iterations) + 1):
+            step_ctx_parts = []
+            if pruned_ctx:
+                step_ctx_parts.append(pruned_ctx)
+            if observations:
+                step_ctx_parts.append("VERIFIED KERNEL OBSERVATIONS:\n" + "\n".join(observations[-6:]))
+            step_ctx = "\n\n".join(step_ctx_parts)
+
+            with moe_route_context(role="coder", attempt=step, escalate=(step >= 3)):
+                task_exec = await self.thinker.solve_task(kernel_task, context=step_ctx)
+
+            tool_calls = getattr(task_exec, "tools_to_call", None) or []
+            direct_resp = (getattr(task_exec, "direct_response", None) or "").strip()
+            if not tool_calls:
+                final_answer = direct_resp or "\n".join(observations) or "Completed."
+                break
+
+            step_ok = True
+            for tc in tool_calls:
+                t_name = tc.tool_name
+                t_args = tc.arguments or {}
+                t0 = time.perf_counter()
+                safe_ok, _, safe_reason, _ = kernel.gate_tool_execution(t_name, t_args, prompt=prompt, world_state=world_state)
+                if not safe_ok:
+                    step_ok = False
+                    observations.append(f"[Step {step} | {t_name} | BLOCKED]: {safe_reason}")
+                    kernel.record_execution(
+                        episode_id=session_id,
+                        prompt=prompt,
+                        decision=decision if step == 1 else None,
+                        action_id=t_name,
+                        action_args=t_args,
+                        status=OutcomeStatus.BLOCKED,
+                        verifier_passed=False,
+                        actual_latency_ms=(time.perf_counter() - t0) * 1000.0,
+                        error_message=safe_reason,
+                        world_state=world_state,
+                    )
+                    continue
+
+                await tracer.emit_event("tool_call", {"step": step, "tool": t_name, "source": "LLM_BATTERY"})
+                rec = await self.actor._invoke_tool(t_name, t_args)
+                lat_ms = (time.perf_counter() - t0) * 1000.0
+                ok = bool(rec.get("success"))
+                world_state.step_index += 1
+                world_state.last_tool_id = t_name
+                world_state.consecutive_failures = 0 if ok else (world_state.consecutive_failures + 1)
+                if ok:
+                    executed_actions.append(t_name)
+                else:
+                    step_ok = False
+
+                kernel.record_execution(
+                    episode_id=session_id,
+                    prompt=prompt,
+                    decision=decision if (step == 1 and len(executed_actions) <= 1) else None,
+                    action_id=t_name,
+                    action_args=t_args,
+                    action_sequence=list(executed_actions) or [t_name],
+                    status=OutcomeStatus.SUCCESS if ok else OutcomeStatus.RETRYABLE_ERR,
+                    verifier_passed=ok,
+                    actual_latency_ms=lat_ms,
+                    error_message=rec.get("error"),
+                    world_state=world_state,
+                )
+                observations.append(
+                    f"[Step {step} | {t_name} | {'OK' if ok else 'FAIL'}]: "
+                    f"{compact_value(rec.get('output') if ok else rec.get('error'), max_chars=700)}"
+                )
+
+            if step_ok and getattr(task_exec, "is_complete", False) and direct_resp:
+                final_answer = direct_resp
+                break
+
+        if not final_answer:
+            final_answer = "\n".join(observations) if observations else "No result produced."
+
+        kernel.check_drift()
+        if hasattr(memory, "add_interaction"):
+            await memory.add_interaction(session_id, "assistant", final_answer)
+        await self._flush_background()
+        await tracer.emit_event("complete", {"session_id": session_id, "mode": "kernel", "source": "LLM_BATTERY"})
+        return final_answer
+
+    async def run_kernel_stream(
+        self,
+        prompt: str,
+        memory: Any,
+        session_id: str,
+        max_iterations: int = 8,
+    ):
+        """Streaming wrapper around the PHX v2 Kernel-First Hybrid Loop."""
+        yield {"type": "status", "content": "PHX v2 Kernel Hot Path..."}
+        final = await self.run_kernel(prompt, memory, session_id, max_iterations=max_iterations)
+        yield {"type": "status", "content": "PHX v2 Kernel run complete."}
         for line in final.splitlines() or [final]:
             yield {"type": "chunk", "content": f"{line}\n"}
 

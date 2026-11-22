@@ -1,6 +1,6 @@
 import uuid
 import inspect
-from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Type, Union
 from phoenix.services.llm.openai import OpenAILLM
 from phoenix.services.llm.local import LocalLLM
 from phoenix.services.llm.router import LLMRouter
@@ -19,6 +19,14 @@ from phoenix.framework.agent.execution.tool_manager import ToolManager
 from phoenix.framework.agent.runtime.restricted_python import RestrictedPythonRuntime
 from phoenix.framework.agent.core.loop import AgentLoop
 from phoenix.framework.agent.core.profile import AgentProfile
+from phoenix.framework.agent.kernel import PHXKernel
+from phoenix.framework.agent.capsules import (
+    ASTCapsuleComposer,
+    BlueprintMLRouter,
+    CapsuleRegistry,
+    CompositionResult,
+    MegaCapsuleMiner,
+)
 
 
 class Agent:
@@ -48,6 +56,9 @@ class Agent:
         checkpoint_dir: Optional[str] = None,
         on_event: Optional[Callable[[Dict[str, Any]], Any]] = None,
         fast_mode: Optional[bool] = None,
+        kernel: Optional[PHXKernel] = None,
+        enable_kernel: bool = True,
+        capsule_registry: Optional[CapsuleRegistry] = None,
     ):
         self.llm = self._prepare_llm(
             llm,
@@ -63,6 +74,10 @@ class Agent:
         self.on_event = on_event
         self.fast_mode = self._is_local_llm(self.llm) if fast_mode is None else bool(fast_mode)
         self.last_run_metrics: Optional[Dict[str, Any]] = None
+        self.kernel: Optional[PHXKernel] = kernel if kernel is not None else (PHXKernel() if enable_kernel else None)
+        self.capsule_registry: CapsuleRegistry = capsule_registry if capsule_registry is not None else CapsuleRegistry(load_builtin=True)
+        self.blueprint_router = BlueprintMLRouter()
+        self.mega_capsule_miner = MegaCapsuleMiner()
 
         # Support passing a list/iterable of tools/functions, a single BaseTool/function, or a ToolRegistry
         if isinstance(tools, (list, tuple, set)):
@@ -279,6 +294,8 @@ class Agent:
             "memory_manager": self.memory if isinstance(self.memory, MemoryManager) else getattr(self.memory, "backing_memory", None),
             "checkpoint_dir": self.checkpoint_dir,
             "fast_reflect": self.fast_mode,
+            "kernel": self.kernel,
+            "capsule_registry": self.capsule_registry,
         }
         loop_kwargs.update(self._dynamic_components)
         return self._call_with_supported_kwargs(self.loop_cls, loop_kwargs)
@@ -405,9 +422,11 @@ class Agent:
             return "deep"
         if raw in ("engine", "neuro_symbolic", "smart"):
             return "engine"
+        if raw in ("kernel", "v2", "hybrid", "phx2"):
+            return "kernel"
         if raw in ("auto", "plan", "react"):
             return raw
-        raise ValueError(f"Invalid agent mode '{mode}'. Supported modes: 'auto', 'fast_ans', 'react', 'plan', 'deep', 'engine'.")
+        raise ValueError(f"Invalid agent mode '{mode}'. Supported modes: 'auto', 'fast_ans', 'react', 'plan', 'deep', 'engine', 'kernel'.")
 
     @staticmethod
     def _looks_like_casual_greeting(prompt: str) -> bool:
@@ -447,12 +466,108 @@ class Agent:
             return self.llm.get_routing_stats()
         return None
 
+    def get_kernel_stats(self) -> Optional[Dict[str, Any]]:
+        """Return PHX v2 Kernel telemetry (Hot Path P50/P99 latency, offload rate, graduation stage, PSI, ECE)."""
+        return self.kernel.get_stats() if self.kernel is not None else None
+
+    def train_kernel(self, *, force_promote: bool = False) -> Dict[str, Any]:
+        """Trigger PHX v2 Cold Path distillation, Shadow Validation Gate, Atomic Hot-Swap & Mega-Capsule mining."""
+        if self.kernel is None:
+            return {"promoted": False, "reason": "PHXKernel is disabled on this Agent."}
+        report = self.kernel.run_cold_path_cycle(force_promote=force_promote)
+        all_traces = self.kernel.trace_store.all_traces()
+        bp_fitted = self.blueprint_router.fit_from_traces(all_traces)
+        mined_megas = self.mega_capsule_miner.mine_and_register(self.capsule_registry, all_traces)
+        report["blueprint_router_fitted"] = bp_fitted
+        report["mined_mega_capsules"] = [m.capsule_id for m in mined_megas]
+        return report
+
+    async def compose_code(
+        self,
+        spec_or_capsule_ids: Union[str, Sequence[str]],
+        *,
+        target_file: Optional[str] = None,
+        param_overrides: Optional[Dict[str, Dict[str, Any]]] = None,
+        custom_slot_bodies: Optional[Dict[str, str]] = None,
+        custom_slot_requirements: Optional[Dict[str, str]] = None,
+        language: str = "python",
+        framework: Optional[str] = None,
+        orm: Optional[str] = None,
+        top_k: int = 3,
+    ) -> CompositionResult:
+        """
+        PHX v2 Semantic-Structural Code Composition Pipeline (FR-13 to FR-18):
+          1. RF Blueprint Router (P >= 0.85) or Hybrid Semantic-Metadata Retrieval
+          2. Deterministic Dependency Graph & Constraint Solver
+          3. AST-Level Composer & Wirer (with Global Symbol/Route Collision Guard)
+          4. Scoped LLM Glue Synthesis (only for custom_logic_slots if requested)
+          5. Embedded Sandbox Verification + verified ExecutionTrace logging
+        """
+        import time as _t
+        from phoenix.framework.agent.kernel.schema import OutcomeStatus
+
+        t0 = _t.perf_counter()
+        prompt_text = ""
+        if isinstance(spec_or_capsule_ids, str):
+            prompt_text = spec_or_capsule_ids
+            bp_ids, _, hi_conf = self.blueprint_router.predict_blueprint(prompt_text)
+            if hi_conf and bp_ids:
+                requested_ids = bp_ids
+            else:
+                hits = self.capsule_registry.retrieve(
+                    prompt_text,
+                    language=language,
+                    framework=framework,
+                    orm=orm,
+                    top_k=top_k,
+                )
+                requested_ids = [c.capsule_id for c, _ in hits]
+        else:
+            requested_ids = list(spec_or_capsule_ids)
+            prompt_text = "compose " + " ".join(requested_ids)
+
+        if not requested_ids:
+            return CompositionResult(success=False, errors=["No matching capsules found for specification."])
+
+        res = await ASTCapsuleComposer.compose_and_verify(
+            self.capsule_registry,
+            requested_ids,
+            runtime=self.runtime,
+            param_overrides=param_overrides,
+            custom_slot_bodies=custom_slot_bodies,
+            custom_slot_requirements=custom_slot_requirements,
+            llm=self.llm if custom_slot_requirements else None,
+            language=language,
+            framework=framework,
+            orm=orm,
+        )
+
+        if res.success and target_file and self.runtime is not None:
+            await self.runtime.execute_io("write", target_file, res.assembled_code)
+
+        if self.kernel is not None:
+            self.kernel.record_execution(
+                episode_id=f"comp_{uuid.uuid4().hex[:8]}",
+                prompt=prompt_text,
+                decision=None,
+                action_id="compose_code",
+                action_args={"capsule_ids": res.capsule_ids, "target_file": target_file},
+                action_sequence=["compose_code"],
+                status=OutcomeStatus.SUCCESS if res.success else OutcomeStatus.FATAL_ERR,
+                verifier_passed=res.verifier_passed,
+                actual_latency_ms=(_t.perf_counter() - t0) * 1000.0,
+                error_message="; ".join(res.errors) if res.errors else None,
+                capsule_ids=res.capsule_ids,
+            )
+        return res
+
     async def run(self, prompt: str, session_id: str = None, max_iterations: int = 15, mode: str = "auto") -> str:
         """
         Run the agent with the given prompt.
-        mode can be "auto", "plan", "react", or "fast_ans".
+        mode can be "auto", "plan", "react", "fast_ans", "deep", "engine", or "kernel" (PHX v2).
         """
-        if hasattr(self.llm, "client") and self.llm.client is None:
+        actual_mode = self._normalize_mode(mode)
+        if actual_mode != "kernel" and hasattr(self.llm, "client") and self.llm.client is None:
             if hasattr(self.llm, "init"):
                 await self.llm.init()
 
@@ -464,7 +579,6 @@ class Agent:
         try:
             await self.memory.add_interaction(session_id, "user", prompt)
 
-            actual_mode = self._normalize_mode(mode)
             if actual_mode == "auto":
                 if self.fast_mode:
                     if self._looks_like_casual_greeting(prompt) or not self.get_tools_info():
@@ -484,6 +598,8 @@ class Agent:
                     fast_answer = await self.llm.generate(fast_prompt, session_id=None)
                 await self.memory.add_interaction(session_id, "assistant", fast_answer)
                 return fast_answer
+            if actual_mode == "kernel" and hasattr(self.loop, "run_kernel"):
+                return await self.loop.run_kernel(prompt, self.memory, session_id, max_iterations=max_iterations)
             if actual_mode == "engine" and hasattr(self.loop, "run_engine"):
                 return await self.loop.run_engine(prompt, self.memory, session_id, max_iterations=max_iterations)
             if actual_mode == "deep" and hasattr(self.loop, "run_deep"):
@@ -519,7 +635,8 @@ class Agent:
         """
         Streaming variant of run(). Uses loop.run_stream when available.
         """
-        if hasattr(self.llm, "client") and self.llm.client is None:
+        actual_mode_pre = self._normalize_mode(mode)
+        if actual_mode_pre != "kernel" and hasattr(self.llm, "client") and self.llm.client is None:
             if hasattr(self.llm, "init"):
                 await self.llm.init()
 
@@ -531,7 +648,7 @@ class Agent:
         try:
             await self.memory.add_interaction(session_id, "user", prompt)
 
-            actual_mode = self._normalize_mode(mode)
+            actual_mode = actual_mode_pre
             if actual_mode == "auto":
                 if self.fast_mode:
                     if self._looks_like_casual_greeting(prompt) or not self.get_tools_info():
@@ -553,6 +670,11 @@ class Agent:
                 yield {"type": "status", "content": "Fast answer mode"}
                 for line in fast_answer.splitlines() or [fast_answer]:
                     yield {"type": "chunk", "content": f"{line}\n"}
+                return
+
+            if actual_mode == "kernel" and hasattr(self.loop, "run_kernel_stream"):
+                async for event in self.loop.run_kernel_stream(prompt, self.memory, session_id, max_iterations=max_iterations):
+                    yield event
                 return
 
             if actual_mode == "engine" and hasattr(self.loop, "run_engine_stream"):

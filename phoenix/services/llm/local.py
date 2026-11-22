@@ -278,9 +278,55 @@ class LocalLLM(BaseLLM):
     def is_available(self) -> bool:
         return bool(self.model) and (self._allow_auto_load or config.LOAD_LOCAL_LLM)
 
+    @staticmethod
+    def _preload_cuda_libs_for_llama_cpp() -> None:
+        """Preload pip/system CUDA 12 shared libs via RTLD_GLOBAL so cu12 llama_cpp wheels work even in CUDA 13 / Jupyter kernels."""
+        if os.name != "posix":
+            return
+        try:
+            import ctypes
+            import site
+
+            search_dirs: List[str] = []
+            for base in list(getattr(site, "getsitepackages", lambda: [])()) + [getattr(site, "getusersitepackages", lambda: "")()]:
+                if base and os.path.isdir(base):
+                    search_dirs.extend([
+                        os.path.join(base, "nvidia", "cuda_runtime", "lib"),
+                        os.path.join(base, "nvidia", "cublas", "lib"),
+                    ])
+            for cuda_dir in ("/usr/local/cuda-12.4/lib64", "/usr/local/cuda-12.1/lib64", "/usr/local/cuda-12/lib64", "/usr/local/cuda/lib64"):
+                if os.path.isdir(cuda_dir):
+                    search_dirs.append(cuda_dir)
+
+            # Dependency order matters: cudart -> cublasLt -> cublas
+            for lib_name in ("libcudart.so.12", "libcublasLt.so.12", "libcublas.so.12"):
+                for sdir in search_dirs:
+                    cand = os.path.join(sdir, lib_name)
+                    if os.path.isfile(cand):
+                        try:
+                            ctypes.CDLL(cand, mode=ctypes.RTLD_GLOBAL)
+                        except OSError:
+                            pass
+                        break
+        except Exception:
+            pass
+
     def _load_llama_cpp_sync(self, hw: Dict[str, Any]) -> Dict[str, Any]:
-        import llama_cpp
-        from llama_cpp import Llama
+        if hw.get("device") == "cuda" and "llama_cpp" not in sys.modules:
+            self._preload_cuda_libs_for_llama_cpp()
+        try:
+            import llama_cpp
+            from llama_cpp import Llama
+        except Exception as imp_err:
+            err_s = str(imp_err)
+            if "libcudart.so.12" in err_s or "libcublas" in err_s:
+                raise RuntimeError(
+                    f"{imp_err}. Install CUDA 12 runtime wheels in Colab/Kaggle via "
+                    "`!pip install -q nvidia-cuda-runtime-cu12 nvidia-cublas-cu12` (no kernel restart needed!), "
+                    "OR compile llama-cpp-python for your local CUDA version via "
+                    "`CMAKE_ARGS='-DGGML_CUDA=on' pip install --force-reinstall --no-cache-dir llama-cpp-python`."
+                ) from imp_err
+            raise
 
         actual_device = hw["device"]
         gpu_offload_fn = getattr(llama_cpp, "llama_supports_gpu_offload", None)

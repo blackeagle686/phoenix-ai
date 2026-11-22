@@ -82,6 +82,7 @@ class RestrictedPythonRuntime(BaseRuntime):
         "functools", "statistics", "random", "decimal", "fractions",
         "hashlib", "base64", "uuid", "string", "typing", "dataclasses",
         "enum", "copy", "bisect", "heapq", "time", "operator", "ast",
+        "secrets",
     }
 
     BLOCKED_FUNCTIONS = {
