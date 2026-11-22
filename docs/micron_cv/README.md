@@ -48,6 +48,29 @@
 
 ---
 
+## Installation (Only Micron CV Agent — Without Full `phx-ashborn`)
+
+### Option A: True Standalone (`0` Dependencies, `~25 KB`, Pure Python Stdlib)
+Best for **phone CPUs (Android/Termux), Raspberry Pi, and ultra-low-RAM edge containers** — does **not** install `numpy`, `openai`, `pydantic`, `httpx`, `torch`, or the rest of `phx-ashborn`:
+```bash
+# Core Micron CV Agent ONLY (rule mode, DB, files, alerts, custom tools)
+pip install "git+https://github.com/blackeagle686/phoenix-ai.git#subdirectory=phoenix/framework/cv_agent"
+
+# Standalone + quantized <=1B MoE GGUF CPU runtime
+pip install "phx-micron-cv[gguf] @ git+https://github.com/blackeagle686/phoenix-ai.git#subdirectory=phoenix/framework/cv_agent"
+```
+
+### Option B: Lightweight Extra on `phx-ashborn`
+Skips heavy Agent/RAG/ChatBot/Local/ML dependencies (`torch`, `transformers`, `chromadb`, `fastapi`, `sklearn`, etc.):
+```bash
+pip install "phx-ashborn[cv]"       # Core Micron CV extra
+pip install "phx-ashborn[cv-gguf]"  # + llama-cpp-python for <=1B MoE GGUF CPU
+```
+
+Both options use the exact same import: `from phoenix.framework.cv_agent import CVAgent`.
+
+---
+
 ## 60-Second Quickstart
 
 ### In a Script / OpenCV Loop (Sync)

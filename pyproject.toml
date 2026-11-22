@@ -83,6 +83,10 @@ ml = [
     "lightgbm>=4.0.0",
     "onnxruntime>=1.16.0"
 ]
+cv = []
+cv-gguf = [
+    "llama-cpp-python>=0.2.85"
+]
 full = [
     "pydantic",
     "redis>=4.5.0",

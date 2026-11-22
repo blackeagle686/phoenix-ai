@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "phx-micron-cv"
+version = "1.4.2"
+description = "Ultra-low-RAM Micron Computer Vision Agent (strictly <= 1B MoE) for phone CPUs and edge devices — standalone, zero-dependency core."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "blackeagle686" }]
+requires-python = ">=3.9"
+keywords = ["computer-vision", "edge-ai", "moe", "micro-agent", "yolo", "opencv", "sqlite", "phone-cpu", "phoenix-ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# Pure Python stdlib core — ZERO runtime dependencies!
+dependencies = []
+
+[project.optional-dependencies]
+gguf = [
+    "llama-cpp-python>=0.2.85",
+]
+hf = [
+    "torch",
+    "transformers",
+]
+
+[project.urls]
+Homepage = "https://github.com/blackeagle686/phoenix-ai"
+Documentation = "https://github.com/blackeagle686/phoenix-ai/tree/master/docs/micron_cv"
+Repository = "https://github.com/blackeagle686/phoenix-ai"
+
+[tool.setuptools]
+packages = ["phoenix.framework.cv_agent"]
+include-package-data = false
+
+[tool.setuptools.package-dir]
+"phoenix.framework.cv_agent" = "."

@@ -36,6 +36,13 @@ Whether you are building with FastAPI, Django, or a custom event-driven service,
 Choose the installation tier that matches your project needs:
 
 ```bash
+# Micron CV Agent ONLY — Standalone Zero-Dependency Package (Recommended for Phone CPU / Low RAM)
+# Download Size: ~25 KB | 0 Dependencies (pure Python stdlib, < 2 MB RAM)
+pip install "git+https://github.com/blackeagle686/phoenix-ai.git#subdirectory=phoenix/framework/cv_agent"
+
+# Micron CV Agent via phx-ashborn lightweight extra (skips torch, chromadb, fastapi, rag, ml)
+pip install "phx-ashborn[cv]"          # or "phx-ashborn[cv-gguf]" for quantized <=1B MoE GGUF CPU inference
+
 # Core Backend Framework
 # Download Size: ~5.2 MB (Verified)
 # Installed Size on Disk: ~15 MB

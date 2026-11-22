@@ -65,10 +65,14 @@ EXTRAS = {
         "joblib>=1.3.0",
         "lightgbm>=4.0.0",
         "onnxruntime>=1.16.0"
+    ],
+    "cv": [],
+    "cv-gguf": [
+        "llama-cpp-python>=0.2.85"
     ]
 }
 
-EXTRAS["full"] = list(set(dep for deps in EXTRAS.values() for dep in deps))
+EXTRAS["full"] = list(set(dep for k, deps in EXTRAS.items() if k != "cv-gguf" for dep in deps))
 
 setup(
     name="phx-ashborn",
