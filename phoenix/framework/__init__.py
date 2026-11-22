@@ -6,6 +6,12 @@ from typing import Any
 _EXPORTS = {
     "ChatBot": (".chatbot.core", "ChatBot"),
     "Agent": (".agent.core.agent", "Agent"),
+    "CVAgent": (".cv_agent.agent", "CVAgent"),
+    "MicroCVAgent": (".cv_agent.agent", "MicroCVAgent"),
+    "CVAgentConfig": (".cv_agent.agent", "CVAgentConfig"),
+    "CVEvent": (".cv_agent.events", "CVEvent"),
+    "Detection": (".cv_agent.events", "Detection"),
+    "MicroMoELLM": (".cv_agent.moe_model", "MicroMoELLM"),
     "MultiAgentManager": (".multi_agent.manager", "MultiAgentManager"),
     "MultiAgentConfig": (".multi_agent.config", "MultiAgentConfig"),
     "AgentConfig": (".multi_agent.config", "AgentConfig"),

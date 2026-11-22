@@ -31,6 +31,7 @@ __all__ = [
     "get_memory",
     "ChatBot",
     "Agent",
+    "CVAgent",
 ]
 
 
@@ -48,6 +49,11 @@ def __getattr__(name: str) -> Any:
     if name == "Agent":
         mod = import_module(".framework.agent", __name__)
         val = getattr(mod, "Agent")
+        globals()[name] = val
+        return val
+    if name == "CVAgent":
+        mod = import_module(".framework.cv_agent", __name__)
+        val = getattr(mod, "CVAgent")
         globals()[name] = val
         return val
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
