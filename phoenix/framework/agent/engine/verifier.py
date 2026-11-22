@@ -54,6 +54,42 @@ _PREFERRED_EVAL_NAMES: Tuple[str, ...] = (
     "solve", "compute", "run_calc", "safe_calc", "safe_eval", "math_eval",
 )
 
+_EXPR_ARG_NAMES = frozenset({
+    "expr", "expression", "formula", "equation", "math_expr", "expr_str",
+    "raw_expr", "query", "statement", "text", "s", "inp", "input_str",
+})
+
+
+def _accepts_single_arg(fn_node: ast.AST, is_method: bool = False) -> bool:
+    """Return True if *fn_node* can be invoked with a single positional argument."""
+    if not isinstance(fn_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return False
+    pos_args = fn_node.args.args[1:] if is_method else fn_node.args.args
+    required_pos = max(0, len(pos_args) - len(fn_node.args.defaults))
+    if required_pos > 1:
+        return False
+    if len(pos_args) == 0 and fn_node.args.vararg is None:
+        return False
+    if any(default is None for default in fn_node.args.kw_defaults):
+        return False
+    return True
+
+
+def _looks_like_expr_evaluator(fn_node: ast.AST, is_method: bool = False) -> bool:
+    """Return True only when *fn_node* plausibly evaluates a string math expression."""
+    if not _accepts_single_arg(fn_node, is_method=is_method):
+        return False
+    fn_low = fn_node.name.lower()
+    if fn_low in _PREFERRED_EVAL_NAMES:
+        return True
+    if "eval" in fn_low or "expr" in fn_low:
+        return True
+    pos_args = fn_node.args.args[1:] if is_method else fn_node.args.args
+    first_arg = pos_args[0].arg.lower() if pos_args else ""
+    if any(tok in fn_low for tok in ("calc", "solve", "compute")) and first_arg in _EXPR_ARG_NAMES:
+        return True
+    return False
+
 
 @dataclass
 class VerificationReport:
@@ -178,6 +214,7 @@ def _prepare_module_for_sandbox(
 
     interactive_funcs = _find_interactive_functions(tree)
     lines = code.splitlines()
+    any_reusable_funcs: List[str] = []
     discovered_str_funcs: List[str] = []
     discovered_node_funcs: List[str] = []
     discovered_classes: List[str] = []
@@ -191,10 +228,11 @@ def _prepare_module_for_sandbox(
                 and node.name not in required_ops
                 and node.name not in interactive_funcs
             ):
+                any_reusable_funcs.append(node.name)
                 if len(node.args.args) >= 1:
                     if _is_ast_node_visitor(node):
                         discovered_node_funcs.append(node.name)
-                    else:
+                    elif _looks_like_expr_evaluator(node, is_method=False):
                         discovered_str_funcs.append(node.name)
         elif isinstance(node, ast.ClassDef):
             discovered_classes.append(node.name)
@@ -207,7 +245,7 @@ def _prepare_module_for_sandbox(
                     if len(item.args.args) >= 2:  # self + at least 1 argument
                         if _is_ast_node_visitor(item):
                             n_methods.append(item.name)
-                        else:
+                        elif _looks_like_expr_evaluator(item, is_method=True):
                             s_methods.append(item.name)
             if s_methods:
                 class_str_methods[node.name] = s_methods
@@ -215,7 +253,7 @@ def _prepare_module_for_sandbox(
                 class_node_methods[node.name] = n_methods
 
     has_reusable_api = bool(
-        discovered_str_funcs or discovered_node_funcs or class_str_methods or class_node_methods or discovered_classes
+        any_reusable_funcs or discovered_str_funcs or discovered_node_funcs or class_str_methods or class_node_methods or discovered_classes
     )
 
     for node in tree.body:

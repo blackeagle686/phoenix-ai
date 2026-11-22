@@ -1562,6 +1562,70 @@ class AgentLoop:
 
         # Path D: Stateless Semantic Co-Processor (LLM Battery) with RF Context Pruning (FR-04, FR-05)
         await self._ensure_llm_ready()
+
+        # D1: For Python code modification/creation tasks on local models (or single-file code specs),
+        # bypass fragile nested JSON tool schemas via the Neuro-Symbolic Engine + ExecutionVerifier
+        # while recording the verified ExecutionTrace directly into PHXKernel!
+        diag_report = PreAnalyzer.analyze(prompt, runtime=rt) if rt is not None else None
+        if (
+            diag_report is not None
+            and diag_report.contract.archetype in ("code_modify", "code_create")
+            and bool(diag_report.contract.target_files)
+            and self._is_local_execution_engine()
+        ):
+            t_ns = time.perf_counter()
+            if diag_report.pre_read_paths and hasattr(self.actor, "mark_files_pre_read"):
+                self.actor.mark_files_pre_read(diag_report.pre_read_paths)
+
+            async def _emit_ns(phase: str, info: Optional[Dict[str, Any]] = None) -> None:
+                await tracer.emit_event("deep_phase", {"session_id": session_id, "phase": phase, **(info or {})})
+
+            ns_res = await NeuroSymbolicRunner.run_code_workflow(
+                prompt=prompt,
+                llm=self.thinker.llm,
+                runtime=rt,
+                report=diag_report,
+                max_attempts=min(4, max(2, max_iterations)),
+                emit_phase=_emit_ns,
+            )
+            ver = ns_res.get("verification")
+            ns_ok = bool(ns_res.get("success"))
+            score = getattr(ver, "score", 0) if ver else 0
+            lat_ms = (time.perf_counter() - t_ns) * 1000.0
+            kernel.record_execution(
+                episode_id=session_id,
+                prompt=prompt,
+                decision=decision,
+                action_id="neuro_symbolic_code_fix",
+                action_args={"target_files": ns_res.get("target_files", [])},
+                action_sequence=["neuro_symbolic_code_fix"],
+                status=OutcomeStatus.SUCCESS if ns_ok else OutcomeStatus.RETRYABLE_ERR,
+                verifier_passed=ns_ok,
+                actual_latency_ms=lat_ms,
+                reward_signal=(score / 100.0) if ns_ok else -0.3,
+                error_message=None if ns_ok else str(ns_res.get("error") or ""),
+                world_state=world_state,
+            )
+            kernel.check_drift()
+            func_outputs = getattr(ver, "functional_outputs", []) if ver else []
+            healed = ns_res.get("healed_actions") or []
+            summary_parts = [
+                f"[PHX v2 Kernel + Neuro-Symbolic Engine] Target: {', '.join(ns_res.get('target_files', []))}",
+                f"Status: {'VERIFIED' if ns_ok else 'PARTIAL'} (sandbox score {score}/100, attempts={ns_res.get('attempts', 1)})",
+            ]
+            if func_outputs:
+                summary_parts.append("Verified Probes: " + "; ".join(func_outputs[:5]))
+            if healed:
+                summary_parts.append("Auto-Healed: " + "; ".join(healed[:4]))
+            if not ns_ok and ns_res.get("error"):
+                summary_parts.append("Remaining Issues:\n" + str(ns_res["error"]))
+            final_ns = "\n".join(summary_parts)
+            if hasattr(memory, "add_interaction"):
+                await memory.add_interaction(session_id, "assistant", final_ns)
+            await self._flush_background()
+            await tracer.emit_event("complete", {"session_id": session_id, "mode": "kernel", "source": "NEURO_SYMBOLIC"})
+            return final_ns
+
         raw_context = ""
         if hasattr(memory, "get_full_context"):
             res_ctx = memory.get_full_context(session_id, query=prompt)
@@ -1582,6 +1646,7 @@ class AgentLoop:
         kernel_task = TaskSchema(task_id="kernel_llm", description=prompt)
         observations: List[str] = []
         executed_actions: List[str] = []
+        executed_sigs: set = set()
         final_answer = ""
 
         for step in range(1, max(1, max_iterations) + 1):
@@ -1590,16 +1655,34 @@ class AgentLoop:
                 step_ctx_parts.append(pruned_ctx)
             if observations:
                 step_ctx_parts.append("VERIFIED KERNEL OBSERVATIONS:\n" + "\n".join(observations[-6:]))
+                step_ctx_parts.append(
+                    "Do NOT repeat identical tool calls. Return compact valid JSON with `tools_to_call` or `direct_response`."
+                )
             step_ctx = "\n\n".join(step_ctx_parts)
 
-            with moe_route_context(role="coder", attempt=step, escalate=(step >= 3)):
-                task_exec = await self.thinker.solve_task(kernel_task, context=step_ctx)
+            try:
+                with moe_route_context(role="coder", attempt=step, escalate=(step >= 3)):
+                    task_exec = await self.thinker.solve_task(kernel_task, context=step_ctx)
+            except (ValueError, RuntimeError) as fmt_err:
+                if not isinstance(fmt_err, ValueError) and "json" not in str(fmt_err).lower():
+                    raise
+                observations.append(
+                    f"[Step {step} | FORMAT RECOVERY]: {str(fmt_err)[:220]}. "
+                    "Keep `thought_process` under 10 words and emit a single valid JSON object."
+                )
+                continue
 
             tool_calls = getattr(task_exec, "tools_to_call", None) or []
             direct_resp = (getattr(task_exec, "direct_response", None) or "").strip()
             if not tool_calls:
                 final_answer = direct_resp or "\n".join(observations) or "Completed."
                 break
+
+            step_sigs = [(tc.tool_name, compact_value(tc.arguments or {}, max_chars=240)) for tc in tool_calls]
+            if step > 1 and all(sig in executed_sigs for sig in step_sigs):
+                final_answer = direct_resp or "\n".join(observations)
+                break
+            executed_sigs.update(step_sigs)
 
             step_ok = True
             for tc in tool_calls:
