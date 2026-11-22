@@ -314,7 +314,8 @@ class AgentLoop:
                             if chk.get("exists") and not chk.get("ast_valid", True):
                                 has_syntax_warn = True
 
-            needs_mutation = str(getattr(task, "task_type", "")).lower() in ("write", "update", "delete")
+            tt_raw = getattr(task, "task_type", "")
+            needs_mutation = str(getattr(tt_raw, "value", tt_raw) or "").lower() in ("write", "update", "delete")
             can_fast_reflect = (
                 self.fast_reflect
                 and bool(getattr(actor_output, "success", False))
@@ -717,7 +718,8 @@ class AgentLoop:
         if hasattr(actor_output, "result") and isinstance(actor_output.result, dict):
             exec_results = actor_output.result.get("execution_results", []) or []
 
-        task_type = str(getattr(task, "task_type", "")).lower()
+        tt_raw = getattr(task, "task_type", "")
+        task_type = str(getattr(tt_raw, "value", tt_raw) or "").lower()
         mutated = any(r.get("success") and r.get("tool") in MUTATING_FILE_TOOLS for r in exec_results)
         has_direct = bool(
             hasattr(actor_output, "result")

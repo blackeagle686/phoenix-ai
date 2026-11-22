@@ -169,6 +169,19 @@ def diagnose_python_error(
     if "too many arguments" in err_low or "positional argument" in err_low:
         hints.append("SIGNATURE HINT: Check method `self` parameter or expected argument count at the failing call.")
 
+    if "infinitelooperror" in err_low or ("runaway while loop" in err_low) or ("exceeded" in err_low and "iterations" in err_low):
+        hints.append(
+            "EXACT LOOP FIX (Infinite / runaway `while` loop): Ensure the loop variable advances or a `break`/`return` exit condition is reachable on every iteration "
+            "(e.g., increment counters `i += 1`, avoid un-exited `while True:` loops)."
+        )
+
+    if "interactivelooperror" in err_low or ("eoferror" in err_low and ("input" in err_low or "stdin" in err_low or "interactive" in err_low)):
+        hints.append(
+            "EXACT INTERACTIVE LOOP FIX: Guard `while True:` CLI loops cleanly with explicit exit commands "
+            "(`if val.lower() in ('quit', 'exit', 'q'): break`) AND `try: ... except EOFError: break`, "
+            "and put interactive execution under `if __name__ == '__main__':`."
+        )
+
     return hints
 
 

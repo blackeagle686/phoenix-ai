@@ -98,6 +98,7 @@ class FileDiagnostic:
     security_findings: List[str] = field(default_factory=list)
     missing_ops: List[str] = field(default_factory=list)
     has_top_level_input: bool = False
+    has_interactive_loop: bool = False
 
 
 @dataclass
@@ -140,6 +141,7 @@ def scan_python_ast(
         "referenced_ops": set(),
         "security_findings": [],
         "has_top_level_input": False,
+        "has_interactive_loop": False,
         "missing_ops": [],
     }
     try:
@@ -166,14 +168,21 @@ def scan_python_ast(
             for tgt in node.targets:
                 if isinstance(tgt, ast.Name):
                     result["defined_names"].add(tgt.id)
-        elif isinstance(node, ast.Expr):
-            # Detect blocking top-level input() calls
             for sub in ast.walk(node):
                 if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Name) and sub.func.id == "input":
                     result["has_top_level_input"] = True
+        elif isinstance(node, (ast.Expr, ast.While, ast.If)):
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Name) and sub.func.id == "input":
+                    result["has_top_level_input"] = True
+                    if isinstance(node, ast.While) or any(isinstance(w, ast.While) for w in ast.walk(node)):
+                        result["has_interactive_loop"] = True
 
     for node in ast.walk(tree):
         lineno = getattr(node, "lineno", 0)
+        if isinstance(node, ast.While):
+            if any(isinstance(sub, ast.Call) and isinstance(sub.func, ast.Name) and sub.func.id == "input" for sub in ast.walk(node)):
+                result["has_interactive_loop"] = True
         if isinstance(node, ast.Import):
             for alias in node.names:
                 base_mod = alias.name.split(".")[0]
@@ -393,6 +402,7 @@ class PreAnalyzer:
                         security_findings=ast_info.get("security_findings", []),
                         missing_ops=ast_info.get("missing_ops", []),
                         has_top_level_input=ast_info.get("has_top_level_input", False),
+                        has_interactive_loop=ast_info.get("has_interactive_loop", False),
                     )
                 )
             else:

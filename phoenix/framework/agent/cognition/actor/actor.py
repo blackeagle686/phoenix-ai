@@ -244,7 +244,8 @@ class Actor(BaseActor):
             "tools_failed": 0,
         }
 
-        task_type = str(getattr(task, "task_type", "")).lower()
+        task_raw = getattr(task, "task_type", "")
+        task_type = str(getattr(task_raw, "value", task_raw) or "").lower()
 
         for step_idx in range(max(1, max_tool_steps)):
             try:

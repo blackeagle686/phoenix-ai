@@ -215,7 +215,7 @@ class Thinker(BaseThinker):
             "TOOL ROUTING RULES:\n"
             "1. Existing file modifications/adding functions: call `file_read` FIRST, then `file_edit` (use `upsert=true` when adding a new block/function). Do NOT overwrite existing files blindly with `file_write`.\n"
             "2. Creating a brand-new file: use `file_write`. Finding symbols/files: use `file_search`.\n"
-            "3. NEVER use `python_repl` or `execute_command` to create/edit project files (`python_repl` is only for quick in-memory calculation and blocks `input()`).\n"
+            "3. NEVER use `python_repl` or `execute_command` to create/edit project files (`python_repl` is only for quick in-memory verification; interactive `input()` is non-blocking/mocked and runaway `while` loops auto-abort).\n"
             "4. Keep `thought_process` under 15 words, set `expected_outcome` concisely before invoking tools; when done, leave `tools_to_call` empty and state ONLY verified tool/disk results in `direct_response`."
         )
 

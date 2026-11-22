@@ -99,16 +99,84 @@ def _is_ast_node_visitor(fn_node: ast.FunctionDef) -> bool:
     return False
 
 
+def _node_contains_input_or_interactive_loop(node: ast.AST, interactive_funcs: Optional[set] = None) -> bool:
+    """Return True if an AST subtree directly invokes `input()`, reads `stdin`, or calls an interactive function."""
+    inter = interactive_funcs or set()
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Call):
+            if isinstance(sub.func, ast.Name):
+                if sub.func.id == "input" or sub.func.id in inter:
+                    return True
+            elif isinstance(sub.func, ast.Attribute):
+                if sub.func.attr in inter:
+                    return True
+                if (
+                    sub.func.attr in ("read", "readline", "readlines")
+                    and isinstance(sub.func.value, ast.Attribute)
+                    and sub.func.value.attr == "stdin"
+                ):
+                    return True
+        elif isinstance(sub, ast.While):
+            for inner in ast.walk(sub):
+                if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name):
+                    if inner.func.id == "input" or inner.func.id in inter:
+                        return True
+    return False
+
+
+def _find_interactive_functions(tree: ast.Module) -> set:
+    """Build transitive call graph of functions/methods containing interactive input() or CLI while loops."""
+    fn_nodes: List[Tuple[str, ast.AST]] = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            fn_nodes.append((node.name, node))
+        elif isinstance(node, ast.ClassDef):
+            for item in node.body:
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    fn_nodes.append((item.name, item))
+
+    interactive: set = set()
+    for fname, fnode in fn_nodes:
+        if _node_contains_input_or_interactive_loop(fnode):
+            interactive.add(fname)
+
+    # Transitive closure: if main() calls run_cli() which calls input(), mark main() interactive too
+    changed = True
+    while changed:
+        changed = False
+        for fname, fnode in fn_nodes:
+            if fname in interactive:
+                continue
+            if _node_contains_input_or_interactive_loop(fnode, interactive):
+                interactive.add(fname)
+                changed = True
+    return interactive
+
+
+def _neutralize_lines_preserving_count(lines: List[str], node: ast.AST) -> None:
+    """Replace an AST statement's span with `pass` + blank lines so 1-indexed line numbers stay exact."""
+    start = getattr(node, "lineno", 1) - 1
+    end = getattr(node, "end_lineno", start + 1) - 1
+    if start < 0 or start >= len(lines):
+        return
+    raw_first = lines[start]
+    indent = raw_first[: len(raw_first) - len(raw_first.lstrip(" \t"))]
+    lines[start] = f"{indent}pass"
+    for idx in range(start + 1, min(end + 1, len(lines))):
+        lines[idx] = ""
+
+
 def _prepare_module_for_sandbox(
     code: str,
     required_ops: List[str],
 ) -> Tuple[str, List[str], List[str], Dict[str, List[str]], List[str], Dict[str, List[str]]]:
-    """Strip only blocking `input()` loops; separate string evaluators from AST-node visitors."""
+    """Neutralize blocking top-level/CLI interactive loops while keeping line numbers exact and preserving non-interactive tests."""
     try:
         tree = ast.parse(code)
     except SyntaxError:
         return code, [], [], {}, [], {}
 
+    interactive_funcs = _find_interactive_functions(tree)
     lines = code.splitlines()
     discovered_str_funcs: List[str] = []
     discovered_node_funcs: List[str] = []
@@ -117,26 +185,12 @@ def _prepare_module_for_sandbox(
     class_node_methods: Dict[str, List[str]] = {}
 
     for node in tree.body:
-        if isinstance(node, ast.If):
-            test = node.test
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if (
-                isinstance(test, ast.Compare)
-                and isinstance(test.left, ast.Name)
-                and test.left.id == "__name__"
+                node.name not in ("main", "run_console", "cli")
+                and node.name not in required_ops
+                and node.name not in interactive_funcs
             ):
-                start = node.lineno - 1
-                end = getattr(node, "end_lineno", node.lineno) - 1
-                block_src = "\n".join(lines[start : end + 1])
-                if re.search(r"\binput\s*\(|\bwhile\s+True\b", block_src):
-                    for i in range(start, min(end + 1, len(lines))):
-                        lines[i] = "pass" if i == start else ""
-                else:
-                    # Non-interactive __main__ verification script -> run it inside the sandbox!
-                    if start < len(lines):
-                        indent = lines[start][: len(lines[start]) - len(lines[start].lstrip())]
-                        lines[start] = f"{indent}if True:"
-        elif isinstance(node, ast.FunctionDef):
-            if node.name not in ("main", "run_console", "cli") and node.name not in required_ops:
                 if len(node.args.args) >= 1:
                     if _is_ast_node_visitor(node):
                         discovered_node_funcs.append(node.name)
@@ -148,6 +202,8 @@ def _prepare_module_for_sandbox(
             n_methods: List[str] = []
             for item in node.body:
                 if isinstance(item, ast.FunctionDef) and not item.name.startswith("_"):
+                    if item.name in interactive_funcs:
+                        continue
                     if len(item.args.args) >= 2:  # self + at least 1 argument
                         if _is_ast_node_visitor(item):
                             n_methods.append(item.name)
@@ -158,12 +214,43 @@ def _prepare_module_for_sandbox(
             if n_methods:
                 class_node_methods[node.name] = n_methods
 
+    has_reusable_api = bool(
+        discovered_str_funcs or discovered_node_funcs or class_str_methods or class_node_methods or discovered_classes
+    )
+
+    for node in tree.body:
+        if isinstance(node, ast.If):
+            test = node.test
+            if (
+                isinstance(test, ast.Compare)
+                and isinstance(test.left, ast.Name)
+                and test.left.id == "__name__"
+            ):
+                start = node.lineno - 1
+                if start < len(lines):
+                    indent = lines[start][: len(lines[start]) - len(lines[start].lstrip())]
+                    lines[start] = f"{indent}if True:"
+                # Keep non-interactive self-test statements active; neutralize interactive CLI or daemon `while True` loops
+                for sub_stmt in node.body:
+                    is_unbounded_while_true = (
+                        has_reusable_api
+                        and isinstance(sub_stmt, ast.While)
+                        and isinstance(sub_stmt.test, ast.Constant)
+                        and bool(sub_stmt.test.value) is True
+                    )
+                    if is_unbounded_while_true or _node_contains_input_or_interactive_loop(sub_stmt, interactive_funcs):
+                        _neutralize_lines_preserving_count(lines, sub_stmt)
+        elif has_reusable_api and _node_contains_input_or_interactive_loop(node, interactive_funcs):
+            # Also neutralize bare top-level CLI loops (`while True: input(...)`) or bare `main()` calls
+            # when the module defines functions/classes to verify, preserving 1:1 line offsets.
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Import, ast.ImportFrom)):
+                _neutralize_lines_preserving_count(lines, node)
+
     cleaned = "\n".join(lines)
-    cleaned = re.sub(r"\binput\s*\([^()\r\n]*\)", "'0'", cleaned)
 
     ordered_str_funcs: List[str] = []
     for name in list(_PREFERRED_EVAL_NAMES) + discovered_str_funcs:
-        if name not in discovered_node_funcs and name not in ordered_str_funcs:
+        if name not in discovered_node_funcs and name not in interactive_funcs and name not in ordered_str_funcs:
             ordered_str_funcs.append(name)
 
     return cleaned, ordered_str_funcs, discovered_classes, class_str_methods, discovered_node_funcs, class_node_methods
@@ -499,7 +586,16 @@ class ExecutionVerifier:
                     is_calculator=c.is_calculator_domain,
                     ast_node_hints=c.ast_node_hints,
                 )
-                exec_res = await sb_rt.execute_code(harness, language="python")
+                if isinstance(sb_rt, RestrictedPythonRuntime):
+                    probe_timeout = min(float(getattr(sb_rt, "timeout", 30.0) or 30.0), 5.0)
+                    exec_res = await sb_rt.execute_code(
+                        harness,
+                        language="python",
+                        timeout=probe_timeout,
+                        max_loop_iterations=10000,
+                    )
+                else:
+                    exec_res = await sb_rt.execute_code(harness, language="python")
                 parsed_out: Optional[Dict[str, Any]] = None
                 if exec_res.success and exec_res.output:
                     for ln in exec_res.output.splitlines():
