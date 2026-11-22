@@ -324,7 +324,10 @@ class PatchProtocol:
             lines.append("SYSTEM ERROR DIAGNOSIS (APPLY THIS FIX):\n" + "\n".join(f"- {h}" for h in diagnosis_hints))
 
         if fd is not None and (not surgical_mode or fd.line_count <= 220):
-            if fd.security_findings:
+            if fd.security_findings and (
+                c.requires_security
+                or any(tok in f for f in fd.security_findings for tok in ("eval", "exec", "compile", "__import__"))
+            ):
                 lines.append("DETECTED RISKS IN CURRENT FILE: " + "; ".join(fd.security_findings[:6]))
             if fd.missing_ops:
                 lines.append("CURRENTLY MISSING OPS: " + ", ".join(fd.missing_ops))
@@ -352,18 +355,20 @@ class PatchProtocol:
         elif surgical_mode and focus_scope is not None:
             lines.append(
                 f"OUTPUT FORMAT: Return either the complete fixed file OR ONLY the fixed `def {focus_scope['func_name']}(...):` function(s) "
-                f"inside a ```python ... ``` block (the system will splice standalone functions safely back into `{primary_path}`). Do NOT wrap in JSON."
+                f"inside a single ```python ... ``` block (the system will splice standalone functions safely back into `{primary_path}`). "
+                "Do NOT echo the original code first and do NOT wrap in JSON."
             )
         else:
             lines.append(
-                "OUTPUT FORMAT: Return the complete updated Python file inside a single ```python ... ``` code block "
+                "OUTPUT FORMAT: Emit ONLY a single ```python ... ``` code block containing the complete UPDATED Python file "
                 "(or <<<<<<< SEARCH / ======= / >>>>>>> REPLACE blocks for small edits). "
-                "Do NOT wrap Python code inside JSON. Preserve existing class/function names and runnable top-level test code cleanly."
+                "Do NOT repeat the original unchanged code before your fix, do NOT write long prose, and do NOT wrap Python code inside JSON. "
+                "Make sure your changes actually solve every issue in TASK."
             )
         return "\n\n".join(lines)
 
     @staticmethod
-    def parse_model_output(raw_output: str) -> Tuple[str, Any]:
+    def parse_model_output(raw_output: str, old_content: str = "") -> Tuple[str, Any]:
         """Parse model output into ('search_replace', pairs) | ('full_code', code_str) | ('json_tool', payload) | ('none', raw)."""
         text = (raw_output or "").strip()
         if "<think>" in text:
@@ -380,20 +385,32 @@ class PatchProtocol:
             if pairs:
                 return "search_replace", pairs
 
-        # 2. Markdown code fences (normalize indentation and prefer longest Python-parseable block)
+        # 2. Markdown code fences (prefer changed Python-parseable blocks over verbatim echoes of old_content)
         fences = [m.group(1) for m in _FENCED_CODE_RE.finditer(text) if m.group(1).strip()]
+        if not fences:
+            # Handle truncated/unclosed trailing ```python fence from local models
+            unclosed = re.search(r"```(?:python|py)?\s*\r?\n(.+)$", text, flags=re.DOTALL | re.IGNORECASE)
+            if unclosed and unclosed.group(1).strip():
+                fences = [unclosed.group(1)]
         if fences:
-            valid_fences = []
-            for blk in fences:
+            old_norm = normalize_python_snippet(old_content).strip() if old_content else ""
+            valid_fences: List[Tuple[bool, int, int, str]] = []
+            for idx, blk in enumerate(fences):
                 norm_blk = normalize_python_snippet(blk)
                 try:
                     ast.parse(norm_blk)
-                    valid_fences.append((len(norm_blk), norm_blk))
+                    is_changed = (not old_norm) or (norm_blk.strip() != old_norm)
+                    valid_fences.append((is_changed, len(norm_blk), idx, norm_blk))
                 except SyntaxError:
                     pass
             if valid_fences:
-                valid_fences.sort(reverse=True)
-                return "full_code", valid_fences[0][1]
+                changed_only = [item for item in valid_fences if item[0]]
+                pool = changed_only if changed_only else valid_fences
+                max_len = max(item[1] for item in pool)
+                # Prefer substantial blocks (>= 65% of max length); among those, prefer the LAST one (models put final fixed code last)
+                substantial = [item for item in pool if item[1] >= int(max_len * 0.65)]
+                best_item = max(substantial, key=lambda x: (x[2], x[1])) if substantial else max(pool, key=lambda x: (x[1], x[2]))
+                return "full_code", best_item[3]
             fences.sort(key=len, reverse=True)
             return "full_code", normalize_python_snippet(fences[0])
 
@@ -455,17 +472,6 @@ class PatchProtocol:
         focus_class: Optional[str] = None,
     ) -> PatchApplyResult:
         """Apply parsed SEARCH/REPLACE or full code safely onto the workspace file."""
-        mode, payload = cls.parse_model_output(raw_output)
-        if mode == "none":
-            return PatchApplyResult(
-                success=False,
-                file_path=target_path,
-                resolved_path=target_path,
-                mode="none",
-                error="Model output did not contain a valid ```python``` block or SEARCH/REPLACE patch.",
-                syntax_valid=False,
-            )
-
         guard = syntax_guard or SyntaxGuard(max_rollbacks=3)
         ok_exist, existing_abs, _, _ = resolve_existing_path(target_path, runtime, allow_dir=False)
         old_content = ""
@@ -483,10 +489,21 @@ class PatchProtocol:
                     success=False,
                     file_path=target_path,
                     resolved_path=resolved,
-                    mode=mode,
+                    mode="none",
                     error=w_err or f"Invalid target path: {target_path}",
                     syntax_valid=False,
                 )
+
+        mode, payload = cls.parse_model_output(raw_output, old_content=old_content)
+        if mode == "none":
+            return PatchApplyResult(
+                success=False,
+                file_path=target_path,
+                resolved_path=resolved,
+                mode="none",
+                error="Model output did not contain a valid ```python``` block or SEARCH/REPLACE patch.",
+                syntax_valid=False,
+            )
 
         healed_actions: List[str] = []
         if mode == "search_replace":

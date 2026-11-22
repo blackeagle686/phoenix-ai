@@ -135,7 +135,22 @@ class HardwareChecker:
                     free_vram_gb = gpus[0]["free_gb"]
                     total_vram_gb = round(sum(g["total_gb"] for g in gpus), 2)
                     total_free_vram_gb = round(sum(g["free_gb"] for g in gpus), 2)
-                    bf16_supported = bool(getattr(torch_mod.cuda, "is_bf16_supported", lambda: False)())
+                    # Require native hardware BF16 (Ampere sm_80+); avoid slow software-emulated BF16 on Turing/T4 GPUs
+                    try:
+                        native_bf16_cc = all(
+                            int(getattr(torch_mod.cuda.get_device_properties(i), "major", 0) or 0) >= 8
+                            for i in range(dev_count)
+                        )
+                    except Exception:
+                        native_bf16_cc = False
+                    bf16_fn = getattr(torch_mod.cuda, "is_bf16_supported", None)
+                    if callable(bf16_fn) and native_bf16_cc:
+                        try:
+                            bf16_supported = bool(bf16_fn(including_emulation=False))
+                        except TypeError:
+                            bf16_supported = bool(bf16_fn())
+                    else:
+                        bf16_supported = False
                 elif hasattr(torch_mod.backends, "mps") and torch_mod.backends.mps.is_available():
                     has_mps = True
                     gpu_name = "Apple Silicon (MPS)"

@@ -81,6 +81,8 @@ class NeuroSymbolicRunner:
         best_snapshot: Dict[str, Optional[str]] = dict(initial_snapshot)
         best_report: Optional[VerificationReport] = None
         best_diff = ""
+        any_effective_change = False
+        best_resolved_path = primary_target
         healed_notes: List[str] = []
         previous_feedback = ""
         last_ver_feedback = ""
@@ -167,6 +169,38 @@ class NeuroSymbolicRunner:
             is_duplicate_attempt = last_written_code is not None and current_code == last_written_code
             last_written_code = current_code
 
+            orig_content = initial_snapshot.get(apply_res.resolved_path)
+            changed_from_initial = (
+                orig_content is None
+                or current_code.replace("\r\n", "\n").strip() != orig_content.replace("\r\n", "\n").strip()
+            )
+            has_real_diff = bool(apply_res.diff) and apply_res.diff != "(no changes)" and changed_from_initial
+
+            # Guard: a `code_modify` request MUST actually change the target file — never declare VERIFIED on a no-op echo!
+            if diag.contract.archetype == "code_modify" and not changed_from_initial:
+                repeated_same_code += 1
+                base_fb = last_ver_feedback or previous_feedback
+                previous_feedback = (
+                    f"{base_fb}\n"
+                    f"- NO-OP FAILURE ON ATTEMPT {attempt}: Your output produced ZERO changes to `{primary_target}` "
+                    "(the file is identical to the original). You MUST actually modify the code to fix the user's "
+                    "reported bug and apply all requested improvements. Do NOT echo the original code unchanged."
+                ).strip()
+                await _emit(
+                    "reacting",
+                    {
+                        "task_id": "t1",
+                        "message": f"Attempt {attempt} made no changes to {primary_target}; retrying with explicit fix instruction...",
+                    },
+                )
+                if repeated_same_code >= 2:
+                    break
+                continue
+
+            if changed_from_initial:
+                any_effective_change = True
+                best_resolved_path = apply_res.resolved_path
+
             if apply_res.healed_actions:
                 for act in apply_res.healed_actions:
                     if act not in healed_notes:
@@ -185,17 +219,18 @@ class NeuroSymbolicRunner:
             if ver.diagnosis_hints:
                 diagnosis_hints = list(ver.diagnosis_hints)
 
-            has_real_diff = bool(apply_res.diff) and apply_res.diff != "(no changes)"
             if ver.score > best_score:
                 best_score = ver.score
                 best_snapshot = cls._snapshot_files([apply_res.resolved_path], runtime)
                 best_report = ver
                 best_diff = apply_res.diff
+                best_resolved_path = apply_res.resolved_path
             elif ver.score == best_score:
                 # Never overwrite a real non-empty diff with "(no changes)" on equal score
                 if has_real_diff or not best_diff or best_diff == "(no changes)":
                     best_snapshot = cls._snapshot_files([apply_res.resolved_path], runtime)
                     best_report = ver
+                    best_resolved_path = apply_res.resolved_path
                     if has_real_diff:
                         best_diff = apply_res.diff
             else:
@@ -246,14 +281,21 @@ class NeuroSymbolicRunner:
 
         # Ensure highest-scoring snapshot stays on disk even if max_attempts exhausted
         cls._restore_snapshot(best_snapshot)
+        modify_satisfied = diag.contract.archetype != "code_modify" or any_effective_change
+        final_success = bool(best_report and best_report.passed and modify_satisfied)
+        final_error = (
+            f"No changes were applied to {primary_target} after {attempts_run} attempt(s)."
+            if not modify_satisfied
+            else (best_report.corrective_action if best_report else previous_feedback)
+        )
         return {
             "handled": True,
-            "success": bool(best_report and best_report.passed),
+            "success": final_success,
             "attempts": attempts_run,
             "target_files": targets,
-            "resolved_file": primary_target,
+            "resolved_file": best_resolved_path,
             "verification": best_report,
-            "diff": best_diff,
+            "diff": best_diff or "(no changes)",
             "healed_actions": healed_notes,
-            "error": best_report.corrective_action if best_report else previous_feedback,
+            "error": None if final_success else final_error,
         }

@@ -1453,11 +1453,13 @@ class AgentLoop:
             {
                 "session_id": session_id,
                 "source": decision.source.value,
+                "path": decision.source.value,
                 "action_id": decision.action_id,
                 "confidence": decision.confidence,
                 "regime_id": decision.regime_id,
                 "ood_distance": decision.ood_distance,
                 "is_ood": decision.is_ood,
+                "ood": decision.is_ood,
                 "graduation_stage": decision.graduation_stage.name,
                 "hot_path_latency_ms": decision.hot_path_latency_ms,
                 "top_attributions": [a.model_dump() for a in decision.top_attributions],
@@ -1609,14 +1611,24 @@ class AgentLoop:
             kernel.check_drift()
             func_outputs = getattr(ver, "functional_outputs", []) if ver else []
             healed = ns_res.get("healed_actions") or []
+            diff_text = str(ns_res.get("diff") or "").strip()
+            resolved_file = str(ns_res.get("resolved_file") or "")
             summary_parts = [
                 f"[PHX v2 Kernel + Neuro-Symbolic Engine] Target: {', '.join(ns_res.get('target_files', []))}",
                 f"Status: {'VERIFIED' if ns_ok else 'PARTIAL'} (sandbox score {score}/100, attempts={ns_res.get('attempts', 1)})",
             ]
+            if resolved_file:
+                summary_parts.append(f"Resolved File: {resolved_file}")
             if func_outputs:
                 summary_parts.append("Verified Probes: " + "; ".join(func_outputs[:5]))
             if healed:
                 summary_parts.append("Auto-Healed: " + "; ".join(healed[:4]))
+            if diff_text:
+                diff_lines = diff_text.splitlines()
+                preview = "\n".join(diff_lines[:30])
+                if len(diff_lines) > 30:
+                    preview += f"\n... ({len(diff_lines) - 30} more diff lines)"
+                summary_parts.append(f"Diff:\n```diff\n{preview}\n```")
             if not ns_ok and ns_res.get("error"):
                 summary_parts.append("Remaining Issues:\n" + str(ns_res["error"]))
             final_ns = "\n".join(summary_parts)

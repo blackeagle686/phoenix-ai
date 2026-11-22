@@ -706,6 +706,13 @@ class ExecutionVerifier:
                 else:
                     score += 30
                     checks_passed.append("sandbox_import_ok")
+            elif not c.requires_security:
+                checks_passed.append("static_ast_verified_sandbox_skipped")
+                functional_outputs.append(
+                    "Static AST verified (restricted sandbox skipped due to system/CLI calls: "
+                    + "; ".join(sec_findings[:2])
+                    + ")"
+                )
 
             if discrepancies and focus_scope is None and c.traceback_lines:
                 for tb_ln in reversed(c.traceback_lines):
